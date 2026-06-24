@@ -1,24 +1,45 @@
-import Database from 'better-sqlite3'
+import pg from 'pg'
 import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { seed } from './seed.js'
+import { dirname, join } from 'path'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const DB_PATH = join(__dirname, 'eventflow.db')
-const SCHEMA_PATH = join(__dirname, 'schema.sql')
+const { Pool } = pg
 
-const db = new Database(DB_PATH)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
-db.pragma('journal_mode = WAL')
-db.exec(readFileSync(SCHEMA_PATH, 'utf-8'))
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+})
 
-const bookingColumns = db.prepare('PRAGMA table_info(bookings)').all().map((col) => col.name)
-if (!bookingColumns.includes('updated_at')) {
-  db.exec('ALTER TABLE bookings ADD COLUMN updated_at TEXT')
-  db.exec("UPDATE bookings SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL")
+export const initDb = async () => {
+  const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8')
+  await pool.query(schema)
+  console.log('Schema initialized')
 }
 
-seed(db)
+const toPgSql = (sql) => {
+  let index = 0
+  return sql.replace(/\?/g, () => `$${++index}`)
+}
+
+/** Legacy shim for middleware/scripts still on the sync prepare API. */
+const db = {
+  prepare(sql) {
+    const pgSql = toPgSql(sql)
+    return {
+      run(...params) {
+        pool.query(pgSql, params).catch(() => {})
+      },
+      get(...params) {
+        throw new Error('db.prepare().get() is not supported — use pool.query() instead')
+      },
+      all(...params) {
+        throw new Error('db.prepare().all() is not supported — use pool.query() instead')
+      },
+    }
+  },
+}
 
 export default db

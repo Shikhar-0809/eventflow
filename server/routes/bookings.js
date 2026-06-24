@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { validate } from '../middleware/validate.js'
 import { bookingCreateRateLimiter } from '../middleware/rateLimiter.js'
@@ -10,20 +10,24 @@ const router = Router()
 
 router.use(requireAuth)
 
-const findDateConflict = (eventDate, excludeId = null) => {
+const findDateConflict = async (eventDate, excludeId = null) => {
   if (excludeId != null) {
-    return db.prepare(
+    const { rows } = await pool.query(
       `SELECT id, client_name, event_type FROM bookings
-       WHERE event_date = ? AND status != 'cancelled' AND id != ?
+       WHERE event_date = $1 AND status != 'cancelled' AND id != $2
        LIMIT 1`,
-    ).get(eventDate, excludeId)
+      [eventDate, excludeId],
+    )
+    return rows[0]
   }
 
-  return db.prepare(
+  const { rows } = await pool.query(
     `SELECT id, client_name, event_type FROM bookings
-     WHERE event_date = ? AND status != 'cancelled'
+     WHERE event_date = $1 AND status != 'cancelled'
      LIMIT 1`,
-  ).get(eventDate)
+    [eventDate],
+  )
+  return rows[0]
 }
 
 const withOptionalConflict = (booking, clashRow) => {
@@ -42,51 +46,76 @@ const withOptionalConflict = (booking, clashRow) => {
   }
 }
 
-const insertBookingInventory = db.prepare(
-  'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES (?, ?, ?)',
-)
-
-const replaceBookingInventory = (bookingId, inventoryLines = []) => {
-  db.prepare('DELETE FROM booking_inventory WHERE booking_id = ?').run(bookingId)
+const replaceBookingInventory = async (client, bookingId, inventoryLines = []) => {
+  await client.query('DELETE FROM booking_inventory WHERE booking_id = $1', [bookingId])
   for (const line of inventoryLines) {
-    insertBookingInventory.run(bookingId, line.item_id, line.quantity)
+    await client.query(
+      'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
+      [bookingId, line.item_id, line.quantity],
+    )
   }
 }
 
-const createBooking = db.transaction((fields, inventoryLines) => {
+const createBooking = async (fields, inventoryLines) => {
   const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = fields
-  const result = db.prepare(
-    'INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(client_name, phone, event_type, event_date, guest_count, venue ?? null, advance, total)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
 
-  const bookingId = Number(result.lastInsertRowid)
-  if (inventoryLines?.length) {
-    replaceBookingInventory(bookingId, inventoryLines)
+    const { rows: insertRows } = await client.query(
+      'INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+      [client_name, phone, event_type, event_date, guest_count, venue ?? null, advance, total],
+    )
+    const bookingId = insertRows[0].id
+
+    if (inventoryLines?.length) {
+      await replaceBookingInventory(client, bookingId, inventoryLines)
+    }
+
+    const { rows: bookingRows } = await client.query('SELECT * FROM bookings WHERE id = $1', [bookingId])
+    await client.query('COMMIT')
+    return bookingRows[0]
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
   }
+}
 
-  return db.prepare('SELECT * FROM bookings WHERE id = ?').get(bookingId)
-})
-
-const updateBooking = db.transaction((id, fields, inventoryLines) => {
+const updateBooking = async (id, fields, inventoryLines) => {
   const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = fields
   const updatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
-  db.prepare(
-    `UPDATE bookings
-     SET client_name = ?, phone = ?, event_type = ?, event_date = ?, guest_count = ?, venue = ?, advance = ?, total = ?, updated_at = ?
-     WHERE id = ?`,
-  ).run(client_name, phone, event_type, event_date, guest_count, venue ?? null, advance, total, updatedAt, id)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
 
-  if (inventoryLines !== undefined) {
-    replaceBookingInventory(id, inventoryLines)
+    await client.query(
+      `UPDATE bookings
+       SET client_name = $1, phone = $2, event_type = $3, event_date = $4, guest_count = $5, venue = $6, advance = $7, total = $8, updated_at = $9
+       WHERE id = $10`,
+      [client_name, phone, event_type, event_date, guest_count, venue ?? null, advance, total, updatedAt, id],
+    )
+
+    if (inventoryLines !== undefined) {
+      await replaceBookingInventory(client, id, inventoryLines)
+    }
+
+    const { rows: bookingRows } = await client.query('SELECT * FROM bookings WHERE id = $1', [id])
+    await client.query('COMMIT')
+    return bookingRows[0]
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
   }
-
-  return db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
-})
+}
 
 router.get('/', async (req, res, next) => {
   try {
-    const bookings = db.prepare('SELECT * FROM bookings ORDER BY event_date ASC').all()
+    const { rows: bookings } = await pool.query('SELECT * FROM bookings ORDER BY event_date ASC')
     res.status(200).json(bookings)
   } catch (err) {
     next(err)
@@ -104,7 +133,7 @@ router.get('/check-conflict', async (req, res, next) => {
     const exclude = excludeId != null && excludeId !== ''
       ? Number(excludeId)
       : null
-    const existing = findDateConflict(date, exclude)
+    const existing = await findDateConflict(date, exclude)
 
     if (existing) {
       return res.status(200).json({ conflict: true, booking: existing })
@@ -118,25 +147,26 @@ router.get('/check-conflict', async (req, res, next) => {
 
 router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
   try {
-    const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id)
+    const { rows: bookingRows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [req.params.id])
+    const booking = bookingRows[0]
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found.' })
     }
 
-    const changeLog = db
-      .prepare('SELECT * FROM change_log WHERE booking_id = ? ORDER BY logged_at ASC')
-      .all(booking.id)
+    const { rows: changeLog } = await pool.query(
+      'SELECT * FROM change_log WHERE booking_id = $1 ORDER BY logged_at ASC',
+      [booking.id],
+    )
 
-    const inventory = db
-      .prepare(
-        `SELECT bi.item_id, bi.quantity, ii.name
-         FROM booking_inventory bi
-         INNER JOIN inventory_items ii ON ii.id = bi.item_id
-         WHERE bi.booking_id = ?
-         ORDER BY ii.name ASC`,
-      )
-      .all(booking.id)
+    const { rows: inventory } = await pool.query(
+      `SELECT bi.item_id, bi.quantity, ii.name
+       FROM booking_inventory bi
+       INNER JOIN inventory_items ii ON ii.id = bi.item_id
+       WHERE bi.booking_id = $1
+       ORDER BY ii.name ASC`,
+      [booking.id],
+    )
 
     res.status(200).json({ ...booking, change_log: changeLog, inventory })
   } catch (err) {
@@ -147,8 +177,8 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
 router.post('/', validate(bookingSchema), bookingCreateRateLimiter, trackUsage('booking_created'), async (req, res, next) => {
   try {
     const { inventory, ...fields } = req.body
-    const clash = findDateConflict(fields.event_date)
-    const newBooking = createBooking(fields, inventory)
+    const clash = await findDateConflict(fields.event_date)
+    const newBooking = await createBooking(fields, inventory)
     res.locals.usageMetadata = { booking_id: Number(newBooking.id) }
     res.status(201).json(withOptionalConflict(newBooking, clash))
   } catch (err) {
@@ -158,20 +188,22 @@ router.post('/', validate(bookingSchema), bookingCreateRateLimiter, trackUsage('
 
 router.patch('/:id/log', validate(changeLogSchema), trackUsage('change_logged'), async (req, res, next) => {
   try {
-    const booking = db.prepare('SELECT id FROM bookings WHERE id = ?').get(req.params.id)
+    const { rows: bookingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [req.params.id])
+    const booking = bookingRows[0]
 
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found.' })
     }
 
-    db.prepare('INSERT INTO change_log (booking_id, change_note) VALUES (?, ?)').run(
-      booking.id,
-      req.body.note,
+    await pool.query(
+      'INSERT INTO change_log (booking_id, change_note) VALUES ($1, $2)',
+      [booking.id, req.body.note],
     )
 
-    const changeLog = db
-      .prepare('SELECT * FROM change_log WHERE booking_id = ? ORDER BY logged_at ASC')
-      .all(booking.id)
+    const { rows: changeLog } = await pool.query(
+      'SELECT * FROM change_log WHERE booking_id = $1 ORDER BY logged_at ASC',
+      [booking.id],
+    )
 
     res.status(200).json(changeLog)
   } catch (err) {
@@ -182,16 +214,16 @@ router.patch('/:id/log', validate(changeLogSchema), trackUsage('change_logged'),
 router.patch('/:id', validate(bookingSchema), trackUsage('booking_edited'), async (req, res, next) => {
   try {
     const id = Number(req.params.id)
-    const existing = db.prepare('SELECT id FROM bookings WHERE id = ?').get(id)
+    const { rows: existingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [id])
+    const existing = existingRows[0]
 
     if (!existing) {
       return res.status(404).json({ error: 'Booking not found.' })
     }
 
     const { inventory, ...fields } = req.body
-    // inventory omitted = unchanged; inventory: [] = cleared
-    const clash = findDateConflict(fields.event_date, id)
-    const updated = updateBooking(id, fields, inventory)
+    const clash = await findDateConflict(fields.event_date, id)
+    const updated = await updateBooking(id, fields, inventory)
     res.locals.usageMetadata = { booking_id: id }
     res.status(200).json(withOptionalConflict(updated, clash))
   } catch (err) {

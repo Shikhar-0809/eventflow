@@ -1,3 +1,4 @@
+import { pool } from './database.js'
 import { seedAnalyticsHistory } from './analyticsHistorySeed.js'
 import {
   logDevBookings,
@@ -47,94 +48,120 @@ const STARTER_INVENTORY = [
   { name: 'Sofas', total_quantity: 10, damaged_quantity: 0 },
 ]
 
-const seedInventory = (db) => {
-  const count = db.prepare('SELECT COUNT(*) AS count FROM inventory_items').get().count
-  if (count > 0) return
+const seedInventory = async () => {
+  const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS count FROM inventory_items')
+  if (countRows[0].count > 0) return
 
-  const runSeed = db.transaction(() => {
-    const insertItem = db.prepare(
-      'INSERT INTO inventory_items (name, total_quantity, damaged_quantity) VALUES (?, ?, ?)',
-    )
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+
     const itemIds = {}
     for (const item of STARTER_INVENTORY) {
-      const result = insertItem.run(item.name, item.total_quantity, item.damaged_quantity)
-      itemIds[item.name] = Number(result.lastInsertRowid)
+      const { rows } = await client.query(
+        'INSERT INTO inventory_items (name, total_quantity, damaged_quantity) VALUES ($1, $2, $3) RETURNING id',
+        [item.name, item.total_quantity, item.damaged_quantity],
+      )
+      itemIds[item.name] = rows[0].id
     }
 
-    db.prepare(
-      'INSERT INTO inventory_damage_log (item_id, change, note) VALUES (?, ?, ?)',
-    ).run(itemIds['Plastic Chairs'], 15, 'damaged in transit')
-
-    const insertBookingInventory = db.prepare(
-      'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES (?, ?, ?)',
+    await client.query(
+      'INSERT INTO inventory_damage_log (item_id, change, note) VALUES ($1, $2, $3)',
+      [itemIds['Plastic Chairs'], 15, 'damaged in transit'],
     )
 
-    const ramesh = db.prepare(
+    const { rows: rameshRows } = await client.query(
       `SELECT id FROM bookings
        WHERE client_name = 'Ramesh Sharma' AND status != 'cancelled'
        LIMIT 1`,
-    ).get()
-    if (ramesh) {
-      insertBookingInventory.run(ramesh.id, itemIds['Plastic Chairs'], 150)
-      insertBookingInventory.run(ramesh.id, itemIds['Round Tables'], 15)
+    )
+    if (rameshRows[0]) {
+      await client.query(
+        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
+        [rameshRows[0].id, itemIds['Plastic Chairs'], 150],
+      )
+      await client.query(
+        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
+        [rameshRows[0].id, itemIds['Round Tables'], 15],
+      )
     }
 
-    const vikram = db.prepare(
+    const { rows: vikramRows } = await client.query(
       `SELECT id FROM bookings
        WHERE client_name = 'Vikram Singh' AND status != 'cancelled'
        LIMIT 1`,
-    ).get()
-    if (vikram) {
-      insertBookingInventory.run(vikram.id, itemIds['Shamiana Tents'], 2)
-      insertBookingInventory.run(vikram.id, itemIds['Sofas'], 4)
+    )
+    if (vikramRows[0]) {
+      await client.query(
+        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
+        [vikramRows[0].id, itemIds['Shamiana Tents'], 2],
+      )
+      await client.query(
+        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
+        [vikramRows[0].id, itemIds['Sofas'], 4],
+      )
     }
-  })
 
-  runSeed()
-  console.log(`Seeded ${STARTER_INVENTORY.length} starter inventory items`)
+    await client.query('COMMIT')
+    console.log(`Seeded ${STARTER_INVENTORY.length} starter inventory items`)
+  } catch (err) {
+    await client.query('ROLLBACK')
+    if (err.code === '23505') {
+      console.log('Inventory seed skipped: starter items already exist')
+      return
+    }
+    throw err
+  } finally {
+    client.release()
+  }
 }
 
-export const seed = (db) => {
+export const seed = async () => {
   if (process.env.NODE_ENV === 'production') {
     console.log('Seed skipped: NODE_ENV is production. Demo seed data will not run.')
     return
   }
 
-  const count = db.prepare('SELECT COUNT(*) AS count FROM bookings').get().count
-
-  if (count === 0) {
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM bookings')
+  if (rows[0].count === 0) {
     const bookings = buildSeedBookings()
-    const insert = db.prepare(`
-      INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const insertMany = db.transaction((rows) => {
-      for (const row of rows) {
-        insert.run(
-          row.client_name,
-          row.phone,
-          row.event_type,
-          row.event_date,
-          row.guest_count,
-          row.venue,
-          row.advance,
-          row.total,
-          row.status,
-          row.notes,
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      for (const row of bookings) {
+        await client.query(
+          `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            row.client_name,
+            row.phone,
+            row.event_type,
+            row.event_date,
+            row.guest_count,
+            row.venue,
+            row.advance,
+            row.total,
+            row.status,
+            row.notes,
+          ],
         )
       }
-    })
-    insertMany(bookings)
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
     console.log(`Seeded ${bookings.length} demo bookings`)
   }
 
-  seedInventory(db)
-
-  seedAnalyticsHistory(db)
-  removeManualTestBookings(db)
-  removeVerificationBookings(db)
-  seedSureshDemoBooking(db)
-  purgeNonDemoEventLog(db)
-  seedDemoEventLog(db)
-  logDevBookings(db)
+  await seedInventory()
+  await seedAnalyticsHistory(pool)
+  await removeManualTestBookings(pool)
+  await removeVerificationBookings(pool)
+  await seedSureshDemoBooking(pool)
+  await purgeNonDemoEventLog(pool)
+  await seedDemoEventLog(pool)
+  await logDevBookings(pool)
 }

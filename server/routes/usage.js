@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { requireAdminKey } from '../middleware/requireAdminKey.js'
 import { validate } from '../middleware/validate.js'
@@ -34,18 +34,18 @@ const weekStartSql = () => {
 
 router.use(requireAuth)
 
-router.post('/log-client-action', validate(clientActionSchema), (req, res, next) => {
+router.post('/log-client-action', validate(clientActionSchema), async (req, res, next) => {
   try {
     const { event_type, booking_id } = req.body
 
-    const booking = db.prepare('SELECT id FROM bookings WHERE id = ?').get(booking_id)
-    if (!booking) {
+    const { rows: bookingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [booking_id])
+    if (!bookingRows[0]) {
       return res.status(404).json({ error: 'Booking not found.' })
     }
 
-    db.prepare('INSERT INTO event_log (event_type, metadata) VALUES (?, ?)').run(
-      event_type,
-      JSON.stringify({ booking_id }),
+    await pool.query(
+      'INSERT INTO event_log (event_type, metadata) VALUES ($1, $2)',
+      [event_type, JSON.stringify({ booking_id })],
     )
 
     res.status(204).send()
@@ -54,7 +54,7 @@ router.post('/log-client-action', validate(clientActionSchema), (req, res, next)
   }
 })
 
-router.get('/me', (req, res, next) => {
+router.get('/me', async (req, res, next) => {
   try {
     const now = new Date()
     const year = now.getFullYear()
@@ -63,59 +63,59 @@ router.get('/me', (req, res, next) => {
     const currentEnd = `${nextMonthStart(year, monthIndex)} 00:00:00`
     const weekStart = weekStartSql()
 
-    const loginsThisWeek = db
-      .prepare(
-        "SELECT COUNT(*) AS count FROM event_log WHERE event_type = 'login' AND created_at >= ?",
-      )
-      .get(weekStart).count
+    const { rows: loginRows } = await pool.query(
+      "SELECT COUNT(*) AS count FROM event_log WHERE event_type = 'login' AND created_at >= $1",
+      [weekStart],
+    )
+    const loginsThisWeek = Number(loginRows[0].count)
 
-    const bookingsCreatedThisMonth = db
-      .prepare(
-        "SELECT COUNT(*) AS count FROM event_log WHERE event_type = 'booking_created' AND created_at >= ? AND created_at < ?",
-      )
-      .get(currentStart, currentEnd).count
+    const { rows: createdRows } = await pool.query(
+      "SELECT COUNT(*) AS count FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
+      [currentStart, currentEnd],
+    )
+    const bookingsCreatedThisMonth = Number(createdRows[0].count)
 
-    const whatsappMessagesSentThisMonth = db
-      .prepare(
-        `SELECT COUNT(*) AS count FROM event_log
-         WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
-         AND created_at >= ? AND created_at < ?`,
-      )
-      .get(currentStart, currentEnd).count
+    const { rows: whatsappRows } = await pool.query(
+      `SELECT COUNT(*) AS count FROM event_log
+       WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
+       AND created_at >= $1 AND created_at < $2`,
+      [currentStart, currentEnd],
+    )
+    const whatsappMessagesSentThisMonth = Number(whatsappRows[0].count)
 
-    const lastActive = db
-      .prepare('SELECT MAX(created_at) AS last_active FROM event_log')
-      .get()
+    const { rows: lastActiveRows } = await pool.query(
+      'SELECT MAX(created_at) AS last_active FROM event_log',
+    )
 
-    const firstActivity = db
-      .prepare('SELECT MIN(created_at) AS first_activity FROM event_log')
-      .get()
+    const { rows: firstActivityRows } = await pool.query(
+      'SELECT MIN(created_at) AS first_activity FROM event_log',
+    )
 
     res.status(200).json({
       loginsThisWeek,
       bookingsCreatedThisMonth,
       whatsappMessagesSentThisMonth,
-      lastActiveAt: lastActive.last_active ?? null,
-      firstActivityAt: firstActivity.first_activity ?? null,
+      lastActiveAt: lastActiveRows[0].last_active ?? null,
+      firstActivityAt: firstActivityRows[0].first_activity ?? null,
     })
   } catch (err) {
     next(err)
   }
 })
 
-router.get('/admin', requireAdminKey, (req, res, next) => {
+router.get('/admin', requireAdminKey, async (req, res, next) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1)
     const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || 200))
     const offset = (page - 1) * limit
 
-    const total = db.prepare('SELECT COUNT(*) AS count FROM event_log').get().count
+    const { rows: totalRows } = await pool.query('SELECT COUNT(*) AS count FROM event_log')
+    const total = Number(totalRows[0].count)
 
-    const rows = db
-      .prepare(
-        'SELECT id, event_type, metadata, created_at FROM event_log ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      )
-      .all(limit, offset)
+    const { rows } = await pool.query(
+      'SELECT id, event_type, metadata, created_at FROM event_log ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+      [limit, offset],
+    )
 
     res.status(200).json({
       data: rows,

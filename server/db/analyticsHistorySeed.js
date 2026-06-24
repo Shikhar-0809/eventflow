@@ -65,7 +65,7 @@ export const buildHistoricalSeedBookings = () => {
   ]
 }
 
-export const seedAnalyticsHistory = (db) => {
+export const seedAnalyticsHistory = async (pool) => {
   if (process.env.NODE_ENV === 'production') {
     return { inserted: 0, skipped: true }
   }
@@ -75,12 +75,14 @@ export const seedAnalyticsHistory = (db) => {
   const currentMonth = now.getMonth()
   const currentStart = monthStart(currentYear, currentMonth)
 
-  const monthBookingCount = (year, monthIndex) => {
+  const monthBookingCount = async (year, monthIndex) => {
     const start = monthStart(year, monthIndex)
     const end = nextMonthStart(year, monthIndex)
-    return db
-      .prepare('SELECT COUNT(*) AS count FROM bookings WHERE event_date >= ? AND event_date < ?')
-      .get(start, end).count
+    const { rows } = await pool.query(
+      'SELECT COUNT(*) AS count FROM bookings WHERE event_date >= $1 AND event_date < $2',
+      [start, end],
+    )
+    return parseInt(rows[0].count, 10)
   }
 
   const historical = buildHistoricalSeedBookings().filter((row) => row.event_date < currentStart)
@@ -90,7 +92,7 @@ export const seedAnalyticsHistory = (db) => {
     const [yearStr, monthStr] = row.event_date.split('-')
     const year = Number(yearStr)
     const monthIndex = Number(monthStr) - 1
-    if (monthBookingCount(year, monthIndex) > 0) {
+    if (await monthBookingCount(year, monthIndex) > 0) {
       continue
     }
     toInsert.push(row)
@@ -100,27 +102,35 @@ export const seedAnalyticsHistory = (db) => {
     return { inserted: 0, skipped: false }
   }
 
-  const insert = db.prepare(`
-    INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-  const insertMany = db.transaction((rows) => {
-    for (const row of rows) {
-      insert.run(
-        row.client_name,
-        row.phone,
-        row.event_type,
-        row.event_date,
-        row.guest_count,
-        row.venue,
-        row.advance,
-        row.total,
-        row.status,
-        row.notes,
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    for (const row of toInsert) {
+      await client.query(
+        `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          row.client_name,
+          row.phone,
+          row.event_type,
+          row.event_date,
+          row.guest_count,
+          row.venue,
+          row.advance,
+          row.total,
+          row.status,
+          row.notes,
+        ],
       )
     }
-  })
-  insertMany(toInsert)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+
   console.log(`Seeded ${toInsert.length} analytics history bookings`)
   return { inserted: toInsert.length, skipped: false }
 }

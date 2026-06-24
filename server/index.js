@@ -2,7 +2,8 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
-import './db/database.js'
+import { initDb } from './db/database.js'
+import { seed } from './db/seed.js'
 import authRouter from './routes/auth.js'
 import bookingsRouter from './routes/bookings.js'
 import inventoryRouter from './routes/inventory.js'
@@ -45,6 +46,10 @@ app.use('/api/usage', usageRouter)
 
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-})
+;(async () => {
+  await initDb()
+  await seed()
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`)
+  })
+})()

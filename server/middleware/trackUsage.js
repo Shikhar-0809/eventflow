@@ -1,4 +1,4 @@
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 
 const sanitizeMetadata = (raw) => {
   if (!raw || typeof raw !== 'object') return null
@@ -20,10 +20,10 @@ export const trackUsage = (eventType, getMetadata) => (req, res, next) => {
 
     try {
       const metadata = resolveMetadata(req, res, getMetadata)
-      db.prepare('INSERT INTO event_log (event_type, metadata) VALUES (?, ?)').run(
-        eventType,
-        metadata ? JSON.stringify(metadata) : null,
-      )
+      pool.query(
+        'INSERT INTO event_log (event_type, metadata) VALUES ($1, $2)',
+        [eventType, metadata ? JSON.stringify(metadata) : null],
+      ).catch(() => {})
     } catch {
       // Logging must never break or delay the merchant-facing response.
     }

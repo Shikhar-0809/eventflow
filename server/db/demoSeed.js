@@ -25,111 +25,131 @@ const DEMO_SURESH_PHONE = '9876543220'
 const VERIFICATION_CLIENT = 'Verify Demo Client'
 const MANUAL_TEST_BOOKING_IDS = [65, 66, 67, 68]
 
-export const removeManualTestBookings = (db) => {
-  const placeholders = MANUAL_TEST_BOOKING_IDS.map(() => '?').join(', ')
-  const rows = db
-    .prepare(`SELECT id, client_name, event_date FROM bookings WHERE id IN (${placeholders})`)
-    .all(...MANUAL_TEST_BOOKING_IDS)
+export const removeManualTestBookings = async (pool) => {
+  const placeholders = MANUAL_TEST_BOOKING_IDS.map((_, i) => `$${i + 1}`).join(', ')
+  const { rows } = await pool.query(
+    `SELECT id, client_name, event_date FROM bookings WHERE id IN (${placeholders})`,
+    MANUAL_TEST_BOOKING_IDS,
+  )
 
   if (rows.length === 0) {
     return { removed: 0, rows: [] }
   }
 
-  const deleteChangeLog = db.prepare('DELETE FROM change_log WHERE booking_id = ?')
-  const deleteBooking = db.prepare('DELETE FROM bookings WHERE id = ?')
-  const removeMany = db.transaction((toRemove) => {
-    for (const row of toRemove) {
-      deleteChangeLog.run(row.id)
-      deleteBooking.run(row.id)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    for (const row of rows) {
+      await client.query('DELETE FROM change_log WHERE booking_id = $1', [row.id])
+      await client.query('DELETE FROM bookings WHERE id = $1', [row.id])
     }
-  })
-  removeMany(rows)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 
   return { removed: rows.length, rows }
 }
 
-export const purgeNonDemoEventLog = (db) => {
-  const result = db
-    .prepare(`DELETE FROM event_log
-              WHERE metadata NOT LIKE '%"demo_seed":true%' OR metadata IS NULL`)
-    .run()
-  return { removed: result.changes }
+export const purgeNonDemoEventLog = async (pool) => {
+  const result = await pool.query(
+    `DELETE FROM event_log
+     WHERE metadata NOT LIKE '%"demo_seed":true%' OR metadata IS NULL`,
+  )
+  return { removed: result.rowCount }
 }
 
-export const removeVerificationBookings = (db) => {
-  const rows = db
-    .prepare('SELECT id, client_name, event_date FROM bookings WHERE client_name = ?')
-    .all(VERIFICATION_CLIENT)
+export const removeVerificationBookings = async (pool) => {
+  const { rows } = await pool.query(
+    'SELECT id, client_name, event_date FROM bookings WHERE client_name = $1',
+    [VERIFICATION_CLIENT],
+  )
 
   if (rows.length === 0) {
     return { removed: 0, rows: [] }
   }
 
-  const deleteChangeLog = db.prepare('DELETE FROM change_log WHERE booking_id = ?')
-  const deleteBooking = db.prepare('DELETE FROM bookings WHERE id = ?')
-  const removeMany = db.transaction((toRemove) => {
-    for (const row of toRemove) {
-      deleteChangeLog.run(row.id)
-      deleteBooking.run(row.id)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    for (const row of rows) {
+      await client.query('DELETE FROM change_log WHERE booking_id = $1', [row.id])
+      await client.query('DELETE FROM bookings WHERE id = $1', [row.id])
     }
-  })
-  removeMany(rows)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 
   return { removed: rows.length, rows }
 }
 
-export const seedSureshDemoBooking = (db) => {
-  const existing = db.prepare('SELECT id FROM bookings WHERE phone = ?').get(DEMO_SURESH_PHONE)
-  if (existing) {
-    return { inserted: false, id: existing.id }
+export const seedSureshDemoBooking = async (pool) => {
+  const { rows: existingRows } = await pool.query(
+    'SELECT id FROM bookings WHERE phone = $1',
+    [DEMO_SURESH_PHONE],
+  )
+  if (existingRows[0]) {
+    return { inserted: false, id: existingRows[0].id }
   }
 
   const now = new Date()
   const conflictDay = addDays(now, 6)
   const conflictDateStr = formatDate(conflictDay)
-  const conflictCount = db
-    .prepare('SELECT COUNT(*) AS count FROM bookings WHERE event_date = ?')
-    .get(conflictDateStr).count
+  const { rows: countRows } = await pool.query(
+    'SELECT COUNT(*) AS count FROM bookings WHERE event_date = $1',
+    [conflictDateStr],
+  )
+  const conflictCount = parseInt(countRows[0].count, 10)
 
   const targetDay = conflictCount > 0 ? addDays(now, 7) : conflictDay
   const eventDate = formatDate(targetDay)
 
-  const result = db.prepare(`
-    INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    'Suresh Kumar',
-    DEMO_SURESH_PHONE,
-    'wedding',
-    eventDate,
-    350,
-    'Gandhi Maidan',
-    20000,
-    120000,
-    'confirmed',
-    'Demo recording booking — near-term wedding, separate from conflict-demo date',
+  const { rows } = await pool.query(
+    `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING id`,
+    [
+      'Suresh Kumar',
+      DEMO_SURESH_PHONE,
+      'wedding',
+      eventDate,
+      350,
+      'Gandhi Maidan',
+      20000,
+      120000,
+      'confirmed',
+      'Demo recording booking — near-term wedding, separate from conflict-demo date',
+    ],
   )
 
-  return { inserted: true, id: result.lastInsertRowid, eventDate, conflictDateStr }
+  return { inserted: true, id: rows[0].id, eventDate, conflictDateStr }
 }
 
-export const seedDemoEventLog = (db) => {
-  const markerCount = db
-    .prepare("SELECT COUNT(*) AS count FROM event_log WHERE metadata LIKE '%\"demo_seed\":true%'")
-    .get().count
+export const seedDemoEventLog = async (pool) => {
+  const { rows: markerRows } = await pool.query(
+    "SELECT COUNT(*) AS count FROM event_log WHERE metadata LIKE '%\"demo_seed\":true%'",
+  )
+  const markerCount = parseInt(markerRows[0].count, 10)
 
   if (markerCount >= 7) {
     return { inserted: 0, skipped: true, total: markerCount }
   }
 
   if (markerCount > 0) {
-    db.prepare('DELETE FROM event_log').run()
+    await pool.query('DELETE FROM event_log')
   }
 
-  const bookingIds = db
-    .prepare('SELECT id FROM bookings ORDER BY id ASC LIMIT 10')
-    .all()
-    .map((row) => row.id)
+  const { rows: bookingIdRows } = await pool.query(
+    'SELECT id FROM bookings ORDER BY id ASC LIMIT 10',
+  )
+  const bookingIds = bookingIdRows.map((row) => row.id)
 
   if (bookingIds.length === 0) {
     return { inserted: 0, skipped: true }
@@ -171,23 +191,30 @@ export const seedDemoEventLog = (db) => {
     },
   ]
 
-  const insert = db.prepare(
-    'INSERT INTO event_log (event_type, metadata, created_at) VALUES (?, ?, ?)',
-  )
-  const insertMany = db.transaction((rows) => {
-    for (const row of rows) {
-      insert.run(row.event_type, row.metadata, row.created_at)
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    for (const row of events) {
+      await client.query(
+        'INSERT INTO event_log (event_type, metadata, created_at) VALUES ($1, $2, $3)',
+        [row.event_type, row.metadata, row.created_at],
+      )
     }
-  })
-  insertMany(events)
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 
   return { inserted: events.length, skipped: false }
 }
 
-export const logDevBookings = (db) => {
-  const rows = db
-    .prepare('SELECT id, client_name, event_date, status FROM bookings ORDER BY event_date, id')
-    .all()
+export const logDevBookings = async (pool) => {
+  const { rows } = await pool.query(
+    'SELECT id, client_name, event_date, status FROM bookings ORDER BY event_date, id',
+  )
 
   console.log('Demo bookings (dev boot):')
   for (const row of rows) {

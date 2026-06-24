@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 import { requireAuth } from '../middleware/requireAuth.js'
 
 const router = Router()
@@ -27,7 +27,7 @@ const lastSixMonthKeys = () => {
 
 router.use(requireAuth)
 
-router.get('/summary', (req, res, next) => {
+router.get('/summary', async (req, res, next) => {
   try {
     const now = new Date()
     const year = now.getFullYear()
@@ -39,38 +39,39 @@ router.get('/summary', (req, res, next) => {
     const sixMonthStart = monthStart(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth())
     const windowEnd = currentEnd
 
-    const revenueThisMonth = db
-      .prepare(
-        'SELECT COALESCE(SUM(total), 0) AS revenue FROM bookings WHERE event_date >= ? AND event_date < ?',
-      )
-      .get(currentStart, currentEnd).revenue
+    const { rows: revenueRows } = await pool.query(
+      'SELECT COALESCE(SUM(total), 0) AS revenue FROM bookings WHERE event_date >= $1 AND event_date < $2',
+      [currentStart, currentEnd],
+    )
+    const revenueThisMonth = Number(revenueRows[0].revenue)
 
-    const bookingsThisMonth = db
-      .prepare(
-        'SELECT COUNT(*) AS count FROM bookings WHERE event_date >= ? AND event_date < ?',
-      )
-      .get(currentStart, currentEnd).count
+    const { rows: bookingsRows } = await pool.query(
+      'SELECT COUNT(*) AS count FROM bookings WHERE event_date >= $1 AND event_date < $2',
+      [currentStart, currentEnd],
+    )
+    const bookingsThisMonth = Number(bookingsRows[0].count)
 
-    const peakRow = db
-      .prepare(
-        `SELECT strftime('%Y-%m', event_date) AS month, COUNT(*) AS count
-         FROM bookings
-         WHERE event_date >= ? AND event_date < ?
-         GROUP BY month
-         ORDER BY count DESC, month DESC
-         LIMIT 1`,
-      )
-      .get(sixMonthStart, windowEnd)
+    const { rows: peakRows } = await pool.query(
+      `SELECT TO_CHAR(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS count
+       FROM bookings
+       WHERE event_date >= $1 AND event_date < $2
+       GROUP BY month
+       ORDER BY count DESC, month DESC
+       LIMIT 1`,
+      [sixMonthStart, windowEnd],
+    )
+    const peakRow = peakRows[0]
 
-    const totalClients = db
-      .prepare('SELECT COUNT(DISTINCT phone) AS total FROM bookings')
-      .get().total
+    const { rows: clientRows } = await pool.query(
+      'SELECT COUNT(DISTINCT phone) AS total FROM bookings',
+    )
+    const totalClients = Number(clientRows[0].total)
 
     res.status(200).json({
       revenueThisMonth,
       bookingsThisMonth,
       peakMonth: peakRow
-        ? { month: peakRow.month, count: peakRow.count }
+        ? { month: peakRow.month, count: Number(peakRow.count) }
         : { month: null, count: 0 },
       totalClients,
     })
@@ -79,31 +80,30 @@ router.get('/summary', (req, res, next) => {
   }
 })
 
-router.get('/monthly', (req, res, next) => {
+router.get('/monthly', async (req, res, next) => {
   try {
     const now = new Date()
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
     const sixMonthStart = monthStart(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth())
     const windowEnd = nextMonthStart(now.getFullYear(), now.getMonth())
 
-    const rows = db
-      .prepare(
-        `SELECT strftime('%Y-%m', event_date) AS month,
-                COUNT(*) AS bookings,
-                COALESCE(SUM(total), 0) AS revenue
-         FROM bookings
-         WHERE event_date >= ? AND event_date < ?
-         GROUP BY month
-         ORDER BY month ASC`,
-      )
-      .all(sixMonthStart, windowEnd)
+    const { rows } = await pool.query(
+      `SELECT TO_CHAR(event_date::date, 'YYYY-MM') AS month,
+              COUNT(*) AS bookings,
+              COALESCE(SUM(total), 0) AS revenue
+       FROM bookings
+       WHERE event_date >= $1 AND event_date < $2
+       GROUP BY month
+       ORDER BY month ASC`,
+      [sixMonthStart, windowEnd],
+    )
 
     const byMonth = Object.fromEntries(rows.map((r) => [r.month, r]))
 
     const monthly = lastSixMonthKeys().map((month) => ({
       month,
-      bookings: byMonth[month]?.bookings ?? 0,
-      revenue: byMonth[month]?.revenue ?? 0,
+      bookings: Number(byMonth[month]?.bookings ?? 0),
+      revenue: Number(byMonth[month]?.revenue ?? 0),
     }))
 
     res.status(200).json(monthly)
