@@ -6,17 +6,38 @@ Scope discipline is the difference between shipping a working v1 and never shipp
 
 ---
 
+## Scope decisions log
+
+Changes to the locked v1 scope get recorded here so the "why" doesn't get lost later. This is a living section — append to it, don't rewrite history.
+
+- **[Added to v1]** Inventory tracking — items, available/in-use/damaged counts, and a per-date availability check tied to bookings. Originally filed under v2 ("Conflict detection extended from 'date clash' to 'not enough inventory available on this date'"). Pulled forward at the merchant's direct request. Scope kept intentionally lighter than the full v2 description: availability is computed **per event date** by summing what's already committed to other bookings on that exact date — mirroring the existing date-clash logic — rather than a true deploy/return state machine. Real physical deploy/return tracking remains a later idea if it's ever needed; see the new v2 section below.
+- **[Added to v1]** Edit an existing booking. Originally filed under v1.5 ("Edit/cancel an existing booking — currently create-only"). Only **edit** was pulled forward; **cancel** stays in v1.5 since it wasn't requested.
+- **[Behavior change]** Date-clash conflict detection no longer blocks submission. It shows an alert (`ConflictBanner`), but the merchant can still confirm the booking — two events on the same date may be perfectly fine for this merchant to take on. Inventory shortfalls follow a related but stricter pattern: alert, then an explicit "confirm anyway" step before the merchant can override it, since a chair shortage is a more concrete physical problem than two calendar entries sharing a date.
+- **[Rebrand]** Merchant persona renamed from "Sharma Tent House" to "Bala Ji Tent House" — Sidebar branding, WhatsApp message sign-off, and document title all updated. (The tool itself is still called EventFlow; only the merchant-facing business name changed.) WhatsApp messages now sign off as "Bala Ji Tent House" instead of "EventFlow" — the message is sent on the merchant's behalf, not the software's.
+- **[UI decision]** Inventory quantity selection in BookingModal uses a visual "unit grid" picker (BookMyShow-style: a grid of unit indicators showing filled/available, click to set quantity) instead of a plain number input. This is presentation only — the underlying model remains quantity-based (available = usable - committed per event date), not individually-identified units. True per-unit identity tracking (which specific chair goes where) was considered and explicitly rejected as out of scope — items are interchangeable for this business.
+- **[Resolved]** Bugs #005 (cold reload connection error), #012 (calendar event context switch), and a tab-title nit on the connection error screen — all fixed and verified before Prompt 15. No open bugs entering the Postgres migration.
+
+---
+
 ## v1 (current build) — locked scope
 
 - Single merchant, password-protected login
 - Calendar view of all bookings
-- Create booking with real-time conflict detection
+- Create booking with real-time conflict detection (alert-only, doesn't block — see Scope decisions log)
+- **Edit an existing booking** (added — see Scope decisions log)
 - Booking detail view
-- WhatsApp confirmation + payment reminder (deep link, no API)
+- WhatsApp confirmation + payment reminder (deep link, no API), signed as Bala Ji Tent House
 - Manual change log per booking
 - **Business analytics dashboard** — revenue, bookings/month, peak month, total clients (merchant-facing)
-- **Usage tracking** — merchant-facing "Your Activity" summary + internal adoption-proof event log (added per panel feedback — see ARCHITECTURE.md's Analytics vs Usage section)
-- Deployed on Vercel (frontend) + Render (backend) + Neon/Supabase (Postgres)
+- **Usage tracking** — merchant-facing "Your Activity" summary + internal adoption-proof event log
+- **Inventory tracking** (added — see Scope decisions log):
+  - Inventory item types (chairs, tables, sofas, tents, generators, etc.) with total owned and damaged/repair count
+  - Available vs. in-use-today counts shown separately per item
+  - Add new item types; edit total quantity owned
+  - Mark items damaged / mark items repaired, with a lightweight audit log (mirrors the existing booking change-log pattern)
+  - Attach inventory needs to a booking (e.g. "150 chairs, 20 tables")
+  - Per-event-date availability check when creating or editing a booking — alert + explicit "confirm anyway" step if insufficient, never a silent block
+- Deployed on Vercel (frontend) + Render (backend) + Neon/Supabase (Postgres) — **deliberately deferred for now** per the Prompt 15 decision; see `DEPLOYMENT.md`. The app ships as a fully functional local, demo-ready build in the meantime.
 
 This is the version validated with the real merchant from the original conversation. Nothing below gets built until v1 is in their hands and being used.
 
@@ -26,22 +47,22 @@ This is the version validated with the real merchant from the original conversat
 
 These are low-effort, high-value additions that don't expand scope conceptually, just depth:
 
-- Edit/cancel an existing booking (currently create-only)
+- Cancel an existing booking
 - Search/filter bookings by client name or date range
-- Simple data export button (CSV) in the UI — currently this exists only as a manual script per DATA_PRIVACY.md
+- Simple data export button (CSV) in the UI — currently this exists only as a manual script per `DATA_PRIVACY.md`
 - "Mark advance as fully paid" quick action on the detail panel
-- Self-service password reset (currently manual via developer, per RUNBOOK.md)
+- Self-service password reset (currently manual via developer, per `RUNBOOK.md`)
 
 ---
 
-## v2 — inventory tracking
+## v2 — deeper inventory & operations
 
-The second problem the merchant named, after booking chaos. Deferred from v1 specifically because the panel feedback was to prove value with one flow first.
+What's left of the original "inventory tracking" bucket after the core was pulled forward into v1:
 
-- Inventory items table: tents, chairs, tables, generators, etc. with quantity owned
-- Link inventory to bookings — deploy/return tracking
-- Conflict detection extended from "date clash" to "not enough inventory available on this date"
-- Damage/loss logging
+- True deploy/return tracking — explicitly marking inventory as physically out for an event and back in stock, instead of computing "in use" from the event date alone
+- Multi-day event support (inventory held across a date range, not a single day)
+- Damage/loss **cost** tracking (₹ value of damaged items, not just a count)
+- Low-stock threshold alerts (e.g. "only 20% of chairs are unbooked this month")
 
 ---
 
@@ -77,7 +98,7 @@ Only relevant if EventFlow moves from "one merchant's tool" to "a product for ma
 - Per-merchant data isolation
 - Onboarding flow for new merchants
 - Billing/subscription model
-- This would also reopen DATA_PRIVACY.md for a full rewrite — single-merchant informal trust does not scale to multi-tenant SaaS, and DPDP Act obligations get materially heavier (formal privacy policy, consent flows, possibly a Data Protection Officer depending on scale)
+- This would also reopen `DATA_PRIVACY.md` for a full rewrite — single-merchant informal trust does not scale to multi-tenant SaaS, and DPDP Act obligations get materially heavier (formal privacy policy, consent flows, possibly a Data Protection Officer depending on scale)
 
 ---
 
@@ -94,4 +115,4 @@ Keeping a "no" list prevents re-litigating the same idea every few weeks.
 
 ## How to use this file
 
-Before adding any feature not in "v1 (current build) — locked scope," ask: is this already listed somewhere below? If yes, it's deferred on purpose — don't build it now. If it's genuinely new, add it to the appropriate version bucket and keep building v1.
+Before adding any feature not in "v1 (current build) — locked scope," ask: is this already listed somewhere below? If yes, it's deferred on purpose — don't build it now. If it's genuinely new, add it to the appropriate version bucket and keep building v1. If an explicit decision is made to pull something forward (as happened with inventory and booking-edit), record it in the **Scope decisions log** at the top of this file rather than just silently moving the bullet — the log is what keeps this file trustworthy over time.

@@ -1,29 +1,66 @@
 const BASE = import.meta.env.VITE_API_URL
 
 class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, conflictBooking = null) {
     super(message)
     this.status = status
+    this.conflictBooking = conflictBooking
   }
 }
 
 const request = async (path, options = {}) => {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new ApiError(body.error || 'Something went wrong. Please try again.', res.status)
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    })
+  } catch {
+    throw new ApiError('Something went wrong. Please try again.', 0)
   }
 
-  return res.json()
+  const body = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new ApiError(
+      body.error || 'Something went wrong. Please try again.',
+      res.status,
+      body.conflict ? body.booking : null,
+    )
+  }
+
+  return body
 }
 
 export const api = {
   login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   getMe: () => request('/auth/me'),
+  getBookings: () => request('/bookings'),
+  getBooking: (id) => request(`/bookings/${id}`),
+  createBooking: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
+  updateBooking: (id, data) => request(`/bookings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  checkConflict: (date, excludeId) => {
+    const params = new URLSearchParams({ date })
+    if (excludeId != null) params.set('excludeId', String(excludeId))
+    return request(`/bookings/check-conflict?${params}`)
+  },
+  logChange: (id, note) => request(`/bookings/${id}/log`, { method: 'PATCH', body: JSON.stringify({ note }) }),
+  logClientAction: (eventType, bookingId) =>
+    request('/usage/log-client-action', {
+      method: 'POST',
+      body: JSON.stringify({ event_type: eventType, booking_id: bookingId }),
+    }),
+  getAnalyticsSummary: () => request('/analytics/summary'),
+  getMonthlyAnalytics: () => request('/analytics/monthly'),
+  getMyUsage: () => request('/usage/me'),
+  getInventory: () => request('/inventory'),
+  addInventoryItem: (data) => request('/inventory', { method: 'POST', body: JSON.stringify(data) }),
+  updateInventoryQuantity: (id, data) =>
+    request(`/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  adjustInventoryDamage: (id, data) =>
+    request(`/inventory/${id}/damage`, { method: 'POST', body: JSON.stringify(data) }),
+  checkInventoryAvailability: (data) =>
+    request('/inventory/check-availability', { method: 'POST', body: JSON.stringify(data) }),
 }

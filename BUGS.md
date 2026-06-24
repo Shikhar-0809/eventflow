@@ -21,23 +21,17 @@ Log every bug here as you find it during the build. Format: one line description
 
 ---
 
+No open bugs as of pre-Prompt-15 gate — all v1 issues resolved.
+
 ## Bug tracker
 
 | # | Description | Severity | Status | Fix |
 |---|---|---|---|---|
-| 001 | better-sqlite3 ERR_DLOPEN_FAILED — Node ABI mismatch between Cursor terminal (Node 22 / MODULE 127) and external PowerShell (nvm Node 20 / MODULE 115) | Medium | Fixed | See note below |
-| 002 | PowerShell `$` in bcrypt hash corrupts `MERCHANT_PASSWORD_HASH` when set without quoting — login fails with "Incorrect password" | Low | Fixed | Wrap the value in single quotes when setting env vars containing `$` in PowerShell |
+| 020 | [SECURITY-adjacent / process] Partial Prompt 15 (Postgres) migration code was present in the working tree (database.js exiting on missing DATABASE_URL, routes using pg) despite Prompt 15 being explicitly deferred in PROMPTS.md — broke local server startup ahead of Prompts 16-21 | High | Fixed | Reverted database.js, schema.sql, routes, seeds, trackUsage.js, package.json back to better-sqlite3. Verification pass confirmed all DB paths use better-sqlite3 .prepare()/.run()/.get()/.all() with ? placeholders, no pg references remain, db.transaction(fn) pattern intact in seed files. |
+| 021 | Date conflict blocked booking creation — submit disabled and POST /bookings returned 409, contradicting ARCHITECTURE.md advisory-only conflict model (Prompt 17) | Medium | Fixed | Prompt 17 follow-up: submit no longer gated on hasConflict; POST/PATCH always persist after validation. Backend detects same-date clashes (non-cancelled) and returns optional `conflict: { detected, booking }` on 201/200 — never 409. Prior gap: backend check was removed entirely, so API-only/race paths had no clash record; restored with informational response shape matching inventory shortfalls. |
+| 022 | Verification scripts' finally-block cleanup (verifyDbCleanup.mjs pattern) does not run if the script process is abruptly terminated (e.g. killed mid-execution) rather than failing gracefully via a thrown error — confirmed this is expected Node.js process-termination behavior, not a logic bug in the cleanup code itself. Can leave orphaned test rows in the dev DB if a verify script is force-killed. | Low | Open (documented, accepted) | Cleanup logic verified correct for graceful failures (deliberate-throw test passed). Abrupt termination is an accepted low-stakes risk for a single-developer dev DB — not worth engineering around at this scale. If orphaned test data is ever found, clean up manually using the naming convention (ZZZ_TEST_* / Audit *) to identify it. |
 
-### 001 — better-sqlite3 ABI mismatch (ERR_DLOPEN_FAILED)
-
-**Root cause:** nvm-windows had Node **20.20.2** active in external PowerShell (`C:\nvm4w\nodejs\node.exe`, `NODE_MODULE_VERSION` **115**) while Cursor's bundled terminal used Node **22.22.0** (`NODE_MODULE_VERSION` **127**). `npm install` compiled `better-sqlite3`'s native binary against Node 22's ABI (127), which then failed to load under Node 20 (115) with `ERR_DLOPEN_FAILED`.
-
-**Fix:**
-1. `nvm install 22.22.0` + `nvm use 22.22.0` — align external PowerShell with Cursor's bundled Node version
-2. `npm rebuild better-sqlite3` — recompile the native binary against the now-matching version
-3. **Windows gotcha:** a leftover `node index.js` process held a file lock on `better_sqlite3.node` (`EBUSY`/`EPERM`) — had to `Stop-Process` the running node PID before the rebuild would succeed. Kill running node processes before any future native-module rebuild on Windows.
-
-**Status:** Fixed. Verified `node -v` and `node -p "process.versions.modules"` match between Cursor's terminal and external PowerShell; server boots clean under both `NODE_ENV=development` and `NODE_ENV=production`; prod seed guard holds; `/api/health` returns `{"status":"ok"}`.
+Carried forward from the prior build pass — see `HANDOFF.md` for the full archive of #001–#019. Log new bugs found during the rebrand/inventory/edit-booking work below this line as they're found.
 
 ---
 
@@ -61,16 +55,17 @@ These are common issues with the stack used — check these first before logging
 **better-sqlite3**
 - Synchronous by design — do not wrap in async/await, it will behave unexpectedly
 - If DB file not found: check that the path in `database.js` is relative to the server root, not the project root
-- On Windows, kill any running `node` processes before `npm rebuild better-sqlite3` — a live server holds a file lock on `better_sqlite3.node` and rebuild fails with `EBUSY`/`EPERM`
-- If `ERR_DLOPEN_FAILED` / `NODE_MODULE_VERSION` mismatch: `npm install` and `node` must use the same Node version — check with `node -v` and `node -p "process.versions.modules"` in both Cursor and external PowerShell; align via `nvm use` then `npm rebuild better-sqlite3`
+- Multi-table writes (booking + `booking_inventory` rows, item + damage log row) need `db.transaction(fn)` — a half-completed insert across two tables is a real risk once inventory lines are part of every booking write
 
 **Zustand**
 - If state updates don't reflect in calendar: make sure you're spreading the array `[...state.bookings, newBooking]` not mutating it
 - If store is undefined: check that the component is inside the React tree (not called outside a component)
+- `bookingStore`'s `modalMode` ('create' vs 'edit') must be reset to `'create'` on close — if it leaks, the next "New Booking" click can accidentally open in edit mode against a stale `selectedBooking`
 
 **WhatsApp links**
 - If link doesn't open WhatsApp: check that phone number has no spaces or dashes — strip all non-digits before building the link
 - If message is malformed: always `encodeURIComponent` the full message string
+- If the message still says "EventFlow" at the end: check `utils/whatsapp.js` — both templates should sign off as "Bala Ji Tent House" per the rebrand, see `ARCHITECTURE.md`
 
 **CORS**
 - If frontend can't reach backend: make sure `cors()` middleware is added before routes in `index.js`
@@ -80,6 +75,12 @@ These are common issues with the stack used — check these first before logging
 - If styles don't apply: check `tailwind.config.js` content array includes `./src/**/*.{js,jsx}`
 - If custom FullCalendar overrides don't work: add `!important` or increase specificity with parent selector
 
+**Inventory**
+- If chair/table counts look wrong on `InventoryView`: check that "in use" is computed for **today's date only** — items committed to bookings on other dates should never reduce today's available count
+- If a booking's date is changed during an edit: the availability recalculation must use the *new* date, not the date the booking was originally created against — a stale date in the check produces a confidently wrong number
+- If editing a booking shows a false inventory shortfall against itself: confirm `excludeBookingId` is actually being passed to `/api/inventory/check-availability` — same class of bug as forgetting `excludeId` on the date-conflict check
+- If `damaged_quantity` goes negative or above `total_quantity`: the clamp logic in the `/api/inventory/:id/damage` route is missing or wrong — this should never be reachable from the UI, but the backend must enforce it regardless of what the frontend sends
+
 ---
 
 ## Security-specific gotchas (check before every milestone)
@@ -88,10 +89,13 @@ These are common issues with the stack used — check these first before logging
 - If the merchant gets logged out on every refresh: check the cookie is set with `httpOnly: true, secure: NODE_ENV==='production', sameSite: 'lax'` — `secure: true` in dev (on http://localhost) will silently block the cookie from being set at all
 
 **Validation skipped on the server**
-- If a malformed booking gets through: the most common cause is the `validate(schema)` middleware being added to the route but placed *after* the route handler instead of before it in the middleware chain — order matters in Express
+- If a malformed booking gets through: the most common cause is the `validate(schema)` middleware being added to the route but placed *after* the route handler instead of before it in the middleware chain — order matters in Express. Same applies to the new inventory routes.
 
 **Conflict check race condition**
-- Frontend conflict check is advisory only (UX feedback). If two requests hit POST `/bookings` for the same date within milliseconds of each other, the backend check-then-insert is not atomic in plain SQL. For v1 with a single merchant typing manually, this is a low-probability bug — documented here, not yet fixed. If it becomes relevant, fix with a `UNIQUE` constraint on `event_date` in the schema and catch the DB-level constraint error instead of relying on the SELECT-then-INSERT pattern.
+- Frontend conflict check is advisory only (UX feedback) — the merchant can confirm a booking even when `ConflictBanner` is showing. POST `/bookings` always returns **201** and may include `conflict: { detected: true, booking: {...} }` when another non-cancelled booking shares the date (field omitted when clear). If two creates hit the same date within milliseconds, both can succeed; the response body records the clash for API-only paths.
+
+**Inventory availability race condition**
+- Same shape of bug as the conflict-check race condition above, applied to inventory: the `/api/inventory/check-availability` check and the actual booking insert are not atomic. Two near-simultaneous bookings against the same date and item could both pass the check and together oversubscribe an item. For a single merchant typing manually, this is acceptably low-probability for v1 — documented here, not fixed. Not worth a locking mechanism at this scale.
 
 **Secrets accidentally logged**
 - If `JWT_SECRET` or `MERCHANT_PASSWORD_HASH` ever appears in a `console.log` during debugging — search the whole codebase for that log line and remove it before the next commit, not just before deploy
@@ -112,8 +116,11 @@ These are common issues with the stack used — check these first before logging
 
 ## Resolved bugs archive
 
-Move fixed bugs here from the tracker above once confirmed working.
+Move fixed bugs here from the tracker above once confirmed working. The full archive of #001–#004, #006–#011, #013–#019 from the prior build pass lives in project history / `HANDOFF.md` — re-paste entries here as they're reconfirmed in this chat if a fresh log is needed.
 
 | # | Description | Fix |
 |---|---|---|
-| — | None yet | — |
+| 005 | Cold reload with backend down shows LoginScreen instead of a distinct "can't connect" message (checkAuth network failure misread as invalid session) | authStore `connectionError` flag distinguishes network/5xx from 401; App.jsx renders a full-screen reconnect message instead of LoginScreen |
+| 012 | Clicking a different calendar event while BookingDetail drawer is already open doesn't switch the panel — stays on the previously opened booking until closed and reopened | BookingDetail sync effect returns null when selectedBooking.id changes instead of keeping stale local booking state |
+| — | Tab title read "EventFlow — Log In" on connection error screen instead of "EventFlow — Bala Ji Tent House" | App.jsx title effect treats `connectionError` the same as `isAuthenticated` so the merchant sees the product name, not the login title |
+| — | See HANDOFF.md for the #001–#019 archive carried over from the previous session | — |

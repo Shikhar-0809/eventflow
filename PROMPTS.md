@@ -1,4 +1,3 @@
-
 # PROMPTS.md — EventFlow
 
 ## How to use this file
@@ -10,6 +9,8 @@ Run these prompts in Cursor in the exact order listed. Each prompt builds on the
 After every milestone marked **[MILESTONE]**, run the relevant checklist from `TESTING.md` and the security audit checklist from `SECURITY.md` before moving on. This is no longer optional now that real merchant data is in scope — see the conversation that led to this update.
 
 Estimated time per prompt is noted. This build is now product-grade, not just demo — budget more time than the original 8-hour pass, especially for Prompts 2 (auth) and 6 (security hardening), which are new.
+
+**Note on Prompts 16–21:** these were added after the original build (Prompts 0–14) was complete, demo-verified, and Prompt 15 (Postgres migration) was deliberately deferred. Run 16–21 against the local SQLite build, **before** ever attempting Prompt 15 / deployment — they extend v1's feature scope (rebrand, non-blocking conflict alerts, booking edit, inventory tracking) per the Scope decisions log in `ROADMAP.md`. They're numbered after Prompt 15 only to avoid renumbering a prompt that `DEPLOYMENT.md` and other docs already reference by number — sequence-wise, treat 16–21 as continuing directly from 14.
 
 ---
 
@@ -216,6 +217,8 @@ Submit button: full width, bg-teal-600 hover:bg-teal-700, "Confirm Booking" text
 All inputs: consistent style — border border-slate-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-teal-500, border-red-400 when that field has a validation error
 
 Build ConflictBanner.jsx as a separate component.
+
+NOTE: the "submit button disabled and grey on conflict" behavior described above was changed in Prompt 17 — if you're running this prompt fresh today, skip straight to Prompt 17's version of this behavior instead of implementing the blocking version first.
 ```
 
 ---
@@ -367,7 +370,7 @@ Run a security hardening pass on the EventFlow codebase, following SECURITY.md e
 
 1. Audit every route in /server/routes — confirm every route except /api/auth/login has requireAuth in its middleware chain, INCLUDING the new analytics.js and usage.js routes added in Prompts 9-11. Fix any that are missing it.
 
-2. Confirm /server/middleware/errorHandler.js never returns err.message or err.stack when process.env.NODE_ENV === 'production' — only a generic message. Add a test by throwing a deliberate error and checking the response shape.
+2. Confirm /server/middleware/errorHandler.js never returns err.message or err.stack when process.env.NODE_ENV === 'production'. Add a test by throwing a deliberate error and checking the response shape.
 
 3. Search the entire codebase for any console.log that includes req.body, password, token, or full booking objects — remove or replace with a NODE_ENV-gated debug helper. Pay specific attention to anything in trackUsage.js or the analytics/usage routes that might accidentally log client phone numbers.
 
@@ -441,7 +444,7 @@ If any seed data is missing or malformed, fix seed.js and clear + re-run the see
 ---
 
 ## Prompt 15 — Postgres migration for deploy
-**Time: 40 min — run only when ready to deploy, see DEPLOYMENT.md first**
+**Time: 40 min — run only when ready to deploy, see DEPLOYMENT.md first — DEFERRED, do not run yet**
 
 ```
 Migrate EventFlow's database layer from better-sqlite3 to Postgres, following DEPLOYMENT.md exactly.
@@ -452,30 +455,194 @@ Migrate EventFlow's database layer from better-sqlite3 to Postgres, following DE
 
 3. Rewrite /server/db/database.js to connect via a pg Pool using process.env.DATABASE_URL, with ssl enabled when NODE_ENV is production. Export the pool.
 
-4. Update every query in /server/routes/bookings.js and /server/routes/auth.js (if any DB access there) from better-sqlite3's synchronous .prepare().get()/.run() pattern to pg's async pool.query() with $1, $2 style parameterized placeholders instead of ?. Every route handler must now properly await these calls.
+4. Update every query in /server/routes/bookings.js, /server/routes/inventory.js, and /server/routes/auth.js (if any DB access there) from better-sqlite3's synchronous .prepare().get()/.run() pattern to pg's async pool.query() with $1, $2 style parameterized placeholders instead of ?. Every route handler must now properly await these calls. Pay attention to the multi-table transactions (booking + booking_inventory, item + damage log) — pg uses a client checked out from the pool with BEGIN/COMMIT/ROLLBACK, not better-sqlite3's db.transaction(fn).
 
 5. Re-confirm the NODE_ENV guard in seed.js still prevents seeding in production — adapt the seed insert statements to use the new pg query pattern but keep the production guard absolutely intact.
 
-6. Test locally against a free Neon dev database before deploying — set DATABASE_URL in server/.env to the Neon connection string and confirm the app still works end to end (login, create booking, conflict detection, change log).
+6. Test locally against a free Neon dev database before deploying — set DATABASE_URL in server/.env to the Neon connection string and confirm the app still works end to end (login, create booking, edit booking, conflict detection, inventory check, change log).
 
 Follow CODING_STANDARDS.md's parameterized-query rule throughout — no string interpolation into SQL, ever.
 ```
 
 ---
 
+## Prompt 16 — Rebrand: Sharma Tent House → Bala Ji Tent House
+**Time: 15 min**
+
+```
+Rebrand the merchant persona across EventFlow from "Sharma Tent House" to "Bala Ji Tent House". The tool's own name, "EventFlow", does NOT change — only the merchant business name shown inside it.
+
+Find and update every occurrence:
+
+1. Sidebar.jsx — the business name header next to the tent icon: "Sharma Tent House" → "Bala Ji Tent House"
+2. document.title (wherever it's set, likely main.jsx or App.jsx, per Prompt 13) — "EventFlow — Sharma Tent House" → "EventFlow — Bala Ji Tent House"
+3. utils/whatsapp.js — both confirmationMessage() and paymentReminderMessage() currently sign off with "- EventFlow". Change the sign-off to "- Bala Ji Tent House" in both templates, exactly matching the templates in ARCHITECTURE.md's WhatsApp link generation section.
+4. Search the whole codebase (client and server) for any other literal occurrence of "Sharma Tent House" and update it. Do NOT touch references to "EventFlow" as the tool/product name — only the merchant persona name changes.
+
+Do not touch seed data client names (Ramesh Sharma, Priya Patel, etc.) — those are fictional client names, unrelated to the merchant business name, and should stay as-is.
+
+After this change, re-run the WhatsApp confirmation/reminder flow manually and confirm the opened WhatsApp message reads correctly with the new sign-off.
+```
+
+---
+
+## Prompt 17 — Conflict detection: alert, don't block
+**Time: 20 min**
+
+```
+Change BookingModal.jsx's date-conflict behavior, following the updated Conflict detection logic section in ARCHITECTURE.md.
+
+Current behavior (to remove): when a date conflict is detected, the submit button is disabled and greyed out.
+
+New behavior:
+- <ConflictBanner> still appears exactly as before when api.checkConflict(date) returns a conflict, and the date input still gets a red border
+- The submit button ("Confirm Booking") stays fully enabled and clickable while a conflict is showing — remove the disabled={hasConflict} (or equivalent) condition
+- Clicking submit while a conflict is showing creates the booking normally via api.createBooking(data) — no extra confirmation step for a date clash specifically (this is intentionally different from the inventory shortfall flow built in Prompt 21, which DOES get an extra confirm step)
+- If the backend's own conflict check also fires (409 response, e.g. a near-simultaneous booking from a race condition), still show the ConflictBanner using the response data — but if the merchant submits again immediately after seeing it, let it through on the retry. Don't introduce a hard server-side block here either; 409 should be informational, not the end of the flow. (If this part is ambiguous on the backend, leave bookings.js's POST handler returning the conflict info on a real clash, but make sure it's not treated as a fatal error by the frontend.)
+
+Verify: create a booking on a date that already has one. Confirm the banner shows, AND confirm you can still click "Confirm Booking" and have it succeed, with both bookings now visible on that date on the calendar.
+
+Update BUGS.md / TESTING.md notes if you find the old blocking behavior was relied on anywhere else (e.g. a disabled-state test that needs updating).
+```
+
+---
+
+## Prompt 18 — Edit an existing booking
+**Time: 45 min**
+
+```
+Add the ability to edit an existing booking, following ARCHITECTURE.md's updated route list and Key UI decisions section.
+
+Backend:
+1. Add an `updated_at` column to the bookings table in schema.sql (TEXT, default datetime('now')), set explicitly on every PATCH.
+2. Add PATCH /api/bookings/:id to /server/routes/bookings.js — requireAuth, validate(bookingSchema), then:
+   - Update the booking row with the new field values
+   - Set updated_at to the current timestamp
+   - Return the updated booking, 200 status
+3. Update GET /api/bookings/check-conflict to accept an optional ?excludeId= query param — when present, exclude that booking's own id from the conflict query, so editing a booking without changing its date doesn't falsely flag a clash against itself.
+4. Wire trackUsage('booking_edited') into the PATCH route on success, following the same fire-and-forget pattern as the other trackUsage calls — metadata should be { booking_id }, nothing else.
+
+Frontend:
+5. Update bookingStore.js — add a `modalMode` field ('create' | 'edit', default 'create') and an `updateBooking` action that replaces a booking in the bookings array by id. openModal(mode) now accepts an optional mode argument.
+6. Update BookingModal.jsx to handle both modes:
+   - When modalMode === 'edit', prefill all form fields from the selectedBooking in the store
+   - Title reads "Edit Booking" instead of "New Booking"
+   - Submit button reads "Save Changes" instead of "Confirm Booking", and calls api.updateBooking(selectedBooking.id, data) instead of api.createBooking(data)
+   - The date-conflict check (api.checkConflict) must pass excludeId: selectedBooking.id when in edit mode
+   - On success: close modal, call updateBooking in the store, calendar and BookingDetail (if open) reflect the change immediately without a refresh
+7. Add an "Edit" button (lucide Pencil icon) to BookingDetail.jsx's header, next to the close button. Clicking it calls openModal('edit') with the currently selected booking already set, opening BookingModal pre-filled.
+8. Add api.updateBooking(id, data) to utils/api.js, following the existing pattern (PATCH, credentials included, error handling via the shared request() wrapper).
+
+Verify: open a booking, click Edit, change the guest count and venue, save, and confirm both the calendar event and the detail panel reflect the change without a manual refresh. Then edit a booking's date to a date with an existing booking and confirm the alert-not-block behavior from Prompt 17 also applies correctly here.
+```
+
+---
+
+## Prompt 19 — Inventory tracking (backend)
+**Time: 50 min**
+
+```
+Build the inventory backend for EventFlow, following the Inventory tables and Inventory availability logic sections in ARCHITECTURE.md, and the inventory.schema.js definitions in CODING_STANDARDS.md.
+
+1. Add inventory_items, booking_inventory, and inventory_damage_log tables to /server/db/schema.sql, exactly as defined in ARCHITECTURE.md's Data model section.
+
+2. Create /server/schemas/inventory.schema.js with inventoryItemSchema, inventoryQuantityUpdateSchema, inventoryDamageAdjustSchema, and availabilityCheckSchema, exactly matching CODING_STANDARDS.md.
+
+3. Update /server/schemas/booking.schema.js to add the optional `inventory` array field (bookingInventoryLineSchema), per CODING_STANDARDS.md.
+
+4. Create /server/routes/inventory.js, all routes behind requireAuth:
+   - GET / — return all inventory items, each with computed `usable` (total_quantity - damaged_quantity), `in_use_today` (SUM of booking_inventory.quantity for bookings where event_date = today AND status != 'cancelled'), and `available` (usable - in_use_today)
+   - POST / — validate(inventoryItemSchema), insert a new item, return 201
+   - PATCH /:id — validate(inventoryQuantityUpdateSchema), update total_quantity, return the updated item with recomputed fields
+   - POST /:id/damage — validate(inventoryDamageAdjustSchema), apply `change` to damaged_quantity CLAMPED between 0 and total_quantity (reject or clamp — clamp and note in the response if the requested change would have gone out of bounds), insert a row into inventory_damage_log, return the updated item
+   - POST /check-availability — validate(availabilityCheckSchema), for each { item_id, quantity } in the request, compute committed = SUM(booking_inventory.quantity) for OTHER bookings (status != 'cancelled') sharing the given date, excluding excludeBookingId if provided, then available = usable - committed. Return { sufficient: boolean, shortfalls: [{ item_id, name, requested, available }] } — shortfalls only includes items where requested > available
+
+5. Update POST /api/bookings and PATCH /api/bookings/:id in bookings.js to accept the optional `inventory` array from the validated body:
+   - Wrap the booking insert/update AND the booking_inventory writes in a single db.transaction(fn) — per CODING_STANDARDS.md's transaction rule, a booking should never be created with half its inventory rows missing
+   - On create: after inserting the booking, insert one booking_inventory row per inventory line
+   - On edit: delete all existing booking_inventory rows for that booking_id, then insert the new set (simpler and safer than diffing old vs new)
+   - These routes do NOT reject on insufficient inventory — that's a frontend confirm-step concern (Prompt 21), not a backend block. The backend's job here is just to persist whatever inventory lines were submitted.
+
+6. Mount inventory routes at /api/inventory in server/index.js.
+
+Use parameterized queries throughout, per CODING_STANDARDS.md and SECURITY.md — including the aggregate SUM queries.
+
+Test with curl/Postman: add an item, update its quantity, mark some damaged, mark some repaired, and call check-availability with a date that has existing bookings using that item — confirm the math is correct at each step.
+```
+
+---
+
+## Prompt 20 — Inventory dashboard (frontend)
+**Time: 50 min**
+
+```
+Build InventoryView.jsx and activate the Inventory nav item, following ARCHITECTURE.md's Key UI decisions section.
+
+1. Update Sidebar.jsx — the "Package (Inventory)" nav item from Prompt 4 was greyed out as a future placeholder. Make it a working nav link now (lucide Package icon), following the same active-state pattern as Calendar/Analytics/My Activity.
+
+2. Create src/store/inventoryStore.js per the structure in CODING_STANDARDS.md.
+
+3. Build InventoryView.jsx:
+   - Page header: "Inventory" h1, slate-800 bold, with an "Add Item" button (teal, lucide Plus icon) top right
+   - Grid of <InventoryItemCard> — one per item, showing: item name, Total Owned, "In Use Today" (amber badge), "Available" (emerald badge), and a small Damaged count if > 0
+   - Card style: bg-white rounded-xl shadow-sm border border-slate-200 p-4, consistent with AnalyticsView's stat cards
+   - Below the main grid: a "Damaged / Repair Needed" section (heading + AlertTriangle icon), rendered by <DamagedItemsPanel>:
+     - Lists only items with damaged_quantity > 0
+     - Each row: item name, damaged count, a small form to log a damage/repair adjustment (number input for change, optional note text input, "Mark Damaged" and "Mark Repaired" buttons — Mark Damaged sends a positive change, Mark Repaired sends a negative change to api.adjustInventoryDamage)
+     - If nothing is damaged: friendly empty state, "Nothing flagged as damaged right now."
+   - Loading skeleton while fetching, error state with retry on failure — same pattern as AnalyticsView/UsageView
+
+4. Build AddInventoryItemModal.jsx — small centered modal (not a slide-in drawer, this is a quick action): name input, total quantity input, both validated against inventoryItemSchema client-side first, "Add Item" submit button. On success, close modal and add the item to inventoryStore.
+
+5. Add an inline "Edit Quantity" action on each InventoryItemCard (e.g. a small pencil icon next to Total Owned) that lets the merchant update total_quantity via api.updateInventoryQuantity — a simple inline number input + save/cancel, not a full modal.
+
+6. Add api.getInventory(), api.addInventoryItem(), api.updateInventoryQuantity(), api.adjustInventoryDamage() to utils/api.js, following the existing pattern (already specified in CODING_STANDARDS.md's api.js example — confirm they match).
+
+Verify against TESTING.md's new inventory checklist items: add an item, edit its quantity, mark some units damaged, mark some repaired, confirm available/in-use/damaged numbers all update correctly and immediately without a page refresh.
+```
+
+---
+
+## Prompt 21 — Inventory-aware booking flow
+**Time: 55 min**
+
+```
+Wire inventory into the booking creation/edit flow, following ARCHITECTURE.md's Inventory availability logic section exactly — this is the prompt that ties Prompts 19 and 20 into the core booking flow.
+
+1. Build ConfirmDialog.jsx — a small reusable centered modal: title, message, "Cancel" and a confirm button (label passed as a prop, e.g. "Confirm Anyway"), used for the inventory-override step here and reusable for any future confirm-before-proceeding need. bg-white rounded-xl shadow-lg, dark overlay, consistent with the rest of the modal styling.
+
+2. Build InventoryWarningBanner.jsx — visually distinct from ConflictBanner per CODING_STANDARDS.md's palette (amber, not red): bg-amber-50 border border-amber-300 rounded-lg p-3 text-amber-800 text-sm, AlertTriangle icon, lists each short item as "{name}: need {requested}, only {available} available".
+
+3. Update BookingModal.jsx:
+   - Add an "Inventory Needed" section to the form, after Total Amount. Render a row per existing inventory item (fetched from inventoryStore — fetch on modal open if not already loaded) with a number input defaulting to 0 (or the existing booking_inventory quantity, when in edit mode). Show "{available} available" as a small grey hint under each input, recalculated live.
+   - On every change to the Event Date field OR any inventory quantity field (debounced, e.g. 300ms), call api.checkInventoryAvailability({ date, items: nonZeroQuantityLines, excludeBookingId: modalMode === 'edit' ? selectedBooking.id : undefined })
+   - If the response has shortfalls.length > 0: render <InventoryWarningBanner> below the Inventory Needed section, listing the shortfalls. Do NOT disable the submit button — this banner alone does not block anything, matching the date-conflict pattern from Prompt 17.
+   - On submit: run normal client-side validation first. THEN, if the most recent availability check still shows a shortfall, do NOT call the create/edit API yet — instead open <ConfirmDialog> with a message summarizing the shortfall (e.g. "You don't have enough Plastic Chairs for this date — need 150, only 100 available. Confirm this booking anyway?"). Only call api.createBooking/api.updateBooking if the merchant confirms. If they cancel, close the dialog and leave the form open and untouched.
+   - If there's no shortfall, submit proceeds immediately as before, no dialog.
+   - Include the inventory lines (item_id + quantity, omitting zero-quantity rows) in the payload sent to createBooking/updateBooking.
+
+4. Update BookingDetail.jsx to show a new "Inventory Used" section (between Event details and the WhatsApp actions section) listing each inventory_items line attached to this booking with its quantity, fetched alongside the booking detail from GET /api/bookings/:id (update that route in bookings.js to also join and return booking_inventory rows with item names).
+
+Verify end-to-end: create a booking requesting more chairs than available for that date — confirm the warning banner appears, confirm clicking submit opens the ConfirmDialog instead of submitting immediately, confirm cancelling the dialog leaves the form open, and confirm confirming it actually creates the booking with the over-allocated inventory line saved. Then verify the opposite — enough inventory — submits with no dialog at all.
+```
+
+---
+
 ## Demo script (for screen recording)
 
-Follow this exactly during recording. Keep narration tight. Note: this script now runs slightly over 2 minutes with analytics/usage included — if you must hit exactly 2:00, cut the change log beat (1:30–1:50 in the old version) and compress the WhatsApp beat instead, since conflict detection + analytics + usage are the three things the panel explicitly asked to see.
+Follow this exactly during recording. Keep narration tight.
+
+**Note:** this script predates Prompts 16–21 (rebrand, non-blocking conflict, edit booking, inventory). The 2:00 structure below still works almost unchanged — just say "Bala Ji Tent House" instead of "Sharma Tent House" wherever the business name comes up, and the conflict-banner beat now naturally ends with "...and the owner can still take it" instead of being blocked. If there's room, a short inventory beat (10-15 sec, showing the Inventory screen and an availability warning) is worth adding before the Analytics beat — but re-time the whole script before recording rather than guessing at the cut, since this hasn't been verified against the actual new screens yet.
 
 **[0:00–0:10]** Open the app. Pan across the calendar — show it's populated with real bookings across the month. "This is EventFlow — a booking dashboard built specifically for tent and catering businesses."
 
 **[0:10–0:20]** Point to the sidebar stats. "The owner sees their month at a glance — total bookings, pending advances, next event."
 
-**[0:20–0:40]** Click "New Booking". Form slides in. "A new inquiry just came in." Fill in: Neha Singh, phone, Wedding, pick the conflicting date. Conflict banner appears. "The system immediately catches the conflict — Suresh Kumar's wedding is already on that date."
+**[0:20–0:40]** Click "New Booking". Form slides in. "A new inquiry just came in." Fill in: Neha Singh, phone, Wedding, pick the conflicting date. Conflict banner appears. "The system immediately flags the clash — Suresh Kumar's wedding is already on that date — but it's the owner's call whether they can still take it."
 
 **[0:40–0:55]** Change to a free date. Green checkmark appears. Fill remaining fields. Click "Confirm Booking". Booking appears on calendar instantly.
 
-**[0:55–1:15]** Click the new booking on the calendar. Detail panel slides in. "The owner can reach the client in one tap." Click "Send Confirmation" — WhatsApp opens with message pre-filled. Back to app.
+**[0:55–1:15]** Click the new booking on the calendar. Detail panel slides in. "The owner can reach the client in one tap." Click "Send Confirmation" — WhatsApp opens with message pre-filled, signed from Bala Ji Tent House. Back to app.
 
 **[1:15–1:35]** Navigate to Analytics. "And the owner finally sees their business clearly — revenue, bookings, their peak month — without doing a single manual count." Point to the chart.
 

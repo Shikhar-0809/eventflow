@@ -29,7 +29,8 @@ This app is being built **for** the merchant (a data fiduciary under the Act) �
 - Event type, date, guest count, venue
 - Advance/total amounts
 - Change log notes (free text — could contain anything the merchant types)
-- **Usage events** (`event_log` table) — timestamps of merchant logins and actions (booking created, WhatsApp sent, etc.). This is data about the *merchant's* own usage of the tool, not about their clients — but the merchant should still know it's being collected and why (adoption tracking for the PoC), per the transparency note below. This data should never include client names/phone numbers in its `metadata` field — log a booking ID reference only, not the personal details, to keep this table low-risk even if it's queried more casually during panel prep.
+- **Inventory data** (`inventory_items`, `booking_inventory`, `inventory_damage_log` tables) — item names (e.g. "Plastic Chairs"), quantities, and damage notes. This is data about the *merchant's business assets*, not about any person, so it carries no DPDP-relevant risk on its own. The only thing worth watching: `inventory_damage_log.note` is free text, same caution as `change_log.change_note` below — don't let a merchant casually type a client's name into a damage note ("torn during Priya's wedding setup") without realizing it links business-asset data back to a specific client. Not a hard technical restriction, just worth a heads-up in the same plain-language conversation described below.
+- **Usage events** (`event_log` table) — timestamps of merchant logins and actions (booking created, booking edited, WhatsApp sent, etc.). This is data about the *merchant's* own usage of the tool, not about their clients — but the merchant should still know it's being collected and why (adoption tracking for the PoC), per the transparency note below. This data should never include client names/phone numbers in its `metadata` field — log a booking ID reference only, not the personal details, to keep this table low-risk even if it's queried more casually during panel prep.
 
 ### Data EventFlow does NOT need and should never collect
 - Client email (not used anywhere in the current flow — don't add it speculatively)
@@ -46,7 +47,7 @@ Even informally, the merchant should know:
 - Where their data lives (which cloud providers — Render, Vercel, Neon/Supabase)
 - That it's password-protected but they are responsible for keeping that password private
 - That you (the developer) can technically access the database directly — be upfront about this rather than implying otherwise
-- **That the app logs their own usage (logins, bookings created, messages sent) — and why**: this is being used to demonstrate the tool's value to the hackathon/program panel. This is a reasonable and honest thing to track, but it should be said out loud, not left implicit. Most merchants will have no objection once it's explained — but the explanation should happen.
+- **That the app logs their own usage (logins, bookings created/edited, messages sent) — and why**: this is being used to demonstrate the tool's value to the hackathon/program panel. This is a reasonable and honest thing to track, but it should be said out loud, not left implicit. Most merchants will have no objection once it's explained — but the explanation should happen.
 - What happens if they want to stop using the app (see Data Retention below)
 
 A short, honest conversation covers this — it doesn't need to be a formal legal document for a single-merchant POC, but it does need to happen.

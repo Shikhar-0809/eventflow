@@ -18,7 +18,7 @@ EventFlow v1 is a **single-merchant tool**, not a multi-tenant SaaS product. The
 - A secret (JWT signing key, password hash) leaking into git history or a log file
 - A malformed or malicious request reaching the database unvalidated
 - A server error leaking internal details (stack traces, file paths, query text) to the client in production
-- SQL injection via booking form fields
+- SQL injection via booking form fields or inventory fields
 
 **Explicitly out of scope for v1** — see the "Not in v1's threat model" section at the bottom for the full list and why.
 
@@ -30,7 +30,7 @@ EventFlow v1 is a **single-merchant tool**, not a multi-tenant SaaS product. The
 - Password is never stored in plaintext. A bcrypt hash lives in `MERCHANT_PASSWORD_HASH` (env var, server-side only).
 - On successful login, the server issues a JWT in an **httpOnly cookie** — not returned in the response body, not stored in `localStorage`, not accessible to client-side JS at all. This is the single biggest XSS mitigation in the whole app: even if malicious JS somehow ran in the merchant's browser, it cannot read the session token.
 - The JWT itself carries no sensitive payload — just an issued-at/expiry pair. There's nothing inside it worth protecting if decoded; the cookie's `httpOnly` flag is what actually matters, not the token contents.
-- Every route except `POST /api/auth/login` requires a valid session. No exceptions, no "just for testing" bypasses left in committed code.
+- Every route except `POST /api/auth/login` requires a valid session. No exceptions, no "just for testing" bypasses left in committed code. This now explicitly includes the inventory routes added after the original auth build — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
 
 ---
 
@@ -185,6 +185,8 @@ export const bookingCreateRateLimiter = rateLimit({
 
 `loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only — high enough that a real merchant double-clicking submit never hits it, low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
 
+Inventory and booking-edit routes are **not** separately rate limited — they're low-volume, manually-triggered actions for a single merchant, and adding limiters there would be solving a problem that doesn't exist at this scale. Don't add them speculatively.
+
 ---
 
 ## Route auth matrix
@@ -198,6 +200,7 @@ Cross-check against this table any time a new route is added — every row excep
 | `GET /api/auth/me` | Yes | No |
 | `GET /api/bookings` | Yes | No |
 | `POST /api/bookings` | Yes | Yes — `bookingCreateRateLimiter` |
+| `PATCH /api/bookings/:id` | Yes | No |
 | `GET /api/bookings/:id` | Yes | No |
 | `PATCH /api/bookings/:id/log` | Yes | No |
 | `GET /api/bookings/check-conflict` | Yes | No |
@@ -206,6 +209,11 @@ Cross-check against this table any time a new route is added — every row excep
 | `GET /api/usage/me` | Yes | No |
 | `POST /api/usage/log-client-action` | Yes | No |
 | `GET /api/usage/admin` | Yes + `requireAdminKey` (below) | No |
+| `GET /api/inventory` | Yes | No |
+| `POST /api/inventory` | Yes | No |
+| `PATCH /api/inventory/:id` | Yes | No |
+| `POST /api/inventory/:id/damage` | Yes | No |
+| `POST /api/inventory/check-availability` | Yes | No |
 
 ---
 
@@ -264,7 +272,7 @@ This must be the **last** middleware mounted in `index.js`, after every route. T
 
 ## Input validation — server is the only check that matters
 
-Client-side `zod` validation (`CODING_STANDARDS.md`) is UX only — instant feedback, nothing more. It can be bypassed entirely by anyone hitting the API directly (Postman, curl, browser devtools). The server-side `validate(schema)` middleware is what actually protects the database.
+Client-side `zod` validation (`CODING_STANDARDS.md`) is UX only — instant feedback, nothing more. It can be bypassed entirely by anyone hitting the API directly (Postman, curl, browser devtools). The server-side `validate(schema)` middleware is what actually protects the database. This applies equally to the new inventory schemas (`inventory.schema.js`) — an item name or quantity coming from the client is no more trustworthy than a booking field.
 
 **Known gotcha** (from `BUGS.md`): the most common way this silently breaks is `validate(schema)` being added to a route's middleware chain but placed *after* the route handler instead of before it. Express runs middleware in array order — always:
 
@@ -282,7 +290,7 @@ router.post('/', requireAuth, async (req, res, next) => { ... }, validate(bookin
 
 ## SQL injection prevention
 
-Every query uses `better-sqlite3`'s parameterized `.prepare()` with `?` placeholders. No exceptions, no string concatenation or template literals with variables in SQL — including aggregate queries added later for analytics. See `CODING_STANDARDS.md` for the exact pattern; this file just states it's a hard security requirement, not a style preference.
+Every query uses `better-sqlite3`'s parameterized `.prepare()` with `?` placeholders. No exceptions, no string concatenation or template literals with variables in SQL — including aggregate queries for analytics and the per-date inventory availability calculation. See `CODING_STANDARDS.md` for the exact pattern; this file just states it's a hard security requirement, not a style preference.
 
 ---
 
@@ -323,22 +331,22 @@ Must be mounted **before** routes in `index.js`. `credentials: true` is required
 
 This is the checklist `PROMPTS.md`'s Prompt 12 refers to. Run through all of it, not just the items that feel relevant to whatever you just built.
 
-- [ ] Every route except `POST /api/auth/login` has `requireAuth` in its middleware chain — including newer routes (analytics, usage) that are easy to forget once the original auth prompt is a few milestones back
+- [ ] Every route except `POST /api/auth/login` has `requireAuth` in its middleware chain — including newer routes (analytics, usage, **inventory**, and the booking-edit `PATCH` route) that are easy to forget once the original auth prompt is a few milestones back
 - [ ] `errorHandler.js` never returns `err.message` or a stack trace when `NODE_ENV === 'production'` — verified by deliberately throwing an error and checking the response
 - [ ] No `console.log` anywhere includes `req.body`, a password, a token, or a full booking object (phone numbers count as sensitive here too)
-- [ ] Every SQL query uses parameterized `.prepare()` — no string concatenation, anywhere, including newer aggregate/analytics queries
+- [ ] Every SQL query uses parameterized `.prepare()` — no string concatenation, anywhere, including the inventory availability aggregate queries
 - [ ] `.env` is confirmed not tracked by git (`git status` should not list it); `.env.example` contains only placeholders
 - [ ] `npm audit` run in both `/client` and `/server`; any High/Critical findings fixed, not just noted
 - [ ] `loginRateLimiter` is actually applied to the login route, not just defined and imported nowhere
 - [ ] `event_log.metadata` never contains `client_name` or `phone` — spot-check a few real rows, not just the schema (per `DATA_PRIVACY.md`)
-- [ ] Logged-out session can't read booking data even by guessing API URLs directly (`/api/bookings`, `/api/analytics/summary`, `/api/usage/admin` all return `401`)
+- [ ] Logged-out session can't read booking OR inventory data even by guessing API URLs (`/api/bookings`, `/api/analytics/summary`, `/api/usage/admin`, `/api/inventory` all return `401`)
 - [ ] `BUGS.md` updated with anything found during this pass, severity rated honestly — a "minor" auth gap is still High by default per that file's own rule
 
 **Pre-deploy additions** (on top of all of the above, run against the live URL — not localhost):
 - [ ] Cookie `secure` flag is actually working in the deployed environment — log in on the live URL and confirm the session persists across a refresh
 - [ ] HTTPS active with no browser security warnings
 - [ ] `CORS_ORIGIN` set to the real deployed frontend URL, not `localhost`
-- [ ] A logged-out session genuinely cannot see any booking data on the live URL, not just locally
+- [ ] A logged-out session genuinely cannot see any booking or inventory data on the live URL, not just locally
 
 ---
 
@@ -349,6 +357,7 @@ This is the checklist `PROMPTS.md`'s Prompt 12 refers to. Run through all of it,
 - **No protection against the developer themselves.** You have direct database access during build and via the hosting dashboards. `DATA_PRIVACY.md` covers the transparency obligation that comes with that access — this file is about external threats, not insider trust, which is a different problem with a different (non-technical) solution at this scale.
 - **No DDoS protection beyond basic rate limiting.** `loginRateLimiter` and `bookingCreateRateLimiter` stop scripted brute-forcing and accidental abuse; they are not a substitute for platform-level protection (e.g. Cloudflare) at real scale. Not worth building further for a single-merchant POC.
 - **No multi-tenant data isolation.** There's only one merchant, so there's nothing to isolate yet. This entire file would need a substantial rewrite before onboarding a second merchant — `ROADMAP.md`'s v5+ section already flags this explicitly; don't try to half-build multi-tenancy into v1's auth model.
+- **No race-condition-proof inventory locking.** Like the existing date-conflict check, the inventory availability check is select-then-decide, not atomic. For a single merchant typing manually this is a low-probability, low-stakes bug — see `BUGS.md`.
 
 ---
 

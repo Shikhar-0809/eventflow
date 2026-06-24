@@ -1,3 +1,84 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.fc-wrapper .fc {
+  font-family: inherit;
+}
+
+.fc-wrapper .fc-toolbar-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.fc-wrapper .fc-button {
+  background-color: #0d9488;
+  border-color: #0d9488;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.375rem 0.75rem;
+  transition: all 0.2s;
+}
+
+.fc-wrapper .fc-button:hover {
+  background-color: #0f766e;
+  border-color: #0f766e;
+}
+
+.fc-wrapper .fc-button:focus {
+  box-shadow: 0 0 0 2px #99f6e4;
+}
+
+.fc-wrapper .fc-button-primary:not(:disabled).fc-button-active,
+.fc-wrapper .fc-button-primary:not(:disabled):active {
+  background-color: #0f766e;
+  border-color: #0f766e;
+}
+
+.fc-wrapper .fc-daygrid-event {
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.fc-wrapper .fc-daygrid-event .fc-event-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-wrapper .fc-daygrid-event-harness {
+  margin-top: 1px;
+  margin-bottom: 1px;
+}
+
+.fc-wrapper .fc-daygrid-day-number {
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
+.fc-wrapper .fc-col-header-cell-cushion {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.fc-wrapper .fc-daygrid-day.fc-day-today {
+  background-color: #f0fdfa;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}

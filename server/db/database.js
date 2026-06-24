@@ -13,6 +13,12 @@ const db = new Database(DB_PATH)
 db.pragma('journal_mode = WAL')
 db.exec(readFileSync(SCHEMA_PATH, 'utf-8'))
 
+const bookingColumns = db.prepare('PRAGMA table_info(bookings)').all().map((col) => col.name)
+if (!bookingColumns.includes('updated_at')) {
+  db.exec('ALTER TABLE bookings ADD COLUMN updated_at TEXT')
+  db.exec("UPDATE bookings SET updated_at = COALESCE(created_at, datetime('now')) WHERE updated_at IS NULL")
+}
+
 seed(db)
 
 export default db

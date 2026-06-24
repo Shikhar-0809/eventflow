@@ -12,6 +12,7 @@ This file keeps Cursor-generated code consistent across all files in the project
 - Every error a merchant could see is a clear, human sentence — never a raw stack trace or `undefined is not a function`
 - Every list rendered from user-controlled data is safe against injection (React escapes by default — but anything using `dangerouslySetInnerHTML` is banned outright)
 - No silent failures — if a WhatsApp link can't generate or a save fails, the merchant sees a message, not a frozen button
+- Alerts inform, they don't block by default — conflict and inventory warnings are surfaced clearly, but the merchant makes the final call unless there's a genuine data-integrity reason to stop them (see `ARCHITECTURE.md`'s Conflict detection and Inventory availability sections)
 
 ---
 
@@ -31,12 +32,12 @@ This file keeps Cursor-generated code consistent across all files in the project
 
 | Type | Convention | Example |
 |---|---|---|
-| React components | PascalCase `.jsx` | `BookingModal.jsx` |
+| React components | PascalCase `.jsx` | `BookingModal.jsx`, `InventoryItemCard.jsx` |
 | Utility functions | camelCase `.js` | `conflictCheck.js` |
-| Store files | camelCase `.js` | `bookingStore.js` |
-| Route files | camelCase `.js` | `bookings.js` |
+| Store files | camelCase `.js` | `bookingStore.js`, `inventoryStore.js` |
+| Route files | camelCase `.js` | `bookings.js`, `inventory.js` |
 | DB files | camelCase `.js` | `database.js` |
-| Schema files | camelCase `.schema.js` | `booking.schema.js` |
+| Schema files | camelCase `.schema.js` | `booking.schema.js`, `inventory.schema.js` |
 
 ---
 
@@ -97,6 +98,10 @@ export const BookingModal = ({ isOpen, onClose }) => {
 | Disabled button | `bg-slate-300 text-slate-500 cursor-not-allowed` |
 | Card background | `bg-white` |
 | Border default | `border border-slate-200` |
+| Inventory: available | `bg-emerald-50` / `text-emerald-700` |
+| Inventory: in use (today) | `bg-amber-50` / `text-amber-700` |
+| Inventory: damaged / repair needed | `bg-red-50` / `text-red-700` / `border-red-200` |
+| Inventory shortfall warning (in booking form) | `bg-amber-50` / `border-amber-300` / `text-amber-800` — distinct from the red `ConflictBanner` so the two alert types are visually distinguishable at a glance |
 
 - Use `rounded-xl` for cards and modals, `rounded-lg` for buttons and inputs
 - Use `shadow-sm` for cards, `shadow-lg` for modals and drawers
@@ -133,7 +138,7 @@ Never hand-roll `toLocaleString('en-US')` or manual comma insertion — always t
 
 ## State management (Zustand)
 
-All global state lives in `src/store/bookingStore.js`. No prop drilling beyond one level.
+All global booking state lives in `src/store/bookingStore.js`. All inventory state lives in a separate `src/store/inventoryStore.js` — don't conflate the two stores just because both feed into the booking form. No prop drilling beyond one level.
 
 ```js
 // bookingStore.js structure
@@ -141,14 +146,34 @@ export const useBookingStore = create((set, get) => ({
   bookings: [],
   selectedBooking: null,
   isModalOpen: false,
+  modalMode: 'create',        // 'create' | 'edit' — drives BookingModal's title/submit label/API call
   isDetailOpen: false,
 
   setBookings: (bookings) => set({ bookings }),
   addBooking: (booking) => set((state) => ({ bookings: [...state.bookings, booking] })),
+  updateBooking: (booking) => set((state) => ({
+    bookings: state.bookings.map((b) => (b.id === booking.id ? booking : b)),
+  })),
   setSelectedBooking: (booking) => set({ selectedBooking: booking, isDetailOpen: true }),
-  openModal: () => set({ isModalOpen: true }),
-  closeModal: () => set({ isModalOpen: false }),
+  openModal: (mode = 'create') => set({ isModalOpen: true, modalMode: mode }),
+  closeModal: () => set({ isModalOpen: false, modalMode: 'create' }),
   closeDetail: () => set({ isDetailOpen: false, selectedBooking: null }),
+}))
+```
+
+```js
+// inventoryStore.js structure
+export const useInventoryStore = create((set) => ({
+  items: [],
+  setItems: (items) => set({ items }),
+  upsertItem: (item) => set((state) => {
+    const exists = state.items.some((i) => i.id === item.id)
+    return {
+      items: exists
+        ? state.items.map((i) => (i.id === item.id ? item : i))
+        : [...state.items, item],
+    }
+  }),
 }))
 ```
 
@@ -162,6 +187,11 @@ Define the booking shape once, conceptually, and mirror it on both sides. Client
 // schemas/booking.schema.js — same file content on client AND server
 import { z } from 'zod'
 
+export const bookingInventoryLineSchema = z.object({
+  item_id: z.number().int().positive(),
+  quantity: z.number().int().positive().max(10000),
+})
+
 export const bookingSchema = z.object({
   client_name: z.string().trim().min(2, 'Name is too short').max(100),
   phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
@@ -171,6 +201,35 @@ export const bookingSchema = z.object({
   venue: z.string().trim().max(200).optional(),
   advance: z.number().int().nonnegative().max(10000000),
   total: z.number().int().nonnegative().max(10000000),
+  inventory: z.array(bookingInventoryLineSchema).max(50).optional(),
+})
+```
+
+```js
+// schemas/inventory.schema.js — same file content on client AND server
+import { z } from 'zod'
+
+export const inventoryItemSchema = z.object({
+  name: z.string().trim().min(2, 'Item name is too short').max(100),
+  total_quantity: z.number().int().nonnegative().max(100000),
+})
+
+export const inventoryQuantityUpdateSchema = z.object({
+  total_quantity: z.number().int().nonnegative().max(100000),
+})
+
+export const inventoryDamageAdjustSchema = z.object({
+  change: z.number().int().refine((n) => n !== 0, 'Change cannot be zero'), // positive = mark damaged, negative = mark repaired
+  note: z.string().trim().max(300).optional(),
+})
+
+export const availabilityCheckSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
+  items: z.array(z.object({
+    item_id: z.number().int().positive(),
+    quantity: z.number().int().positive().max(10000),
+  })),
+  excludeBookingId: z.number().int().positive().optional(),
 })
 ```
 
@@ -212,8 +271,14 @@ export const api = {
   login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
   getBookings: () => request('/bookings'),
   createBooking: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
-  checkConflict: (date) => request(`/bookings/check-conflict?date=${date}`),
+  updateBooking: (id, data) => request(`/bookings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  checkConflict: (date, excludeId) => request(`/bookings/check-conflict?date=${date}${excludeId ? `&excludeId=${excludeId}` : ''}`),
   logChange: (id, note) => request(`/bookings/${id}/log`, { method: 'PATCH', body: JSON.stringify({ note }) }),
+  getInventory: () => request('/inventory'),
+  addInventoryItem: (data) => request('/inventory', { method: 'POST', body: JSON.stringify(data) }),
+  updateInventoryQuantity: (id, data) => request(`/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  adjustInventoryDamage: (id, data) => request(`/inventory/${id}/damage`, { method: 'POST', body: JSON.stringify(data) }),
+  checkInventoryAvailability: (data) => request('/inventory/check-availability', { method: 'POST', body: JSON.stringify(data) }),
 }
 ```
 
@@ -244,13 +309,16 @@ const handleSubmit = async () => {
 - All routes return JSON — no exceptions
 - All route handlers are `async` — wrap in try/catch, or use an async error-catching wrapper so errors reach `errorHandler.js` automatically
 - HTTP status codes must be correct:
-  - `200` for successful GET
+  - `200` for successful GET/PATCH
   - `201` for successful POST (resource created)
   - `401` for missing/invalid auth session
-  - `409` for conflict detected (booking clash)
   - `400` for validation errors
   - `429` for rate-limited requests
   - `500` for unexpected server errors
+- **Date clashes and inventory shortfalls are never error statuses.** Both are detected on the server and returned as informational flags on an otherwise successful response — same pattern for both:
+  - Date clash on POST `/bookings` → `201` with optional `conflict: { detected: true, booking: { id, client_name, event_type } }` on the created booking body (field omitted when no clash)
+  - Date clash on PATCH `/bookings/:id` → `200` with the same optional `conflict` shape
+  - Inventory shortfall on POST `/inventory/check-availability` → `200` with `{ sufficient: true }` or `{ sufficient: false, shortfalls: [...] }` — never a 409 or other error status for either case
 - **Validation happens via the zod schema, before any DB call** — use a generic `validate(schema)` middleware so individual routes don't hand-roll checks
 - **Auth happens via `requireAuth` middleware** on every route except `/auth/login` — see SECURITY.md for the full model
 - No business logic in `index.js` — only middleware setup and route mounting
@@ -272,17 +340,31 @@ router.post('/', requireAuth, validate(bookingSchema), async (req, res, next) =>
   try {
     const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = req.body
 
-    const existing = db.prepare('SELECT * FROM bookings WHERE event_date = ?').get(event_date)
-    if (existing) {
-      return res.status(409).json({ conflict: true, booking: existing })
-    }
+    const clash = db.prepare(
+      `SELECT id, client_name, event_type FROM bookings
+       WHERE event_date = ? AND status != 'cancelled'
+       LIMIT 1`,
+    ).get(event_date)
 
     const result = db.prepare(
       'INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(client_name, phone, event_type, event_date, guest_count, venue, advance, total)
 
     const newBooking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(result.lastInsertRowid)
-    res.status(201).json(newBooking)
+    const body = clash
+      ? {
+          ...newBooking,
+          conflict: {
+            detected: true,
+            booking: {
+              id: clash.id,
+              client_name: clash.client_name,
+              event_type: clash.event_type,
+            },
+          },
+        }
+      : newBooking
+    res.status(201).json(body)
   } catch (err) {
     next(err) // goes to errorHandler.js — never res.status(500).json({ error: err.message }) directly, that can leak internals
   }
@@ -303,6 +385,8 @@ export const errorHandler = (err, req, res, next) => {
 
 **SQL rule: always use parameterized queries (`?` placeholders) — never string-concatenate user input into SQL.** `better-sqlite3`'s `.prepare()` already does this correctly in every example above; never replace it with template-literal SQL.
 
+**Multi-table writes (booking + booking_inventory, or item + damage log) must run inside a transaction.** `better-sqlite3` supports `db.transaction(fn)` — use it whenever a single logical action touches more than one table, so a booking is never created with half its inventory rows missing if something fails partway through.
+
 ---
 
 ## Seed data rules
@@ -315,12 +399,15 @@ export const errorHandler = (err, req, res, next) => {
 - All phone numbers: use `9876543210` pattern with last digits varied
 - All advance amounts between ₹5,000 and ₹25,000
 - All total amounts between ₹25,000 and ₹1,50,000
+- A starter inventory set: at minimum Plastic Chairs, Round Tables, Shamiana Tents, Sofas — realistic owned quantities for a small/mid tent business (e.g. 300 chairs, 40 tables, 4 tents, 10 sofas)
+- At least one item with a nonzero `damaged_quantity` and a matching `inventory_damage_log` row, so the Damaged section isn't empty on first load
+- At least one or two seeded bookings should have `booking_inventory` rows attached, so `InventoryView` shows a nonzero "in use" count without needing to create a booking manually first
 
 ---
 
 ## WhatsApp links
 
-Always use `https://wa.me/91${phone}` format (Indian numbers). Always `encodeURIComponent` the message. Never hardcode a phone number.
+Always use `https://wa.me/91${phone}` format (Indian numbers). Always `encodeURIComponent` the message. Never hardcode a phone number. Messages sign off as **"Bala Ji Tent House"**, not "EventFlow" — see `ARCHITECTURE.md`'s WhatsApp link generation section for the exact templates.
 
 ---
 
@@ -344,8 +431,9 @@ Run through this before marking any PROMPTS.md milestone "done." Takes 5 minutes
 - [ ] Every `api.*` call site has a `catch`/error state — no silent failures
 - [ ] No `console.log` of sensitive data (phone numbers, session tokens)
 - [ ] No hardcoded URLs — `localhost:3001` should only ever come from `import.meta.env.VITE_API_URL`
-- [ ] Every protected route has `requireAuth` in its middleware chain
+- [ ] Every protected route has `requireAuth` in its middleware chain — including inventory routes
 - [ ] Every new dependency added is actually used (no leftover installs bloating the bundle)
 - [ ] New component follows the 8-step structure order defined above
 - [ ] Tailwind classes match the palette table — no off-palette hex colors introduced ad hoc
+- [ ] Any multi-table write (booking + inventory rows, item + damage log) is wrapped in a `db.transaction(...)`
 - [ ] `BUGS.md` updated if anything was debugged during this milestone

@@ -3,10 +3,11 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { loginRateLimiter } from '../middleware/rateLimiter.js'
 import { requireAuth } from '../middleware/requireAuth.js'
+import { trackUsage } from '../middleware/trackUsage.js'
 
 const router = Router()
 
-router.post('/login', loginRateLimiter, async (req, res, next) => {
+router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, next) => {
   try {
     const { password } = req.body
 
