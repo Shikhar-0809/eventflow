@@ -26,7 +26,7 @@ router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, ne
     res.cookie(process.env.SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
 

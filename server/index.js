@@ -38,15 +38,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
-app.get('/api/debug-hash', (req, res) => {
-  const hash = process.env.MERCHANT_PASSWORD_HASH
-  res.json({
-    hashLength: hash ? hash.length : null,
-    hashStart: hash ? hash.slice(0, 7) : null,
-    hashEnd: hash ? hash.slice(-4) : null,
-  })
-})
-
 app.use('/api/auth', authRouter)
 app.use('/api/bookings', bookingsRouter)
 app.use('/api/inventory', inventoryRouter)
