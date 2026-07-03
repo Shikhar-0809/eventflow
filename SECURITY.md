@@ -61,18 +61,24 @@ openssl rand -base64 24
 ## Session cookie configuration — exact
 
 ```js
+const isProd = process.env.NODE_ENV === 'production'
+
 res.cookie(process.env.SESSION_COOKIE_NAME, token, {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // NEVER hardcode true — breaks login on local http://localhost
+  secure: isProd, // NEVER hardcode true — breaks login on local http://localhost
   sameSite: 'lax',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, in milliseconds
 })
 ```
 
+**Same-origin via Vercel proxy (production):** The browser never talks to the Render API directly. `client/vercel.json` rewrites `/api/*` to the Render backend, and `VITE_API_URL=/api` (in `client/.env.production`) makes all frontend `fetch` calls same-origin on the Vercel domain. The session cookie is therefore first-party — no cross-site cookie rules apply. This is more reliable than `SameSite=None` on mobile browsers (iOS Safari ITP, privacy-hardened Android browsers) that block third-party/cross-site cookies even when `SameSite=None; Secure` is set correctly; see `BUGS.md` #024.
+
+**Local development:** Vite on `localhost:5173` and Express on `localhost:3001` differ only by port, which browsers treat as same-site, so `sameSite: 'lax'` works there too with `VITE_API_URL=http://localhost:3001/api`.
+
 Why each flag matters:
 - `httpOnly: true` — client-side JS cannot read this cookie, even via `document.cookie`. Core XSS mitigation.
-- `secure: NODE_ENV === 'production'` — cookie only sent over HTTPS in production. **Must be conditional, not always `true`** — see `BUGS.md`'s "Auth cookie not persisting" gotcha: hardcoding `true` silently blocks the cookie from being set at all on local `http://localhost`, and the failure mode looks like "login works but you're immediately logged out," which is confusing to debug.
-- `sameSite: 'lax'` — sent on top-level navigation and same-site requests, blocks most CSRF vectors without breaking the normal frontend→backend flow. `'strict'` would also block legitimate cross-origin fetches from the Vite dev server during local development.
+- `secure: isProd` — cookie only sent over HTTPS in production. **Must be conditional, not always `true`** — see `BUGS.md`'s "Auth cookie not persisting" gotcha: hardcoding `true` silently blocks the cookie from being set at all on local `http://localhost`, and the failure mode looks like "login works but you're immediately logged out," which is confusing to debug.
+- `sameSite: 'lax'` — correct in both environments because API requests are same-origin from the browser's perspective (Vercel proxy in prod, localhost same-site in dev). `'lax'` is spec-reliable across desktop and mobile; do not use `'none'`.
 - 7-day expiry — long enough that a single merchant isn't re-logging-in constantly, short enough that a stale session doesn't live forever if the device is lost.
 
 Cookie name comes from `process.env.SESSION_COOKIE_NAME` (set to `eventflow_session` per `ARCHITECTURE.md`'s `.env.example`) — never hardcode the literal string in more than one place.
@@ -133,9 +139,11 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
 
     const token = jwt.sign({}, process.env.JWT_SECRET, { expiresIn: '7d' })
 
+    const isProd = process.env.NODE_ENV === 'production'
+
     res.cookie(process.env.SESSION_COOKIE_NAME, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProd,
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
@@ -313,9 +321,9 @@ app.use(cors({
 }))
 ```
 
-Must be mounted **before** routes in `index.js`. `credentials: true` is required specifically because the session lives in a cookie, not a header — without it, the browser silently drops the cookie on cross-origin requests and login appears to "not persist," which is the exact symptom in `BUGS.md`'s CORS gotcha.
+Must be mounted **before** routes in `index.js`. `credentials: true` is required because the session lives in a cookie, not a header.
 
-`CORS_ORIGIN` should be the exact deployed frontend URL in production — never `*` once real client data is in scope, since a wildcard origin combined with `credentials: true` is invalid per the CORS spec anyway and most browsers will reject it outright.
+In production the browser only hits the Vercel frontend origin; Vercel proxies `/api/*` to Render server-to-server, so the merchant's browser is not making cross-origin requests to Render. CORS on Render remains defense in depth: `CORS_ORIGIN` should still be the exact deployed frontend URL — never `*` once real client data is in scope (a wildcard origin combined with `credentials: true` is invalid per the CORS spec anyway). Direct calls to the Render URL (e.g. Postman, curl) are a separate path and do not affect the merchant's browser session.
 
 ---
 
