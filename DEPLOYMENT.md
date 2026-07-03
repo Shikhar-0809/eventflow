@@ -94,11 +94,11 @@ Do not proceed past this section until every item is true:
    - **Framework Preset:** Vite (should auto-detect)
    - **Build Command:** `npm run build` (default)
    - **Output Directory:** `dist` (default for Vite)
-3. Add environment variable in Vercel's dashboard:
+3. Environment variable for production builds (also in `client/.env.production` in the repo — no Vercel dashboard override needed unless you want to set it explicitly):
    ```
-   VITE_API_URL=https://eventflow-api.onrender.com/api
+   VITE_API_URL=/api
    ```
-   (the Render backend URL from Step 2, with `/api` appended — match `ARCHITECTURE.md`'s `.env.example` pattern)
+   Must stay a **relative** path, not the full `onrender.com` URL. `client/vercel.json` rewrites `/api/*` to the Render backend so all browser requests are same-origin on the Vercel domain — see `SECURITY.md`'s Session cookie configuration section for why this matters (mobile ITP / cross-site cookie blocking).
 4. Deploy. Vercel assigns a URL like `https://eventflow.vercel.app`
 5. **Go back to Render** and update `CORS_ORIGIN` to this exact Vercel URL (Step 2's config had a placeholder for this). Redeploy the backend so the new CORS origin takes effect.
 
