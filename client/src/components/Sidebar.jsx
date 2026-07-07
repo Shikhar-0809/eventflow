@@ -91,7 +91,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
-      <div className="p-5 border-b border-slate-800 shrink-0">
+      <div className="shrink-0 px-4 py-5 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <Tent className="w-5 h-5 text-teal-400 shrink-0" />
           <h1 className="text-white font-bold text-sm leading-tight">{t(lang, 'businessName')}</h1>
@@ -131,16 +131,14 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           <Activity className="w-4 h-4" />
           {t(lang, 'navActivity')}
         </button>
-      </nav>
 
-      <div className="px-3 pb-4 space-y-2 shrink-0 border-t border-slate-800">
         {error && (
-          <p className="text-xs text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">
+          <p className="mt-4 text-xs text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">
             {error}
           </p>
         )}
 
-        <div className="space-y-2">
+        <div className="mt-4 space-y-2">
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-400">{t(lang, 'statThisMonth')}</p>
             <p className="text-white font-bold text-lg">
@@ -164,8 +162,10 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         {logoutError && (
           <p className="text-xs text-red-400">{logoutError}</p>
         )}
+      </nav>
 
-        <div className="flex gap-2 pt-1">
+      <div className="shrink-0 px-3 pb-4 pt-2 border-t border-slate-700">
+        <div className="flex gap-2 mb-2">
           <button
             type="button"
             onClick={() => setLang('en')}
