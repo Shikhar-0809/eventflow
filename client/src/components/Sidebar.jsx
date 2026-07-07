@@ -87,10 +87,11 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
 
   return (
     <aside
-      className={`w-60 h-screen bg-slate-900 flex flex-col shrink-0 fixed md:relative left-0 top-0 z-[60] md:z-auto transition-transform duration-200 ease-out ${
+      className={`w-60 h-screen bg-slate-900 flex flex-col fixed left-0 top-0 z-[60] transition-transform duration-200 ease-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
+      {/* Logo */}
       <div className="shrink-0 px-4 py-5 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <Tent className="w-5 h-5 text-teal-400 shrink-0" />
@@ -98,6 +99,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         </div>
       </div>
 
+      {/* Nav links + stat cards — scrollable */}
       <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1">
         <button
           type="button"
@@ -138,6 +140,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           </p>
         )}
 
+        {/* Stat cards */}
         <div className="mt-4 space-y-2">
           <div className="bg-slate-800 rounded-lg p-3">
             <p className="text-xs text-slate-400">{t(lang, 'statThisMonth')}</p>
@@ -160,10 +163,11 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         </div>
 
         {logoutError && (
-          <p className="text-xs text-red-400">{logoutError}</p>
+          <p className="text-xs text-red-400 mt-2">{logoutError}</p>
         )}
       </nav>
 
+      {/* Language toggle + Log Out — always pinned at bottom */}
       <div className="shrink-0 px-3 pb-4 pt-2 border-t border-slate-700">
         <div className="flex gap-2 mb-2">
           <button
