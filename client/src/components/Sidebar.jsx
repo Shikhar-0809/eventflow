@@ -87,7 +87,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
 
   return (
     <aside
-      className={`w-[240px] h-full bg-slate-900 flex flex-col shrink-0 fixed md:relative inset-y-0 left-0 z-[60] md:z-auto overflow-y-auto md:overflow-visible transition-transform duration-200 ease-out ${
+      className={`w-[240px] h-full bg-slate-900 flex flex-col shrink-0 fixed md:relative inset-y-0 left-0 z-[60] md:z-auto overflow-y-auto transition-transform duration-200 ease-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
@@ -165,7 +165,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           <p className="text-xs text-red-400">{logoutError}</p>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 mb-2 shrink-0">
           <button
             type="button"
             onClick={() => setLang('en')}
