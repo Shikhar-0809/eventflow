@@ -87,18 +87,18 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
 
   return (
     <aside
-      className={`w-[240px] h-full bg-slate-900 flex flex-col shrink-0 fixed md:relative inset-y-0 left-0 z-[60] md:z-auto overflow-y-auto transition-transform duration-200 ease-out ${
+      className={`w-60 h-screen bg-slate-900 flex flex-col shrink-0 fixed md:relative left-0 top-0 z-[60] md:z-auto transition-transform duration-200 ease-out ${
         mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}
     >
-      <div className="p-5 border-b border-slate-800">
+      <div className="p-5 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-2">
           <Tent className="w-5 h-5 text-teal-400 shrink-0" />
           <h1 className="text-white font-bold text-sm leading-tight">{t(lang, 'businessName')}</h1>
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1">
         <button
           type="button"
           onClick={() => navigate('calendar')}
@@ -133,7 +133,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         </button>
       </nav>
 
-      <div className="p-4 border-t border-slate-800 space-y-3">
+      <div className="px-3 pb-4 space-y-2 shrink-0 border-t border-slate-800">
         {error && (
           <p className="text-xs text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">
             {error}
@@ -165,26 +165,26 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           <p className="text-xs text-red-400">{logoutError}</p>
         )}
 
-        <div className="flex gap-2 mb-2 shrink-0">
+        <div className="flex gap-2 pt-1">
           <button
             type="button"
             onClick={() => setLang('en')}
-            className={
+            className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all duration-200 ${
               lang === 'en'
-                ? 'bg-teal-600 text-white rounded-lg px-2 py-1 text-xs font-semibold'
-                : 'bg-slate-700 text-slate-300 rounded-lg px-2 py-1 text-xs cursor-pointer hover:bg-slate-600 transition-all duration-200'
-            }
+                ? 'bg-teal-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
           >
             EN
           </button>
           <button
             type="button"
             onClick={() => setLang('hi')}
-            className={
+            className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all duration-200 ${
               lang === 'hi'
-                ? 'bg-teal-600 text-white rounded-lg px-2 py-1 text-xs font-semibold'
-                : 'bg-slate-700 text-slate-300 rounded-lg px-2 py-1 text-xs cursor-pointer hover:bg-slate-600 transition-all duration-200'
-            }
+                ? 'bg-teal-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
           >
             हिं
           </button>
