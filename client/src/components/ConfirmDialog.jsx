@@ -1,21 +1,29 @@
+import { useLangStore } from '../store/langStore'
+import { t } from '../utils/i18n'
+
 export const ConfirmDialog = ({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   isConfirming = false,
   onConfirm,
   onCancel,
 }) => {
+  const { lang } = useLangStore()
+
   if (!isOpen) return null
+
+  const resolvedConfirmLabel = confirmLabel ?? t(lang, 'confirm')
+  const resolvedCancelLabel = cancelLabel ?? t(lang, 'confirmDialogCancel')
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
-        aria-label="Close dialog"
+        aria-label={t(lang, 'close')}
         onClick={isConfirming ? undefined : onCancel}
       />
       <div
@@ -35,7 +43,7 @@ export const ConfirmDialog = ({
             disabled={isConfirming}
             className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all duration-200 disabled:opacity-50"
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
           <button
             type="button"
@@ -43,7 +51,7 @@ export const ConfirmDialog = ({
             disabled={isConfirming}
             className="px-4 py-2 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50"
           >
-            {isConfirming ? 'Saving…' : confirmLabel}
+            {isConfirming ? t(lang, 'submitting') : resolvedConfirmLabel}
           </button>
         </div>
       </div>

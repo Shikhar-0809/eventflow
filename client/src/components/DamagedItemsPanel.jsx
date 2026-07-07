@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { api } from '../utils/api'
+import { useLangStore } from '../store/langStore'
+import { t } from '../utils/i18n'
 
 export const DamagedItemsPanel = ({ items, onUpdated }) => {
+  const { lang } = useLangStore()
   const damagedItems = items.filter((item) => item.damaged_quantity > 0)
   const undamagedItems = items.filter((item) => item.damaged_quantity === 0)
   const [forms, setForms] = useState({})
@@ -31,7 +34,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
     const form = getForm(item.id)
     const qty = Number(form.quantity)
     if (!Number.isInteger(qty) || qty <= 0) {
-      setErrors((prev) => ({ ...prev, [item.id]: 'Enter a positive whole number.' }))
+      setErrors((prev) => ({ ...prev, [item.id]: t(lang, 'errorGeneric') }))
       return
     }
 
@@ -63,12 +66,12 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
   const submitNewDamage = async () => {
     const item = items.find((row) => String(row.id) === newDamageItemId)
     if (!item) {
-      setNewDamageError('Select an item first.')
+      setNewDamageError(t(lang, 'errorGeneric'))
       return
     }
     const qty = Number(newDamageQty)
     if (!Number.isInteger(qty) || qty <= 0) {
-      setNewDamageError('Enter a positive whole number.')
+      setNewDamageError(t(lang, 'errorGeneric'))
       return
     }
 
@@ -102,7 +105,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="font-medium text-slate-800">{item.name}</span>
           <span className="text-sm text-red-600 font-medium">
-            {item.damaged_quantity} damaged
+            {item.damaged_quantity} {t(lang, 'inventoryDamaged')}
           </span>
         </div>
 
@@ -110,7 +113,6 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
           <input
             type="number"
             min="1"
-            placeholder="Qty"
             value={form.quantity}
             onChange={(e) => setFormField(item.id, 'quantity', e.target.value)}
             className="w-full sm:w-24 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -118,7 +120,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
           />
           <input
             type="text"
-            placeholder="Note (optional)"
+            placeholder={t(lang, 'fieldVenuePlaceholder')}
             value={form.note}
             onChange={(e) => setFormField(item.id, 'note', e.target.value)}
             className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -130,7 +132,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
             disabled={isSubmitting}
             className="px-3 py-2 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
           >
-            Mark Damaged
+            {t(lang, 'markDamaged')}
           </button>
           <button
             type="button"
@@ -138,7 +140,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
             disabled={isSubmitting}
             className="px-3 py-2 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
           >
-            Mark Repaired
+            {t(lang, 'markRepaired')}
           </button>
         </div>
 
@@ -152,7 +154,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
   if (damagedItems.length === 0 && items.length === 0) {
     return (
       <p className="text-sm text-slate-500 bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-6 text-center">
-        Nothing flagged as damaged right now.
+        {t(lang, 'damagedNoneEmpty')}
       </p>
     )
   }
@@ -161,7 +163,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
     <div className="space-y-3">
       {damagedItems.length === 0 ? (
         <p className="text-sm text-slate-500 bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-6 text-center">
-          Nothing flagged as damaged right now.
+          {t(lang, 'damagedNoneEmpty')}
         </p>
       ) : (
         damagedItems.map(renderDamageRow)
@@ -169,7 +171,6 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
 
       {undamagedItems.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 space-y-3">
-          <p className="text-sm font-medium text-slate-700">Log damage on an item</p>
           <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
             <select
               value={newDamageItemId}
@@ -177,7 +178,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
               className="w-full sm:w-48 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
               disabled={isNewDamageSubmitting}
             >
-              <option value="">Select item…</option>
+              <option value="">—</option>
               {undamagedItems.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
@@ -187,7 +188,6 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
             <input
               type="number"
               min="1"
-              placeholder="Qty"
               value={newDamageQty}
               onChange={(e) => setNewDamageQty(e.target.value)}
               className="w-full sm:w-24 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -195,7 +195,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
             />
             <input
               type="text"
-              placeholder="Note (optional)"
+              placeholder={t(lang, 'fieldVenuePlaceholder')}
               value={newDamageNote}
               onChange={(e) => setNewDamageNote(e.target.value)}
               className="flex-1 min-w-[160px] px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
@@ -207,7 +207,7 @@ export const DamagedItemsPanel = ({ items, onUpdated }) => {
               disabled={isNewDamageSubmitting}
               className="px-3 py-2 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
             >
-              Mark Damaged
+              {t(lang, 'markDamaged')}
             </button>
           </div>
           {newDamageError && (

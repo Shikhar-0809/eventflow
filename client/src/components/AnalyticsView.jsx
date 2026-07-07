@@ -11,6 +11,8 @@ import {
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { useAuthStore } from '../store/authStore'
+import { useLangStore } from '../store/langStore'
+import { t } from '../utils/i18n'
 
 const formatMonthLabel = (yyyyMm) => {
   const [year, month] = yyyyMm.split('-')
@@ -57,24 +59,29 @@ const ChartCardSkeleton = () => (
   </div>
 )
 
-const EmptyChartsMessage = () => (
-  <>
-    <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
-      <h2 className="text-sm font-semibold text-slate-700 mb-4">Bookings per Month</h2>
-      <p className="text-center text-slate-500 py-16 text-sm">
-        Not enough data yet — analytics will appear as you add more bookings.
-      </p>
-    </div>
-    <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
-      <h2 className="text-sm font-semibold text-slate-700 mb-4">Revenue per Month</h2>
-      <p className="text-center text-slate-500 py-16 text-sm">
-        Not enough data yet — analytics will appear as you add more bookings.
-      </p>
-    </div>
-  </>
-)
+const EmptyChartsMessage = () => {
+  const { lang } = useLangStore()
+
+  return (
+    <>
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">{t(lang, 'analyticsChartTitle')}</h2>
+        <p className="text-center text-slate-500 py-16 text-sm">
+          {t(lang, 'analyticsEmptyState')}
+        </p>
+      </div>
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">{t(lang, 'analyticsRevenueChartTitle')}</h2>
+        <p className="text-center text-slate-500 py-16 text-sm">
+          {t(lang, 'analyticsEmptyState')}
+        </p>
+      </div>
+    </>
+  )
+}
 
 export const AnalyticsView = () => {
+  const { lang } = useLangStore()
   const [summary, setSummary] = useState(null)
   const [monthly, setMonthly] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -147,7 +154,7 @@ export const AnalyticsView = () => {
             onClick={fetchAnalytics}
             className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
           >
-            Retry
+            {t(lang, 'retry')}
           </button>
         </div>
       </div>
@@ -156,20 +163,20 @@ export const AnalyticsView = () => {
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 min-w-0">
-      <h1 className="text-xl md:text-2xl font-bold text-slate-800">Business Analytics</h1>
+      <h1 className="text-xl md:text-2xl font-bold text-slate-800">{t(lang, 'analyticsHeading')}</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 min-w-0">
           <p className="text-xl md:text-2xl font-bold text-slate-800 truncate">
             {formatCurrency(summary?.revenueThisMonth ?? 0)}
           </p>
-          <p className="text-sm text-slate-500 mt-1">Revenue This Month</p>
+          <p className="text-sm text-slate-500 mt-1">{t(lang, 'statRevenueThisMonth')}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 min-w-0">
           <p className="text-xl md:text-2xl font-bold text-slate-800">
             {summary?.bookingsThisMonth ?? 0}
           </p>
-          <p className="text-sm text-slate-500 mt-1">Bookings This Month</p>
+          <p className="text-sm text-slate-500 mt-1">{t(lang, 'statBookingsThisMonth')}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 min-w-0">
           {formatPeakMonthLabel(summary?.peakMonth) ? (
@@ -184,13 +191,13 @@ export const AnalyticsView = () => {
           ) : (
             <p className="text-xl md:text-2xl font-bold text-slate-800">—</p>
           )}
-          <p className="text-sm text-slate-500 mt-1">Peak Month</p>
+          <p className="text-sm text-slate-500 mt-1">{t(lang, 'statPeakMonth')}</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 min-w-0">
           <p className="text-xl md:text-2xl font-bold text-slate-800">
             {summary?.totalClients ?? 0}
           </p>
-          <p className="text-sm text-slate-500 mt-1">Total Clients</p>
+          <p className="text-sm text-slate-500 mt-1">{t(lang, 'statTotalClients')}</p>
         </div>
       </div>
 
@@ -199,7 +206,7 @@ export const AnalyticsView = () => {
       ) : (
         <>
           <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 min-w-0 overflow-hidden">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">Bookings per Month</h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">{t(lang, 'analyticsChartTitle')}</h2>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData}>
                 <CartesianGrid stroke="#e2e8f0" vertical={false} />
@@ -212,7 +219,7 @@ export const AnalyticsView = () => {
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 min-w-0 overflow-hidden">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">Revenue per Month</h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">{t(lang, 'analyticsRevenueChartTitle')}</h2>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={chartData}>
                 <CartesianGrid stroke="#e2e8f0" vertical={false} />

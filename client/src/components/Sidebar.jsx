@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Tent, Calendar, Package, BarChart2, Activity } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
+import { useLangStore } from '../store/langStore'
 import { api } from '../utils/api'
+import { t } from '../utils/i18n'
 
 const formatEventDate = (dateStr) => {
   if (!dateStr || dateStr === '—') return '—'
@@ -39,6 +41,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   const [logoutError, setLogoutError] = useState(null)
   const { logout } = useAuthStore()
   const { activeView, setActiveView, bookings } = useBookingStore()
+  const { lang, setLang } = useLangStore()
 
   const navButtonClass = (view) =>
     view === activeView
@@ -91,7 +94,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
       <div className="p-5 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <Tent className="w-5 h-5 text-teal-400 shrink-0" />
-          <h1 className="text-white font-bold text-sm leading-tight">Bala Ji Tent House</h1>
+          <h1 className="text-white font-bold text-sm leading-tight">{t(lang, 'businessName')}</h1>
         </div>
       </div>
 
@@ -102,7 +105,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           className={navButtonClass('calendar')}
         >
           <Calendar className="w-4 h-4" />
-          Calendar
+          {t(lang, 'navCalendar')}
         </button>
         <button
           type="button"
@@ -110,7 +113,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           className={navButtonClass('inventory')}
         >
           <Package className="w-4 h-4" />
-          Inventory
+          {t(lang, 'navInventory')}
         </button>
         <button
           type="button"
@@ -118,7 +121,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           className={navButtonClass('analytics')}
         >
           <BarChart2 className="w-4 h-4" />
-          Analytics
+          {t(lang, 'navAnalytics')}
         </button>
         <button
           type="button"
@@ -126,7 +129,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           className={navButtonClass('usage')}
         >
           <Activity className="w-4 h-4" />
-          My Activity
+          {t(lang, 'navActivity')}
         </button>
       </nav>
 
@@ -139,19 +142,19 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
 
         <div className="space-y-2">
           <div className="bg-slate-800 rounded-lg p-3">
-            <p className="text-xs text-slate-400">This Month</p>
+            <p className="text-xs text-slate-400">{t(lang, 'statThisMonth')}</p>
             <p className="text-white font-bold text-lg">
               {isLoading ? '…' : error ? '—' : stats.thisMonth}
             </p>
           </div>
           <div className="bg-slate-800 rounded-lg p-3">
-            <p className="text-xs text-slate-400">Pending Advances</p>
+            <p className="text-xs text-slate-400">{t(lang, 'statPendingAdvances')}</p>
             <p className="text-white font-bold text-lg">
               {isLoading ? '…' : error ? '—' : stats.pendingAdvances}
             </p>
           </div>
           <div className="bg-slate-800 rounded-lg p-3">
-            <p className="text-xs text-slate-400">Next Event</p>
+            <p className="text-xs text-slate-400">{t(lang, 'statNextEvent')}</p>
             <p className="text-white font-bold text-lg">
               {isLoading ? '…' : error ? '—' : formatEventDate(stats.nextEvent)}
             </p>
@@ -162,12 +165,37 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           <p className="text-xs text-red-400">{logoutError}</p>
         )}
 
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setLang('en')}
+            className={
+              lang === 'en'
+                ? 'bg-teal-600 text-white rounded-lg px-2 py-1 text-xs font-semibold'
+                : 'bg-slate-700 text-slate-300 rounded-lg px-2 py-1 text-xs cursor-pointer hover:bg-slate-600 transition-all duration-200'
+            }
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            onClick={() => setLang('hi')}
+            className={
+              lang === 'hi'
+                ? 'bg-teal-600 text-white rounded-lg px-2 py-1 text-xs font-semibold'
+                : 'bg-slate-700 text-slate-300 rounded-lg px-2 py-1 text-xs cursor-pointer hover:bg-slate-600 transition-all duration-200'
+            }
+          >
+            हिं
+          </button>
+        </div>
+
         <button
           type="button"
           onClick={handleLogout}
           className="w-full text-sm text-slate-400 hover:text-white transition-all duration-200 py-1"
         >
-          Log Out
+          {t(lang, 'logOut')}
         </button>
       </div>
     </aside>

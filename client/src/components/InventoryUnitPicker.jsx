@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useState } from 'react'
+import { useLangStore } from '../store/langStore'
+import { t } from '../utils/i18n'
 
 const UnitButton = memo(({
   unit,
@@ -55,6 +57,7 @@ export const InventoryUnitPicker = memo(({
   onQuantityChange,
   itemId,
 }) => {
+  const { lang } = useLangStore()
   const [quantity, setQuantity] = useState(startingQuantity)
   const gridCount = Math.max(totalQuantity, quantity, 1)
   const available = availableCount ?? totalQuantity
@@ -75,7 +78,7 @@ export const InventoryUnitPicker = memo(({
     <div className="space-y-2">
       <p className="text-sm font-medium text-slate-700">{itemName}</p>
       <p className="text-xs text-slate-500" data-testid={`inventory-count-${itemId}`}>
-        {quantity} / {available} available
+        {quantity} / {available} {t(lang, 'availableHint')}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {Array.from({ length: gridCount }, (_, i) => {

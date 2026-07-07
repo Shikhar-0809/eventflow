@@ -3,6 +3,8 @@ import { AlertTriangle, Plus } from 'lucide-react'
 import { api } from '../utils/api'
 import { useAuthStore } from '../store/authStore'
 import { useInventoryStore } from '../store/inventoryStore'
+import { useLangStore } from '../store/langStore'
+import { t } from '../utils/i18n'
 import { InventoryItemCard } from './InventoryItemCard'
 import { DamagedItemsPanel } from './DamagedItemsPanel'
 import { AddInventoryItemModal } from './AddInventoryItemModal'
@@ -20,6 +22,7 @@ const CardSkeleton = () => (
 
 export const InventoryView = () => {
   const { items, setItems, upsertItem } = useInventoryStore()
+  const { lang } = useLangStore()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -78,7 +81,7 @@ export const InventoryView = () => {
             onClick={fetchInventory}
             className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
           >
-            Retry
+            {t(lang, 'retry')}
           </button>
         </div>
       </div>
@@ -88,20 +91,20 @@ export const InventoryView = () => {
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-8 min-w-0">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl md:text-2xl font-bold text-slate-800">Inventory</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-slate-800">{t(lang, 'inventoryHeading')}</h1>
         <button
           type="button"
           onClick={() => setIsAddModalOpen(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
         >
           <Plus className="w-4 h-4" />
-          Add Item
+          {t(lang, 'addItem')}
         </button>
       </div>
 
       {items.length === 0 ? (
         <p className="text-sm text-slate-500 bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center">
-          No inventory items yet. Add your first item to start tracking stock.
+          {t(lang, 'noData')}
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -118,7 +121,7 @@ export const InventoryView = () => {
       <section className="space-y-4">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-800">
           <AlertTriangle className="w-5 h-5 text-amber-600" />
-          Damaged / Repair Needed
+          {t(lang, 'damagedSectionTitle')}
         </h2>
         <DamagedItemsPanel items={items} onUpdated={handleItemUpdated} />
       </section>

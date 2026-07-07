@@ -7,7 +7,7 @@ export const bookingInventoryLineSchema = z.object({
 
 export const bookingSchema = z.object({
   client_name: z.string().trim().min(2, 'Name is too short').max(100),
-  phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
   event_type: z.enum(['wedding', 'birthday', 'corporate', 'other']),
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   guest_count: z.number().int().positive().max(10000),
