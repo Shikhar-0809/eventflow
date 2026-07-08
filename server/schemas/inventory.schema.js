@@ -9,6 +9,10 @@ export const inventoryQuantityUpdateSchema = z.object({
   total_quantity: z.number().int().nonnegative().max(100000),
 })
 
+export const inventoryPriceUpdateSchema = z.object({
+  unit_price: z.number().int().nonnegative().max(10000000),
+})
+
 export const inventoryDamageAdjustSchema = z.object({
   change: z.number().int().refine((n) => n !== 0, 'Change cannot be zero'),
   note: z.string().trim().max(300).optional(),

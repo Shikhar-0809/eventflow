@@ -50,21 +50,55 @@ const replaceBookingInventory = async (client, bookingId, inventoryLines = []) =
   await client.query('DELETE FROM booking_inventory WHERE booking_id = $1', [bookingId])
   for (const line of inventoryLines) {
     await client.query(
-      'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
-      [bookingId, line.item_id, line.quantity],
+      `INSERT INTO booking_inventory (booking_id, item_id, quantity, unit_price, line_total)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        bookingId,
+        line.item_id,
+        line.quantity,
+        line.unit_price ?? 0,
+        line.line_total ?? 0,
+      ],
     )
   }
 }
 
 const createBooking = async (fields, inventoryLines) => {
-  const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = fields
+  const {
+    client_name,
+    phone,
+    event_type,
+    event_date,
+    guest_count,
+    venue,
+    advance,
+    total,
+    subtotal,
+    discount,
+    grand_total,
+  } = fields
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
 
     const { rows: insertRows } = await client.query(
-      'INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-      [client_name, phone, event_type, event_date, guest_count, venue ?? null, advance, total],
+      `INSERT INTO bookings (
+         client_name, phone, event_type, event_date, guest_count, venue, advance, total,
+         subtotal, discount, grand_total
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [
+        client_name,
+        phone,
+        event_type,
+        event_date,
+        guest_count,
+        venue ?? null,
+        advance,
+        total,
+        subtotal ?? 0,
+        discount ?? 0,
+        grand_total ?? 0,
+      ],
     )
     const bookingId = insertRows[0].id
 
@@ -84,7 +118,19 @@ const createBooking = async (fields, inventoryLines) => {
 }
 
 const updateBooking = async (id, fields, inventoryLines) => {
-  const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = fields
+  const {
+    client_name,
+    phone,
+    event_type,
+    event_date,
+    guest_count,
+    venue,
+    advance,
+    total,
+    subtotal,
+    discount,
+    grand_total,
+  } = fields
   const updatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
   const client = await pool.connect()
@@ -93,9 +139,25 @@ const updateBooking = async (id, fields, inventoryLines) => {
 
     await client.query(
       `UPDATE bookings
-       SET client_name = $1, phone = $2, event_type = $3, event_date = $4, guest_count = $5, venue = $6, advance = $7, total = $8, updated_at = $9
-       WHERE id = $10`,
-      [client_name, phone, event_type, event_date, guest_count, venue ?? null, advance, total, updatedAt, id],
+       SET client_name = $1, phone = $2, event_type = $3, event_date = $4, guest_count = $5,
+           venue = $6, advance = $7, total = $8, subtotal = $9,
+           discount = $10, grand_total = $11, updated_at = $12
+       WHERE id = $13`,
+      [
+        client_name,
+        phone,
+        event_type,
+        event_date,
+        guest_count,
+        venue ?? null,
+        advance,
+        total,
+        subtotal ?? 0,
+        discount ?? 0,
+        grand_total ?? 0,
+        updatedAt,
+        id,
+      ],
     )
 
     if (inventoryLines !== undefined) {
@@ -160,7 +222,7 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
     )
 
     const { rows: inventory } = await pool.query(
-      `SELECT bi.item_id, bi.quantity, ii.name
+      `SELECT bi.item_id, bi.quantity, bi.unit_price, bi.line_total, ii.name
        FROM booking_inventory bi
        INNER JOIN inventory_items ii ON ii.id = bi.item_id
        WHERE bi.booking_id = $1

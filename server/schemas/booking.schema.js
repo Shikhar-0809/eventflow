@@ -3,6 +3,8 @@ import { z } from 'zod'
 export const bookingInventoryLineSchema = z.object({
   item_id: z.number().int().positive(),
   quantity: z.number().int().positive().max(10000),
+  unit_price: z.number().int().nonnegative().optional(),
+  line_total: z.number().int().nonnegative().optional(),
 })
 
 export const bookingSchema = z.object({
@@ -14,6 +16,9 @@ export const bookingSchema = z.object({
   venue: z.string().trim().max(200).optional(),
   advance: z.number().int().nonnegative().max(10000000),
   total: z.number().int().nonnegative().max(10000000),
+  subtotal: z.number().int().nonnegative().optional(),
+  discount: z.number().int().nonnegative().max(10000000).optional(),
+  grand_total: z.number().int().nonnegative().optional(),
   inventory: z.array(bookingInventoryLineSchema).max(50).optional(),
 })
 

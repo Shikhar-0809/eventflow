@@ -1,17 +1,20 @@
 CREATE TABLE IF NOT EXISTS bookings (
-  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  client_name TEXT    NOT NULL,
-  phone       TEXT    NOT NULL,
-  event_type  TEXT    NOT NULL,
-  event_date  TEXT    NOT NULL,
-  guest_count INTEGER NOT NULL,
-  venue       TEXT,
-  advance     INTEGER DEFAULT 0,
-  total       INTEGER DEFAULT 0,
-  status      TEXT    DEFAULT 'confirmed',
-  notes       TEXT,
-  created_at  TEXT    DEFAULT NOW(),
-  updated_at  TEXT    DEFAULT NOW()
+  id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  client_name   TEXT    NOT NULL,
+  phone         TEXT    NOT NULL,
+  event_type    TEXT    NOT NULL,
+  event_date    TEXT    NOT NULL,
+  guest_count   INTEGER NOT NULL,
+  venue         TEXT,
+  advance       INTEGER DEFAULT 0,
+  total         INTEGER DEFAULT 0,
+  subtotal      INTEGER NOT NULL DEFAULT 0,
+  discount      INTEGER NOT NULL DEFAULT 0,
+  grand_total   INTEGER NOT NULL DEFAULT 0,
+  status        TEXT    DEFAULT 'confirmed',
+  notes         TEXT,
+  created_at    TEXT    DEFAULT NOW(),
+  updated_at    TEXT    DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS change_log (
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   name             TEXT    NOT NULL UNIQUE,
   total_quantity   INTEGER NOT NULL DEFAULT 0,
   damaged_quantity INTEGER NOT NULL DEFAULT 0,
+  unit_price       INTEGER NOT NULL DEFAULT 0,
   created_at       TEXT    DEFAULT NOW()
 );
 
@@ -40,7 +44,9 @@ CREATE TABLE IF NOT EXISTS booking_inventory (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   booking_id  INTEGER NOT NULL REFERENCES bookings(id),
   item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
-  quantity    INTEGER NOT NULL CHECK (quantity > 0)
+  quantity    INTEGER NOT NULL CHECK (quantity > 0),
+  unit_price  INTEGER NOT NULL DEFAULT 0,
+  line_total  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS inventory_damage_log (

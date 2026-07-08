@@ -13,9 +13,23 @@ export const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 })
 
+const COLUMN_MIGRATIONS = [
+  'ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS unit_price INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE booking_inventory ADD COLUMN IF NOT EXISTS unit_price INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE booking_inventory ADD COLUMN IF NOT EXISTS line_total INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS subtotal INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS grand_total INTEGER NOT NULL DEFAULT 0',
+]
+
 export const initDb = async () => {
   const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8')
   await pool.query(schema)
+
+  for (const sql of COLUMN_MIGRATIONS) {
+    await pool.query(sql)
+  }
+
   console.log('Schema initialized')
 }
 

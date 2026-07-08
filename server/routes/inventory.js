@@ -6,6 +6,7 @@ import {
   availabilityCheckSchema,
   inventoryDamageAdjustSchema,
   inventoryItemSchema,
+  inventoryPriceUpdateSchema,
   inventoryQuantityUpdateSchema,
 } from '../schemas/inventory.schema.js'
 
@@ -138,6 +139,29 @@ router.post('/', validate(inventoryItemSchema), async (req, res, next) => {
     if (err.code === '23505') {
       return res.status(400).json({ error: 'An inventory item with this name already exists.' })
     }
+    next(err)
+  }
+})
+
+router.patch('/:id/price', validate(inventoryPriceUpdateSchema), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const item = await getItemRow(id)
+
+    if (!item) {
+      return res.status(404).json({ error: 'Inventory item not found.' })
+    }
+
+    const { unit_price: unitPrice } = req.body
+
+    await pool.query(
+      'UPDATE inventory_items SET unit_price = $1 WHERE id = $2',
+      [unitPrice, id],
+    )
+
+    const updated = await getItemRow(id)
+    res.status(200).json(await withComputedFields(updated))
+  } catch (err) {
     next(err)
   }
 })
