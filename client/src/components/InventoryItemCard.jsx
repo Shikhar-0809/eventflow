@@ -2,11 +2,8 @@ import { useState } from 'react'
 import { Pencil } from 'lucide-react'
 import { api } from '../utils/api'
 import { inventoryQuantityUpdateSchema } from '../schemas/inventory.schema.js'
-import { useLangStore } from '../store/langStore'
-import { t } from '../utils/i18n'
 
 export const InventoryItemCard = ({ item, onUpdated }) => {
-  const { lang } = useLangStore()
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const [editError, setEditError] = useState(null)
@@ -28,7 +25,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
       total_quantity: Number(editValue),
     })
     if (!parsed.success) {
-      setEditError(parsed.error.issues[0]?.message ?? t(lang, 'errorGeneric'))
+      setEditError(parsed.error.issues[0]?.message ?? 'Something went wrong. Please try again.')
       return
     }
 
@@ -51,7 +48,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
 
       <div className="mt-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-slate-500">{t(lang, 'inventoryTotal')}</span>
+          <span className="text-sm text-slate-500">Total Owned</span>
           {isEditing ? (
             <div className="flex flex-col items-end gap-1">
               <div className="flex items-center gap-1">
@@ -69,7 +66,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
                   disabled={isSaving}
                   className="text-xs px-2 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50"
                 >
-                  {t(lang, 'save')}
+                  Save
                 </button>
                 <button
                   type="button"
@@ -77,7 +74,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
                   disabled={isSaving}
                   className="text-xs px-2 py-1 text-slate-600 hover:text-slate-800 transition-all duration-200"
                 >
-                  {t(lang, 'cancel')}
+                  Cancel
                 </button>
               </div>
               {editError && <p className="text-xs text-red-600">{editError}</p>}
@@ -89,7 +86,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
                 type="button"
                 onClick={startEdit}
                 className="p-1 text-slate-400 hover:text-teal-600 transition-all duration-200"
-                aria-label={t(lang, 'editQuantity')}
+                aria-label="Edit Quantity"
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
@@ -99,16 +96,16 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
 
         <div className="flex flex-wrap gap-2 pt-1">
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-            {t(lang, 'inventoryInUse')}: {item.in_use_today ?? 0}
+            In Use Today: {item.in_use_today ?? 0}
           </span>
           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
-            {t(lang, 'inventoryAvailable')}: {item.available ?? 0}
+            Available: {item.available ?? 0}
           </span>
         </div>
 
         {item.damaged_quantity > 0 && (
           <p className="text-xs text-red-600">
-            {item.damaged_quantity} {t(lang, 'inventoryDamaged')}
+            {item.damaged_quantity} Damaged
           </p>
         )}
       </div>

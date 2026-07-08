@@ -3,21 +3,28 @@ import { X, Loader2, Check } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useInventoryStore } from '../store/inventoryStore'
 import { useAuthStore } from '../store/authStore'
-import { useLangStore } from '../store/langStore'
 import { api } from '../utils/api'
 import { bookingSchema } from '../schemas/booking.schema.js'
-import { EVENT_TYPE_KEYS, eventTypeLabel, t } from '../utils/i18n'
 import { ConflictBanner } from './ConflictBanner'
 import { InventoryWarningBanner } from './InventoryWarningBanner'
 import { InventoryUnitPicker } from './InventoryUnitPicker'
 import { ConfirmDialog } from './ConfirmDialog'
 
 const EVENT_TYPES = [
-  { value: 'wedding', key: EVENT_TYPE_KEYS.wedding },
-  { value: 'birthday', key: EVENT_TYPE_KEYS.birthday },
-  { value: 'corporate', key: EVENT_TYPE_KEYS.corporate },
-  { value: 'other', key: EVENT_TYPE_KEYS.other },
+  { value: 'wedding', label: 'Wedding' },
+  { value: 'birthday', label: 'Birthday' },
+  { value: 'corporate', label: 'Corporate' },
+  { value: 'other', label: 'Other' },
 ]
+
+const EVENT_TYPE_LABELS = {
+  wedding: 'Wedding',
+  birthday: 'Birthday',
+  corporate: 'Corporate',
+  other: 'Other',
+}
+
+const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
 const EMPTY_FORM = {
   client_name: '',
@@ -152,7 +159,6 @@ export const BookingModal = () => {
   } = useBookingStore()
 
   const { items: inventoryItems, setItems } = useInventoryStore()
-  const { lang } = useLangStore()
 
   const isEditMode = modalMode === 'edit'
   const [form, setForm] = useState(EMPTY_FORM)
@@ -465,7 +471,7 @@ export const BookingModal = () => {
         setFormError(err.message)
         return
       }
-      setFormError(t(lang, 'errorGeneric'))
+      setFormError('Something went wrong. Please try again.')
     } finally {
       submittingRef.current = false
       setIsSubmitting(false)
@@ -480,7 +486,6 @@ export const BookingModal = () => {
     selectedBooking?.id,
     setPostSaveConflictNotice,
     updateBooking,
-    lang,
   ])
 
   const handleSubmit = async (e) => {
@@ -528,13 +533,13 @@ export const BookingModal = () => {
         <div className="relative w-full max-w-[480px] h-full bg-white shadow-xl p-6 flex flex-col animate-[slideIn_0.2s_ease-out]">
           <div className="flex items-center justify-between mb-6 shrink-0">
             <h2 className="text-xl font-semibold text-slate-900">
-              {isEditMode ? t(lang, 'editBookingTitle') : t(lang, 'createBookingTitle')}
+              {isEditMode ? 'Edit Booking' : 'New Booking'}
             </h2>
             <button
               type="button"
               onClick={closeModal}
               className="p-1 text-slate-500 hover:text-slate-900 transition-all duration-200"
-              aria-label={t(lang, 'close')}
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -550,7 +555,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="client_name" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldClientName')}
+                  Client Name
                 </label>
                 <input
                   id="client_name"
@@ -567,7 +572,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldPhone')}
+                  Phone Number
                 </label>
                 <input
                   id="phone"
@@ -585,7 +590,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="event_type" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldEventType')}
+                  Event Type
                 </label>
                 <select
                   id="event_type"
@@ -594,8 +599,8 @@ export const BookingModal = () => {
                   onBlur={(e) => handleBlur('event_type', e.target.value)}
                   className={inputClass(touched.event_type && fieldErrors.event_type)}
                 >
-                  {EVENT_TYPES.map(({ value, key }) => (
-                    <option key={value} value={value}>{t(lang, key)}</option>
+                  {EVENT_TYPES.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
                 {touched.event_type && fieldErrors.event_type && (
@@ -605,7 +610,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="event_date" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldEventDate')}
+                  Event Date
                 </label>
                 <div className="relative">
                   <input
@@ -632,7 +637,7 @@ export const BookingModal = () => {
                   <div className="mt-2">
                     <ConflictBanner
                       clientName={conflictBooking.client_name}
-                      eventType={eventTypeLabel(lang, conflictBooking.event_type)}
+                      eventType={formatEventType(conflictBooking.event_type)}
                     />
                   </div>
                 )}
@@ -640,7 +645,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="guest_count" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldGuestCount')}
+                  Guest Count
                 </label>
                 <input
                   id="guest_count"
@@ -658,7 +663,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="venue" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldVenue')}
+                  Venue
                 </label>
                 <input
                   id="venue"
@@ -666,7 +671,7 @@ export const BookingModal = () => {
                   value={form.venue}
                   onChange={(e) => handleChange('venue', e.target.value)}
                   onBlur={(e) => handleBlur('venue', e.target.value)}
-                  placeholder={t(lang, 'fieldVenuePlaceholder')}
+                  placeholder="Optional"
                   className={inputClass(touched.venue && fieldErrors.venue)}
                 />
                 {touched.venue && fieldErrors.venue && (
@@ -676,7 +681,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="advance" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldAdvance')}
+                  Advance Collected (₹)
                 </label>
                 <input
                   id="advance"
@@ -694,7 +699,7 @@ export const BookingModal = () => {
 
               <div>
                 <label htmlFor="total" className="block text-sm font-medium text-slate-700 mb-1">
-                  {t(lang, 'fieldTotal')}
+                  Total Amount (₹)
                 </label>
                 <input
                   id="total"
@@ -712,14 +717,14 @@ export const BookingModal = () => {
 
               <div className="space-y-4 pt-2 border-t border-slate-200">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-800">{t(lang, 'inventorySection')}</h3>
+                  <h3 className="text-sm font-semibold text-slate-800">Inventory Needed</h3>
                   {inventoryChecking && (
                     <Loader2 className="w-4 h-4 text-slate-400 animate-spin shrink-0" />
                   )}
                 </div>
 
                 {inventoryItems.length === 0 ? (
-                  <p className="text-sm text-slate-500">{t(lang, 'noData')}</p>
+                  <p className="text-sm text-slate-500">No data yet.</p>
                 ) : (
                   <div className="space-y-4">
                     {inventoryItems.map((item) => {
@@ -755,10 +760,10 @@ export const BookingModal = () => {
             >
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               {isSubmitting
-                ? t(lang, 'submitting')
+                ? 'Saving...'
                 : isEditMode
-                  ? t(lang, 'submitEdit')
-                  : t(lang, 'submitCreate')}
+                  ? 'Save Changes'
+                  : 'Confirm Booking'}
             </button>
           </form>
         </div>
@@ -766,9 +771,9 @@ export const BookingModal = () => {
 
       <ConfirmDialog
         isOpen={showConfirmDialog}
-        title={t(lang, 'inventoryWarningTitle')}
+        title="Inventory Shortfall"
         message={formatShortfallConfirmMessage(shortfalls)}
-        confirmLabel={t(lang, 'confirm')}
+        confirmLabel="Confirm"
         isConfirming={isSubmitting}
         onConfirm={submitBooking}
         onCancel={() => setShowConfirmDialog(false)}

@@ -1,10 +1,6 @@
 import { AlertTriangle } from 'lucide-react'
-import { useLangStore } from '../store/langStore'
-import { t } from '../utils/i18n'
 
 export const InventoryWarningBanner = ({ shortfalls }) => {
-  const { lang } = useLangStore()
-
   if (!shortfalls?.length) return null
 
   return (
@@ -12,13 +8,11 @@ export const InventoryWarningBanner = ({ shortfalls }) => {
       <div className="flex items-start gap-2">
         <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <p className="font-medium">{t(lang, 'inventoryWarningTitle')}</p>
+          <p className="font-medium">Inventory Shortfall</p>
           <ul className="list-disc list-inside space-y-0.5">
             {shortfalls.map((row) => (
               <li key={row.item_id}>
-                {row.name}: {t(lang, 'inventoryWarningNeed')} {row.requested},{' '}
-                {t(lang, 'inventoryWarningOnly')} {row.available}{' '}
-                {t(lang, 'inventoryWarningAvailable')}
+                {row.name}: need {row.requested}, only {row.available} available
               </li>
             ))}
           </ul>

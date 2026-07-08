@@ -1,15 +1,12 @@
 import { useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
-import { useLangStore } from '../store/langStore'
-import { t } from '../utils/i18n'
 
 export const LoginScreen = () => {
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const { login } = useAuthStore()
-  const { lang } = useLangStore()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -32,14 +29,14 @@ export const LoginScreen = () => {
           <div className="bg-teal-600 rounded-xl p-3 mb-4">
             <CalendarDays className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-semibold text-slate-900">{t(lang, 'loginTitle')}</h1>
-          <p className="mt-1 text-sm text-slate-500">{t(lang, 'loginSubtitle')}</p>
+          <h1 className="text-2xl font-semibold text-slate-900">EventFlow</h1>
+          <p className="mt-1 text-sm text-slate-500">Bala Ji Tent House</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-              {t(lang, 'loginPasswordLabel')}
+              Password
             </label>
             <input
               id="password"
@@ -67,7 +64,7 @@ export const LoginScreen = () => {
                 : 'bg-teal-600 hover:bg-teal-700 text-white'
             }`}
           >
-            {isLoading ? t(lang, 'loading') : t(lang, 'loginButton')}
+            {isLoading ? 'Loading...' : 'Log In'}
           </button>
         </form>
       </div>

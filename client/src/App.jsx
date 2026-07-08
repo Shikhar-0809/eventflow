@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Menu, RefreshCw } from 'lucide-react'
 import { useAuthStore } from './store/authStore'
-import { useLangStore } from './store/langStore'
 import { LoginScreen } from './components/LoginScreen'
 import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
@@ -11,12 +10,10 @@ import { InventoryView } from './components/InventoryView'
 import { BookingModal } from './components/BookingModal'
 import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
-import { t } from './utils/i18n'
 
 export default function App() {
   const { isAuthenticated, isLoading, connectionError, checkAuth } = useAuthStore()
   const { activeView } = useBookingStore()
-  const { lang } = useLangStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
@@ -29,18 +26,16 @@ export default function App() {
       return
     }
     if (!isAuthenticated) {
-      document.title = t(lang, 'loginTitle')
+      document.title = 'EventFlow'
       return
     }
-    document.title = lang === 'hi'
-      ? 'EventFlow — बाला जी टेंट हाउस'
-      : 'EventFlow — Bala Ji Tent House'
-  }, [isAuthenticated, connectionError, lang])
+    document.title = 'EventFlow — Bala Ji Tent House'
+  }, [isAuthenticated, connectionError])
 
   if (isLoading) {
     return (
       <div className="h-screen bg-slate-50 flex items-center justify-center">
-        <p className="text-slate-500">{t(lang, 'loading')}</p>
+        <p className="text-slate-500">Loading...</p>
       </div>
     )
   }
@@ -90,7 +85,7 @@ export default function App() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-white font-bold text-sm">{t(lang, 'businessName')}</span>
+          <span className="text-white font-bold text-sm">Bala Ji Tent House</span>
         </header>
 
         <main className="flex-1 relative overflow-hidden bg-slate-50 min-w-0">

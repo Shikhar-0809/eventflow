@@ -2,11 +2,8 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../utils/api'
 import { inventoryItemSchema } from '../schemas/inventory.schema.js'
-import { useLangStore } from '../store/langStore'
-import { t } from '../utils/i18n'
 
 export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
-  const { lang } = useLangStore()
   const [name, setName] = useState('')
   const [totalQuantity, setTotalQuantity] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -66,7 +63,7 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
       <button
         type="button"
         className="absolute inset-0 bg-black/40"
-        aria-label={t(lang, 'close')}
+        aria-label="Close"
         onClick={handleClose}
       />
       <div
@@ -77,13 +74,13 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
       >
         <div className="flex items-center justify-between mb-4">
           <h2 id="add-inventory-title" className="text-lg font-bold text-slate-800">
-            {t(lang, 'addItemTitle')}
+            Add Inventory Item
           </h2>
           <button
             type="button"
             onClick={handleClose}
             className="p-1 text-slate-400 hover:text-slate-600 transition-all duration-200"
-            aria-label={t(lang, 'close')}
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -92,7 +89,7 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="item-name" className="block text-sm font-medium text-slate-700 mb-1">
-              {t(lang, 'fieldItemName')}
+              Item Name
             </label>
             <input
               id="item-name"
@@ -109,7 +106,7 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
 
           <div>
             <label htmlFor="item-quantity" className="block text-sm font-medium text-slate-700 mb-1">
-              {t(lang, 'fieldTotalQuantity')}
+              Total Quantity Owned
             </label>
             <input
               id="item-quantity"
@@ -136,7 +133,7 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
             disabled={isSubmitting}
             className="w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
           >
-            {isSubmitting ? t(lang, 'submitting') : t(lang, 'addItemSubmit')}
+            {isSubmitting ? 'Saving...' : 'Add Item'}
           </button>
         </form>
       </div>

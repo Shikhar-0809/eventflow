@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react'
 import { X, Phone, MessageCircle, Bell, Loader2, Pencil } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
-import { useLangStore } from '../store/langStore'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
-import { eventTypeLabel, statusLabel, t } from '../utils/i18n'
 import {
   confirmationMessage,
   paymentReminderMessage,
@@ -19,6 +17,22 @@ const STATUS_STYLES = {
   pending: 'bg-amber-100 text-amber-800',
   cancelled: 'bg-red-100 text-red-700',
 }
+
+const STATUS_LABELS = {
+  confirmed: 'Confirmed',
+  pending: 'Pending',
+  cancelled: 'Cancelled',
+}
+
+const EVENT_TYPE_LABELS = {
+  wedding: 'Wedding',
+  birthday: 'Birthday',
+  corporate: 'Corporate',
+  other: 'Other',
+}
+
+const formatStatus = (status) => STATUS_LABELS[status] ?? 'Confirmed'
+const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
 const formatDisplayDate = (dateStr) => {
   const d = new Date(`${dateStr}T00:00:00`)
@@ -52,7 +66,6 @@ const InventoryUsedSkeleton = () => (
 
 export const BookingDetail = () => {
   const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal } = useBookingStore()
-  const { lang } = useLangStore()
   const [booking, setBooking] = useState(null)
   const [changeLog, setChangeLog] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -122,7 +135,7 @@ export const BookingDetail = () => {
     if (!target) return
 
     if (!validatePhoneForWhatsApp(target.phone)) {
-      setWhatsappError(t(lang, 'errorGeneric'))
+      setWhatsappError('Something went wrong. Please try again.')
       return
     }
 
@@ -131,7 +144,7 @@ export const BookingDetail = () => {
       : paymentReminderMessage(target)
 
     if (!url) {
-      setWhatsappError(t(lang, 'errorGeneric'))
+      setWhatsappError('Something went wrong. Please try again.')
       return
     }
 
@@ -187,13 +200,13 @@ export const BookingDetail = () => {
       <div className="absolute inset-0 bg-black/40 pointer-events-none" aria-hidden="true" />
       <div className="relative w-full max-w-[420px] h-full bg-white shadow-xl border-l border-slate-200 flex flex-col animate-[slideIn_0.2s_ease-out] pointer-events-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
-          <h2 className="text-xl font-semibold text-slate-900">{t(lang, 'detailTitle')}</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Booking Details</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
               onClick={() => openModal('edit')}
               className="p-1 text-slate-500 hover:text-slate-900 transition-all duration-200"
-              aria-label={t(lang, 'editBookingButton')}
+              aria-label="Edit"
             >
               <Pencil className="w-5 h-5" />
             </button>
@@ -201,7 +214,7 @@ export const BookingDetail = () => {
               type="button"
               onClick={closeDetail}
               className="p-1 text-slate-500 hover:text-slate-900 transition-all duration-200"
-              aria-label={t(lang, 'close')}
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -219,7 +232,7 @@ export const BookingDetail = () => {
             <div className="flex items-start justify-between gap-3">
               <p className="text-xl font-bold text-slate-900">{display.client_name}</p>
               <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}`}>
-                {statusLabel(lang, status)}
+                {formatStatus(status)}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-2 text-slate-600">
@@ -229,20 +242,20 @@ export const BookingDetail = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <DetailField label={t(lang, 'detailEventType')} value={eventTypeLabel(lang, display.event_type)} />
-            <DetailField label={t(lang, 'detailDate')} value={formatDisplayDate(display.event_date)} />
-            <DetailField label={t(lang, 'detailGuests')} value={display.guest_count} />
-            <DetailField label={t(lang, 'detailVenue')} value={display.venue?.trim() || '—'} />
-            <DetailField label={t(lang, 'detailAdvance')} value={formatCurrency(display.advance)} />
-            <DetailField label={t(lang, 'detailTotal')} value={formatCurrency(display.total)} />
+            <DetailField label="Event Type" value={formatEventType(display.event_type)} />
+            <DetailField label="Date" value={formatDisplayDate(display.event_date)} />
+            <DetailField label="Guests" value={display.guest_count} />
+            <DetailField label="Venue" value={display.venue?.trim() || '—'} />
+            <DetailField label="Advance Paid" value={formatCurrency(display.advance)} />
+            <DetailField label="Total Amount" value={formatCurrency(display.total)} />
           </div>
 
           <div aria-busy={!inventoryReady}>
-            <h3 className="text-sm font-semibold text-slate-800 mb-3">{t(lang, 'detailSectionInventory')}</h3>
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">Inventory Used</h3>
             {!inventoryReady ? (
               <InventoryUsedSkeleton />
             ) : inventoryLines.length === 0 ? (
-              <p className="text-sm text-slate-400">{t(lang, 'noInventoryAttached')}</p>
+              <p className="text-sm text-slate-400">No inventory attached to this booking.</p>
             ) : (
               <ul className="space-y-2">
                 {inventoryLines.map((line) => (
@@ -259,7 +272,7 @@ export const BookingDetail = () => {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 mb-3">{t(lang, 'detailSectionWhatsApp')}</h3>
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">Send to Client</h3>
             {whatsappError && (
               <p role="alert" className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2 mb-3">
                 {whatsappError}
@@ -272,7 +285,7 @@ export const BookingDetail = () => {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-white bg-green-600 hover:bg-green-700 transition-all duration-200"
               >
                 <MessageCircle className="w-4 h-4" />
-                {t(lang, 'whatsappConfirm')}
+                Send Confirmation
               </button>
               <button
                 type="button"
@@ -280,16 +293,16 @@ export const BookingDetail = () => {
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-white bg-amber-500 hover:bg-amber-600 transition-all duration-200"
               >
                 <Bell className="w-4 h-4" />
-                {t(lang, 'whatsappReminder')}
+                Send Payment Reminder
               </button>
             </div>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 mb-3">{t(lang, 'detailSectionChangeLog')}</h3>
+            <h3 className="text-sm font-semibold text-slate-800 mb-3">Change Log</h3>
             <div className="space-y-3 mb-4">
               {changeLog.length === 0 ? (
-                <p className="text-sm text-slate-400">{t(lang, 'changeLogEmpty')}</p>
+                <p className="text-sm text-slate-400">No changes logged yet.</p>
               ) : (
                 changeLog.map((entry) => (
                   <div key={entry.id} className="text-sm text-slate-600">
@@ -309,13 +322,13 @@ export const BookingDetail = () => {
               <textarea
                 value={changeNote}
                 onChange={(e) => setChangeNote(e.target.value.slice(0, MAX_NOTE_LENGTH))}
-                placeholder={t(lang, 'changeLogPlaceholder')}
+                placeholder="Log a change or note..."
                 rows={3}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200 resize-none"
               />
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-400">
-                  {charsRemaining} {t(lang, 'changeLogCharsLeft')}
+                  {charsRemaining} characters left
                 </span>
                 <button
                   type="submit"
@@ -327,7 +340,7 @@ export const BookingDetail = () => {
                   }`}
                 >
                   {isLogging && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {t(lang, 'changeLogButton')}
+                  Log Change
                 </button>
               </div>
             </form>

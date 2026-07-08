@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../utils/api'
-import { daysUsingEventFlow, formatRelativeTime } from '../utils/formatRelativeTime'
+import { formatRelativeTime } from '../utils/formatRelativeTime'
 import { useAuthStore } from '../store/authStore'
-import { useLangStore } from '../store/langStore'
-import { t } from '../utils/i18n'
 
 const StatCardSkeleton = () => (
   <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 animate-pulse">
@@ -13,7 +11,6 @@ const StatCardSkeleton = () => (
 )
 
 export const UsageView = () => {
-  const { lang } = useLangStore()
   const [usage, setUsage] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -43,8 +40,8 @@ export const UsageView = () => {
     const relative = formatRelativeTime(usage?.lastActiveAt)
     if (relative) return relative
     if (usage?.firstActivityAt) return '—'
-    return t(lang, 'noData')
-  }, [usage, lang])
+    return 'No data yet.'
+  }, [usage])
 
   if (isLoading) {
     return (
@@ -73,7 +70,7 @@ export const UsageView = () => {
             onClick={fetchUsage}
             className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
           >
-            {t(lang, 'retry')}
+            Retry
           </button>
         </div>
       </div>
@@ -82,33 +79,33 @@ export const UsageView = () => {
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 min-w-0">
-      <h1 className="text-xl md:text-2xl font-bold text-slate-800">{t(lang, 'usageHeading')}</h1>
+      <h1 className="text-xl md:text-2xl font-bold text-slate-800">Your Activity</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
           <p className="text-2xl font-bold text-slate-800">{usage?.loginsThisWeek ?? 0}</p>
-          <p className="text-sm text-slate-500 mt-1">{t(lang, 'usageLoginsWeek')}</p>
+          <p className="text-sm text-slate-500 mt-1">Logins This Week</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
           <p className="text-2xl font-bold text-slate-800">
             {usage?.bookingsCreatedThisMonth ?? 0}
           </p>
-          <p className="text-sm text-slate-500 mt-1">{t(lang, 'usageBookingsMonth')}</p>
+          <p className="text-sm text-slate-500 mt-1">Bookings Created This Month</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
           <p className="text-2xl font-bold text-slate-800">
             {usage?.whatsappMessagesSentThisMonth ?? 0}
           </p>
-          <p className="text-sm text-slate-500 mt-1">{t(lang, 'usageWhatsappMonth')}</p>
+          <p className="text-sm text-slate-500 mt-1">WhatsApp Messages Sent This Month</p>
         </div>
         <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
           <p className="text-2xl font-bold text-slate-800">{lastActiveLabel}</p>
-          <p className="text-sm text-slate-500 mt-1">{t(lang, 'usageLastActive')}</p>
+          <p className="text-sm text-slate-500 mt-1">Last Active</p>
         </div>
       </div>
 
       <p className="text-sm text-slate-500 text-center pt-2">
-        {t(lang, 'usageFooter')}
+        Keep it up — every booking you log here is one less thing to track on paper.
       </p>
     </div>
   )
