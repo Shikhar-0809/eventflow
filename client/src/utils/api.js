@@ -61,6 +61,7 @@ export const api = {
     request(`/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   updateInventoryPrice: (id, unit_price) =>
     request(`/inventory/${id}/price`, { method: 'PATCH', body: JSON.stringify({ unit_price }) }),
+  deleteInventoryItem: (id) => request(`/inventory/${id}`, { method: 'DELETE' }),
   adjustInventoryDamage: (id, data) =>
     request(`/inventory/${id}/damage`, { method: 'POST', body: JSON.stringify(data) }),
   checkInventoryAvailability: (data) =>

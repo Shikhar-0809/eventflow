@@ -242,4 +242,48 @@ router.post('/:id/damage', validate(inventoryDamageAdjustSchema), async (req, re
   }
 })
 
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const item = await getItemRow(id)
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found.' })
+    }
+
+    const { rows: activeRefs } = await pool.query(
+      `SELECT 1
+       FROM booking_inventory bi
+       INNER JOIN bookings b ON b.id = bi.booking_id
+       WHERE bi.item_id = $1 AND b.status != 'cancelled'
+       LIMIT 1`,
+      [id],
+    )
+
+    if (activeRefs.length > 0) {
+      return res.status(409).json({
+        error: 'This item is attached to one or more active bookings and cannot be removed.',
+      })
+    }
+
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('DELETE FROM booking_inventory WHERE item_id = $1', [id])
+      await client.query('DELETE FROM inventory_damage_log WHERE item_id = $1', [id])
+      await client.query('DELETE FROM inventory_items WHERE id = $1', [id])
+      await client.query('COMMIT')
+    } catch (err) {
+      await client.query('ROLLBACK')
+      throw err
+    } finally {
+      client.release()
+    }
+
+    res.status(200).json({ success: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router

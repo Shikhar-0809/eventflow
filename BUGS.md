@@ -130,3 +130,4 @@ Move fixed bugs here from the tracker above once confirmed working. The full arc
 | 012 | Clicking a different calendar event while BookingDetail drawer is already open doesn't switch the panel — stays on the previously opened booking until closed and reopened | BookingDetail sync effect returns null when selectedBooking.id changes instead of keeping stale local booking state |
 | — | Tab title read "EventFlow — Log In" on connection error screen instead of "EventFlow — Bala Ji Tent House" | App.jsx title effect treats `connectionError` the same as `isAuthenticated` so the merchant sees the product name, not the login title |
 | — | See HANDOFF.md for the #001–#019 archive carried over from the previous session | — |
+| — | Delete inventory item: transaction order, active-booking filter, error-clear on dialog reopen, parameterized queries — all verified | Verified post-implementation |

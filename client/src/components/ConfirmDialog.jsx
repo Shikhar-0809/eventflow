@@ -1,9 +1,13 @@
+import { Loader2 } from 'lucide-react'
+
 export const ConfirmDialog = ({
   isOpen,
   title,
   message,
   confirmLabel,
   cancelLabel,
+  confirmVariant = 'default',
+  confirmingLabel = 'Saving...',
   isConfirming = false,
   onConfirm,
   onCancel,
@@ -12,6 +16,9 @@ export const ConfirmDialog = ({
 
   const resolvedConfirmLabel = confirmLabel ?? 'Confirm'
   const resolvedCancelLabel = cancelLabel ?? 'Cancel'
+  const confirmButtonClass = confirmVariant === 'danger'
+    ? 'bg-red-600 hover:bg-red-700 text-white'
+    : 'bg-teal-600 hover:bg-teal-700 text-white'
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
@@ -44,9 +51,10 @@ export const ConfirmDialog = ({
             type="button"
             onClick={onConfirm}
             disabled={isConfirming}
-            className="px-4 py-2 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50"
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 disabled:opacity-50 flex items-center gap-2 ${confirmButtonClass}`}
           >
-            {isConfirming ? 'Saving...' : resolvedConfirmLabel}
+            {isConfirming && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isConfirming ? confirmingLabel : resolvedConfirmLabel}
           </button>
         </div>
       </div>

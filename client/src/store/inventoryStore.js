@@ -11,4 +11,7 @@ export const useInventoryStore = create((set) => ({
         : [...state.items, item],
     }
   }),
+  removeItem: (id) => set((state) => ({
+    items: state.items.filter((i) => i.id !== id),
+  })),
 }))
