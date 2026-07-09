@@ -27,6 +27,9 @@ if (process.env.NODE_ENV !== 'production') {
 const app = express()
 const PORT = process.env.PORT || 3001
 
+// JSON API only — Express default ETag can respond 304 with an empty body on repeat GETs.
+app.set('etag', false)
+
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   credentials: true,
@@ -34,8 +37,13 @@ app.use(cors({
 app.use(cookieParser())
 app.use(express.json())
 
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store')
+  next()
+})
+
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' })
+  res.status(200).json({ status: 'ok' })
 })
 
 app.use('/api/auth', authRouter)
