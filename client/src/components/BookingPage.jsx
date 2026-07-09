@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { X, Loader2, Check, Pencil } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useInventoryStore } from '../store/inventoryStore'
@@ -42,20 +42,35 @@ const inputClass = (hasError) =>
     hasError ? 'border-red-400' : 'border-slate-300'
   }`
 
-const quantitiesFromInventoryLines = (lines = []) => {
+const normalizeEventDate = (value) => {
+  if (value == null || value === '') return ''
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})/)
+    return match ? match[1] : ''
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const y = value.getFullYear()
+    const m = String(value.getMonth() + 1).padStart(2, '0')
+    const d = String(value.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  return ''
+}
+
+const quantitiesFromInventoryLines = (lines) => {
   const quantities = {}
-  for (const line of lines) {
-    quantities[line.item_id] = line.quantity
+  for (const line of lines ?? []) {
+    if (line?.item_id == null) continue
+    quantities[line.item_id] = line.quantity ?? 0
   }
   return quantities
 }
 
-const unitPricesFromInventoryLines = (lines = []) => {
+const unitPricesFromInventoryLines = (lines) => {
   const prices = {}
-  for (const line of lines) {
-    if (line.unit_price != null) {
-      prices[line.item_id] = line.unit_price
-    }
+  for (const line of lines ?? []) {
+    if (line?.item_id == null || line.unit_price == null) continue
+    prices[line.item_id] = line.unit_price
   }
   return prices
 }
@@ -99,14 +114,14 @@ const buildPayload = (form, billing) => ({
 })
 
 const bookingToForm = (booking) => ({
-  client_name: booking.client_name ?? '',
-  phone: booking.phone != null ? String(booking.phone) : '',
-  event_type: booking.event_type ?? 'wedding',
-  event_date: booking.event_date ?? '',
-  guest_count: booking.guest_count != null ? String(booking.guest_count) : '',
-  venue: booking.venue ?? '',
-  notes: booking.notes ?? '',
-  advance: booking.advance != null ? String(booking.advance) : '',
+  client_name: booking?.client_name ?? '',
+  phone: booking?.phone != null ? String(booking.phone) : '',
+  event_type: booking?.event_type ?? 'wedding',
+  event_date: normalizeEventDate(booking?.event_date),
+  guest_count: booking?.guest_count != null ? String(booking.guest_count) : '',
+  venue: booking?.venue ?? '',
+  notes: booking?.notes ?? '',
+  advance: booking?.advance != null ? String(booking.advance) : '',
 })
 
 const formatShortfallConfirmMessage = (shortfalls) => {
@@ -118,7 +133,7 @@ const formatShortfallConfirmMessage = (shortfalls) => {
   return `Not enough inventory for this date (${summary}). Confirm anyway?`
 }
 
-export const BookingPage = () => {
+export const BookingPageContent = () => {
   const {
     isModalOpen,
     prefillDate,
@@ -157,6 +172,7 @@ export const BookingPage = () => {
   const [availabilityByItem, setAvailabilityByItem] = useState({})
   const [inventoryChecking, setInventoryChecking] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [editLoadError, setEditLoadError] = useState(null)
   const submittingRef = useRef(false)
 
   const resetCreateForm = () => {
@@ -190,6 +206,7 @@ export const BookingPage = () => {
       setConflictBooking(null)
       setDateClear(false)
       setFormError(null)
+      setEditLoadError(null)
       setInventoryQuantities({})
       setUnitPriceOverrides({})
       setBaselineUnitPrices({})
@@ -224,24 +241,26 @@ export const BookingPage = () => {
 
     let active = true
     const loadEditData = async () => {
+      setEditLoadError(null)
       try {
         const data = await api.getBooking(selectedBooking.id)
         if (!active) return
-        const lines = data.inventory ?? []
+        const lines = data?.inventory ?? []
         setForm(bookingToForm(data))
         setInventoryQuantities(quantitiesFromInventoryLines(lines))
         const savedPrices = unitPricesFromInventoryLines(lines)
         setUnitPriceOverrides(savedPrices)
         setBaselineUnitPrices(savedPrices)
         setOriginalInventoryLines(lines)
-        setDiscount(data.discount ?? 0)
-        setBaselineDiscount(data.discount ?? 0)
-      } catch {
+        setDiscount(data?.discount ?? 0)
+        setBaselineDiscount(data?.discount ?? 0)
+      } catch (err) {
         if (!active) return
         setInventoryQuantities({})
         setUnitPriceOverrides({})
         setBaselineUnitPrices({})
         setOriginalInventoryLines([])
+        setEditLoadError(err?.message ?? "Couldn't load this booking. Please close and try again.")
       }
     }
 
@@ -256,7 +275,7 @@ export const BookingPage = () => {
 
     let active = true
     const loadInventory = async () => {
-      if (inventoryItems.length > 0) return
+      if ((inventoryItems ?? []).length > 0) return
       try {
         const data = await api.getInventory()
         if (active) setItems(data)
@@ -272,7 +291,7 @@ export const BookingPage = () => {
   }, [isModalOpen, inventoryItems.length, setItems])
 
   const billLines = useMemo(() => {
-    return inventoryItems
+    return (inventoryItems ?? [])
       .map((item) => {
         const quantity = inventoryQuantities[item.id] || 0
         if (quantity <= 0) return null
@@ -526,7 +545,7 @@ export const BookingPage = () => {
   }, [form.event_date, isModalOpen, isEditMode, selectedBooking?.id])
 
   useEffect(() => {
-    if (!isModalOpen || inventoryItems.length === 0) return
+    if (!isModalOpen || (inventoryItems ?? []).length === 0) return
 
     let active = true
     const timer = setTimeout(async () => {
@@ -540,7 +559,7 @@ export const BookingPage = () => {
 
       setInventoryChecking(true)
       try {
-        const items = inventoryItems.map((item) => ({
+        const items = (inventoryItems ?? []).map((item) => ({
           item_id: item.id,
           quantity: inventoryQuantities[item.id] || 0,
         }))
@@ -596,7 +615,7 @@ export const BookingPage = () => {
 
     try {
       const result = isEditMode
-        ? await api.updateBooking(selectedBooking.id, validation.data)
+        ? await api.updateBooking(selectedBooking?.id, validation.data)
         : await api.createBooking(validation.data)
 
       const { conflict, ...booking } = result
@@ -853,7 +872,23 @@ export const BookingPage = () => {
   )
 
   if (!isModalOpen) return null
-  if (isEditMode && !selectedBooking) return null
+
+  if (isEditMode && !selectedBooking) {
+    return (
+      <div className="fixed inset-0 z-[70] bg-slate-50 flex flex-col items-center justify-center p-6">
+        <p className="text-red-700 bg-red-100 border border-red-400 rounded-lg px-4 py-3 text-sm max-w-md text-center">
+          Couldn&apos;t open this booking. Please close and try again.
+        </p>
+        <button
+          type="button"
+          onClick={closeModal}
+          className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
+        >
+          Close
+        </button>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -885,6 +920,12 @@ export const BookingPage = () => {
               onSubmit={handleSubmit}
               className="md:flex-1 md:overflow-y-auto md:min-h-0 space-y-4"
             >
+              {editLoadError && (
+                <p role="alert" className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+                  {editLoadError}
+                </p>
+              )}
+
               {formError && (
                 <p role="alert" className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
                   {formError}
@@ -971,11 +1012,11 @@ export const BookingPage = () => {
                 {touched.event_date && fieldErrors.event_date && (
                   <p className="mt-1 text-sm text-red-700">{fieldErrors.event_date}</p>
                 )}
-                {hasConflict && (
+                {hasConflict && conflictBooking && (
                   <div className="mt-2">
                     <ConflictBanner
-                      clientName={conflictBooking.client_name}
-                      eventType={formatEventType(conflictBooking.event_type)}
+                      clientName={conflictBooking?.client_name ?? 'Another client'}
+                      eventType={formatEventType(conflictBooking?.event_type)}
                     />
                   </div>
                 )}
@@ -1043,11 +1084,11 @@ export const BookingPage = () => {
                   )}
                 </div>
 
-                {inventoryItems.length === 0 ? (
+                {(inventoryItems ?? []).length === 0 ? (
                   <p className="text-sm text-slate-500">No data yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {inventoryItems.map((item) => {
+                    {(inventoryItems ?? []).map((item) => {
                       const usable = item.total_quantity - item.damaged_quantity
                       const available = availabilityByItem[item.id] ?? usable
                       const qty = inventoryQuantities[item.id] ?? 0
@@ -1098,5 +1139,53 @@ export const BookingPage = () => {
         onCancel={() => setShowConfirmDialog(false)}
       />
     </>
+  )
+}
+
+class BookingPageErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidUpdate(prevProps) {
+    if (!this.props.isOpen && prevProps.isOpen) {
+      this.setState({ hasError: false })
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-[70] bg-slate-50 flex flex-col items-center justify-center p-6">
+          <p className="text-red-700 bg-red-100 border border-red-400 rounded-lg px-4 py-3 text-sm max-w-md text-center">
+            Something went wrong opening this booking. Please close and try again.
+          </p>
+          <button
+            type="button"
+            onClick={this.props.onClose}
+            className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
+          >
+            Close
+          </button>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+export const BookingPage = () => {
+  const { isModalOpen, closeModal } = useBookingStore()
+
+  return (
+    <BookingPageErrorBoundary isOpen={isModalOpen} onClose={closeModal}>
+      <BookingPageContent />
+    </BookingPageErrorBoundary>
   )
 }

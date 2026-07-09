@@ -93,7 +93,12 @@ router.get('/me', async (req, res, next) => {
       { rows: lastActiveRows },
     ] = await Promise.all([
       weekScoped('login'),
-      weekScoped('booking_created'),
+      pool.query(
+        `SELECT COUNT(*)::int AS count FROM bookings
+         WHERE created_at::timestamptz >= $1::timestamptz
+         AND created_at::timestamptz < $2::timestamptz`,
+        [weekStart, weekEndExclusive],
+      ),
       weekScoped('booking_edited'),
       weekScoped('booking_viewed'),
       weekScoped('change_logged'),

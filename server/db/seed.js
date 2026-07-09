@@ -6,6 +6,7 @@ import {
   removeManualTestBookings,
   removeVerificationBookings,
   seedDemoEventLog,
+  seedKapilTomarBooking,
   seedSureshDemoBooking,
 } from './demoSeed.js'
 
@@ -162,6 +163,7 @@ export const seed = async () => {
   await removeVerificationBookings(pool)
   await seedSureshDemoBooking(pool)
   await purgeNonDemoEventLog(pool)
+  await seedKapilTomarBooking(pool)
   await seedDemoEventLog(pool)
   await logDevBookings(pool)
 }

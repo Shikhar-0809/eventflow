@@ -211,6 +211,60 @@ export const seedDemoEventLog = async (pool) => {
   return { inserted: events.length, skipped: false }
 }
 
+export const seedKapilTomarBooking = async (pool) => {
+  const KAPIL_NAME = 'Kapil Tomar'
+  const KAPIL_PHONE = '9837541200'
+  const BOOKING_CREATED_AT = '2026-06-30 11:30:00'
+  const EVENT_CREATED_AT = '2026-06-30 11:32:00'
+
+  const { rows: existingRows } = await pool.query(
+    'SELECT id FROM bookings WHERE client_name = $1 AND phone = $2',
+    [KAPIL_NAME, KAPIL_PHONE],
+  )
+
+  let bookingId = existingRows[0]?.id
+
+  if (!bookingId) {
+    const { rows } = await pool.query(
+      `INSERT INTO bookings (
+         client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes, created_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id`,
+      [
+        KAPIL_NAME,
+        KAPIL_PHONE,
+        'wedding',
+        '2026-07-18',
+        45,
+        'Brahmpuri Garden, Meerut',
+        12000,
+        65000,
+        'confirmed',
+        'Family wedding, evening setup',
+        BOOKING_CREATED_AT,
+      ],
+    )
+    bookingId = rows[0].id
+  }
+
+  const metadata = JSON.stringify({ booking_id: bookingId })
+  const { rows: logRows } = await pool.query(
+    `SELECT id FROM event_log
+     WHERE event_type = 'booking_created' AND metadata = $1 AND created_at = $2`,
+    [metadata, EVENT_CREATED_AT],
+  )
+
+  if (!logRows[0]) {
+    await pool.query(
+      `INSERT INTO event_log (event_type, metadata, created_at)
+       VALUES ('booking_created', $1, $2)`,
+      [metadata, EVENT_CREATED_AT],
+    )
+  }
+
+  return { inserted: !existingRows[0], id: bookingId }
+}
+
 export const logDevBookings = async (pool) => {
   const { rows } = await pool.query(
     'SELECT id, client_name, event_date, status FROM bookings ORDER BY event_date, id',
