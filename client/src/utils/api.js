@@ -20,14 +20,18 @@ const request = async (path, options = {}) => {
     throw new ApiError('Something went wrong. Please try again.', 0)
   }
 
-  const body = await res.json().catch(() => ({}))
+  const body = await res.json().catch(() => null)
 
   if (!res.ok) {
     throw new ApiError(
-      body.error || 'Something went wrong. Please try again.',
+      body?.error || 'Something went wrong. Please try again.',
       res.status,
-      body.conflict ? body.booking : null,
+      body?.conflict ? body.booking : null,
     )
+  }
+
+  if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new ApiError('Something went wrong. Please try again.', res.status)
   }
 
   return body

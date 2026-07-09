@@ -35,7 +35,11 @@ const formatStatus = (status) => STATUS_LABELS[status] ?? 'Confirmed'
 const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
 const formatDisplayDate = (dateStr) => {
-  const d = new Date(`${dateStr}T00:00:00`)
+  if (dateStr == null || dateStr === '') return '—'
+  const normalized = String(dateStr).slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return '—'
+  const d = new Date(`${normalized}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
@@ -64,6 +68,16 @@ const InventoryUsedSkeleton = () => (
   </div>
 )
 
+const bookingIdsMatch = (left, right) => Number(left) === Number(right)
+
+const asArray = (value) => (Array.isArray(value) ? value : [])
+
+const normalizeBookingDetail = (data) => ({
+  ...data,
+  inventory: asArray(data?.inventory),
+  change_log: asArray(data?.change_log),
+})
+
 export const BookingDetail = () => {
   const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal } = useBookingStore()
   const [booking, setBooking] = useState(null)
@@ -89,16 +103,20 @@ export const BookingDetail = () => {
 
     const loadDetail = async () => {
       try {
-        const data = await api.getBooking(selectedBooking.id)
+        const data = normalizeBookingDetail(await api.getBooking(selectedBooking.id))
+        if (!data?.id) {
+          throw new Error('Booking data was incomplete.')
+        }
         setBooking(data)
-        setChangeLog(data.change_log ?? [])
+        setChangeLog(data.change_log)
       } catch (err) {
+        console.error('BookingDetail load failed:', err)
         if (err.status === 401) {
           useAuthStore.setState({ isAuthenticated: false, isLoading: false })
           closeDetail()
           return
         }
-        setFetchError(err.message)
+        setFetchError(err.message ?? 'Something went wrong. Please try again.')
         setBooking(selectedBooking)
         setChangeLog([])
       } finally {
@@ -112,8 +130,19 @@ export const BookingDetail = () => {
   useEffect(() => {
     if (!isDetailOpen || !selectedBooking?.id) return
     setBooking((prev) => {
-      if (prev?.id !== selectedBooking.id) return null
-      return { ...prev, ...selectedBooking, change_log: prev.change_log ?? [] }
+      if (!prev || !bookingIdsMatch(prev.id, selectedBooking.id)) {
+        return prev
+      }
+      return {
+        ...prev,
+        ...selectedBooking,
+        inventory: Array.isArray(selectedBooking.inventory)
+          ? selectedBooking.inventory
+          : (prev.inventory ?? []),
+        change_log: Array.isArray(selectedBooking.change_log)
+          ? selectedBooking.change_log
+          : (prev.change_log ?? []),
+      }
     })
   }, [selectedBooking, isDetailOpen])
 
@@ -176,7 +205,7 @@ export const BookingDetail = () => {
 
     try {
       const updatedLog = await api.logChange(booking.id, note)
-      setChangeLog(updatedLog)
+      setChangeLog(asArray(updatedLog))
     } catch (err) {
       setChangeLog(previousLog)
       setChangeNote(note)
@@ -192,8 +221,8 @@ export const BookingDetail = () => {
   const status = display.status ?? 'confirmed'
   const statusClass = STATUS_STYLES[status] ?? STATUS_STYLES.confirmed
   const charsRemaining = MAX_NOTE_LENGTH - changeNote.length
-  const inventoryReady = !isLoading && booking?.id === selectedBooking.id
-  const inventoryLines = booking?.inventory ?? []
+  const inventoryReady = !isLoading && booking != null && bookingIdsMatch(booking.id, selectedBooking.id)
+  const inventoryLines = asArray(booking?.inventory)
 
   return (
     <div className="absolute inset-0 z-50 flex justify-end pointer-events-none">
@@ -250,10 +279,10 @@ export const BookingDetail = () => {
 
           {(() => {
             const pricedLines = inventoryReady
-              ? inventoryLines.filter((line) => line.quantity > 0)
+              ? inventoryLines.filter((line) => Number(line?.quantity ?? 0) > 0)
               : []
             const hasPricingData = pricedLines.some(
-              (line) => line.unit_price > 0 || line.line_total > 0,
+              (line) => Number(line?.unit_price ?? 0) > 0 || Number(line?.line_total ?? 0) > 0,
             ) || (display.subtotal ?? 0) > 0 || (display.grand_total ?? 0) > 0
 
             if (!inventoryReady) {

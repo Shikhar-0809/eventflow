@@ -225,7 +225,7 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
       [booking.id],
     )
 
-    const { rows: inventory } = await pool.query(
+    const { rows: inventoryRows } = await pool.query(
       `SELECT bi.item_id, bi.quantity, bi.unit_price, bi.line_total, ii.name
        FROM booking_inventory bi
        INNER JOIN inventory_items ii ON ii.id = bi.item_id
@@ -234,7 +234,19 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
       [booking.id],
     )
 
-    res.status(200).json({ ...booking, change_log: changeLog, inventory })
+    const inventory = (inventoryRows ?? []).map((row) => ({
+      item_id: Number(row.item_id),
+      quantity: Number(row.quantity ?? 0),
+      unit_price: Number(row.unit_price ?? 0),
+      line_total: Number(row.line_total ?? 0),
+      name: row.name ?? '',
+    }))
+
+    res.status(200).json({
+      ...booking,
+      change_log: changeLog ?? [],
+      inventory,
+    })
   } catch (err) {
     next(err)
   }
