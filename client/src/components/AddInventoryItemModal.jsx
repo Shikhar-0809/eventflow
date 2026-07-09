@@ -3,9 +3,22 @@ import { X } from 'lucide-react'
 import { api } from '../utils/api'
 import { inventoryItemSchema } from '../schemas/inventory.schema.js'
 
+const validateUnitPrice = (rawValue) => {
+  if (rawValue === '' || rawValue == null) return { value: 0, error: null }
+  const price = Number(rawValue)
+  if (!Number.isInteger(price) || price < 0) {
+    return { value: 0, error: 'Enter a valid whole number.' }
+  }
+  if (price > 10000000) {
+    return { value: 0, error: 'Price is too large.' }
+  }
+  return { value: price, error: null }
+}
+
 export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
   const [name, setName] = useState('')
   const [totalQuantity, setTotalQuantity] = useState('')
+  const [unitPrice, setUnitPrice] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [submitError, setSubmitError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -13,6 +26,7 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
   const resetForm = () => {
     setName('')
     setTotalQuantity('')
+    setUnitPrice('')
     setFieldErrors({})
     setSubmitError(null)
   }
@@ -27,9 +41,16 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
     e.preventDefault()
     setSubmitError(null)
 
+    const priceCheck = validateUnitPrice(unitPrice)
+    if (priceCheck.error) {
+      setFieldErrors({ unit_price: priceCheck.error })
+      return
+    }
+
     const payload = {
       name,
       total_quantity: totalQuantity === '' ? NaN : Number(totalQuantity),
+      unit_price: priceCheck.value,
     }
     const result = inventoryItemSchema.safeParse(payload)
     if (!result.success) {
@@ -45,7 +66,11 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
     setFieldErrors({})
     setIsSubmitting(true)
     try {
-      const item = await api.addInventoryItem(result.data)
+      const item = await api.addInventoryItem({
+        name: result.data.name,
+        total_quantity: result.data.total_quantity,
+        unit_price: priceCheck.value,
+      })
       onAdded(item)
       resetForm()
       onClose()
@@ -119,6 +144,26 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
             />
             {fieldErrors.total_quantity && (
               <p className="mt-1 text-xs text-red-600">{fieldErrors.total_quantity}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="item-price" className="block text-sm font-medium text-slate-700 mb-1">
+              Price per unit (₹)
+            </label>
+            <input
+              id="item-price"
+              type="number"
+              min="0"
+              step="1"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(e.target.value)}
+              placeholder="0"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+              disabled={isSubmitting}
+            />
+            {fieldErrors.unit_price && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors.unit_price}</p>
             )}
           </div>
 

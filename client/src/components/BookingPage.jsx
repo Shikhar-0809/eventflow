@@ -424,7 +424,15 @@ export const BookingPage = () => {
   }
 
   const handleQuantityChange = (itemId, rawValue) => {
-    const quantity = Math.max(0, Number(rawValue) || 0)
+    if (rawValue === '') {
+      setInventoryQuantities((prev) => ({ ...prev, [itemId]: 0 }))
+      return
+    }
+
+    const parsed = parseInt(rawValue, 10)
+    if (Number.isNaN(parsed)) return
+
+    const quantity = Math.max(0, parsed)
     setInventoryQuantities((prev) => ({ ...prev, [itemId]: quantity }))
     if (quantity > 0) {
       setUnitPriceOverrides((prev) => {
@@ -433,6 +441,16 @@ export const BookingPage = () => {
         return { ...prev, [itemId]: item?.unit_price ?? 0 }
       })
     }
+  }
+
+  const handleQuantityBlur = (itemId) => {
+    setInventoryQuantities((prev) => {
+      const qty = prev[itemId]
+      if (qty === undefined || qty === '' || Number.isNaN(qty)) {
+        return { ...prev, [itemId]: 0 }
+      }
+      return prev
+    })
   }
 
   const startPriceEdit = (itemId, currentPrice) => {
@@ -1032,6 +1050,7 @@ export const BookingPage = () => {
                     {inventoryItems.map((item) => {
                       const usable = item.total_quantity - item.damaged_quantity
                       const available = availabilityByItem[item.id] ?? usable
+                      const qty = inventoryQuantities[item.id] ?? 0
                       return (
                         <div key={item.id} className="flex items-center gap-3">
                           <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">{item.name}</span>
@@ -1039,8 +1058,10 @@ export const BookingPage = () => {
                             type="number"
                             min="0"
                             step="1"
-                            value={inventoryQuantities[item.id] || 0}
+                            value={qty === 0 ? '' : qty}
+                            placeholder="0"
                             onChange={(e) => handleQuantityChange(item.id, e.target.value)}
+                            onBlur={() => handleQuantityBlur(item.id)}
                             className="w-20 px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                           />
                           <span className="text-xs text-slate-400 shrink-0 w-20 text-right">

@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const inventoryItemSchema = z.object({
   name: z.string().trim().min(2, 'Item name is too short').max(100),
   total_quantity: z.number().int().nonnegative().max(100000),
+  unit_price: z.number().int().nonnegative().max(10000000).optional().default(0),
 })
 
 export const inventoryQuantityUpdateSchema = z.object({

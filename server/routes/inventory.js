@@ -126,11 +126,11 @@ router.post('/check-availability', validate(availabilityCheckSchema), async (req
 
 router.post('/', validate(inventoryItemSchema), async (req, res, next) => {
   try {
-    const { name, total_quantity } = req.body
+    const { name, total_quantity, unit_price: unitPrice = 0 } = req.body
 
     const { rows } = await pool.query(
-      'INSERT INTO inventory_items (name, total_quantity, damaged_quantity) VALUES ($1, $2, 0) RETURNING id',
-      [name, total_quantity],
+      'INSERT INTO inventory_items (name, total_quantity, damaged_quantity, unit_price) VALUES ($1, $2, 0, $3) RETURNING id',
+      [name, total_quantity, unitPrice],
     )
 
     const item = await getItemRow(rows[0].id)
@@ -251,20 +251,14 @@ router.delete('/:id', async (req, res, next) => {
       return res.status(404).json({ error: 'Item not found.' })
     }
 
-    const { rows: activeRefs } = await pool.query(
-      `SELECT 1
+    const { rows: activeRefRows } = await pool.query(
+      `SELECT COUNT(DISTINCT b.id)::int AS n
        FROM booking_inventory bi
        INNER JOIN bookings b ON b.id = bi.booking_id
-       WHERE bi.item_id = $1 AND b.status != 'cancelled'
-       LIMIT 1`,
+       WHERE bi.item_id = $1 AND b.status != 'cancelled'`,
       [id],
     )
-
-    if (activeRefs.length > 0) {
-      return res.status(409).json({
-        error: 'This item is attached to one or more active bookings and cannot be removed.',
-      })
-    }
+    const activeBookingCount = activeRefRows[0].n
 
     const client = await pool.connect()
     try {
@@ -280,7 +274,12 @@ router.delete('/:id', async (req, res, next) => {
       client.release()
     }
 
-    res.status(200).json({ success: true })
+    const response = { success: true }
+    if (activeBookingCount > 0) {
+      response.warning = `This item was attached to ${activeBookingCount} active booking(s). It has been removed from those bookings.`
+    }
+
+    res.status(200).json(response)
   } catch (err) {
     next(err)
   }

@@ -131,3 +131,4 @@ Move fixed bugs here from the tracker above once confirmed working. The full arc
 | — | Tab title read "EventFlow — Log In" on connection error screen instead of "EventFlow — Bala Ji Tent House" | App.jsx title effect treats `connectionError` the same as `isAuthenticated` so the merchant sees the product name, not the login title |
 | — | See HANDOFF.md for the #001–#019 archive carried over from the previous session | — |
 | — | Delete inventory item: transaction order, active-booking filter, error-clear on dialog reopen, parameterized queries — all verified | Verified post-implementation |
+| 026 | Booking form inventory quantity inputs showed leading zeros (e.g. "015") because fields defaulted to controlled number 0 | BookingPage quantity inputs use empty string display with placeholder="0", parseInt on change, and blur reset to 0 |

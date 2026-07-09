@@ -98,27 +98,32 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
 
   const handleDeleteConfirm = async () => {
     setIsDeleting(true)
+    setDeleteError(null)
     try {
       await api.deleteInventoryItem(item.id)
       removeItem(item.id)
       setShowDeleteDialog(false)
-    } catch (err) {
+    } catch {
       setShowDeleteDialog(false)
-      if (err.status === 409) {
-        setDeleteError(err.message)
-      } else {
-        setDeleteError("Couldn't remove this item. Please try again.")
-      }
+      setDeleteError("Couldn't remove this item. Please try again.")
     } finally {
       setIsDeleting(false)
     }
   }
 
+  const inUseToday = item.in_use_today ?? 0
+  const deleteInUseWarning = inUseToday > 0
+
   return (
     <>
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-semibold text-slate-800 truncate flex-1">{item.name}</h3>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-slate-800 truncate">{item.name}</h3>
+            {unitPrice > 0 && (
+              <p className="text-xs text-slate-400 mt-0.5">{formatCurrency(unitPrice)} per unit</p>
+            )}
+          </div>
           <button
             type="button"
             onClick={openDeleteDialog}
@@ -256,9 +261,13 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
 
       <ConfirmDialog
         isOpen={showDeleteDialog}
-        title="Remove Item"
-        message={`Are you sure you want to remove ${item.name} from inventory? This cannot be undone.`}
-        confirmLabel="Remove"
+        title={deleteInUseWarning ? 'Remove Item — Currently In Use' : 'Remove Item'}
+        message={
+          deleteInUseWarning
+            ? `⚠️ ${item.name} is currently assigned to ${inUseToday} booking(s) today. Removing it will detach it from those bookings. This cannot be undone.`
+            : `Are you sure you want to remove ${item.name}? This cannot be undone.`
+        }
+        confirmLabel={deleteInUseWarning ? 'Remove Anyway' : 'Remove'}
         confirmVariant="danger"
         confirmingLabel="Removing..."
         isConfirming={isDeleting}
