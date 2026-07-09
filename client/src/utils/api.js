@@ -54,7 +54,7 @@ export const api = {
     }),
   getAnalyticsSummary: () => request('/analytics/summary'),
   getMonthlyAnalytics: () => request('/analytics/monthly'),
-  getMyUsage: () => request('/usage/me'),
+  getMyUsage: (weekOffset = 0) => request(`/usage/me?weekOffset=${weekOffset}`),
   getInventory: () => request('/inventory'),
   addInventoryItem: (data) => request('/inventory', { method: 'POST', body: JSON.stringify(data) }),
   updateInventoryQuantity: (id, data) =>

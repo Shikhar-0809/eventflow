@@ -14,22 +14,37 @@ const clientActionSchema = z.object({
 
 const pad = (n) => String(n).padStart(2, '0')
 
-const monthStart = (year, monthIndex) => `${year}-${pad(monthIndex + 1)}-01`
-
-const nextMonthStart = (year, monthIndex) => {
-  if (monthIndex === 11) return `${year + 1}-01-01`
-  return `${year}-${pad(monthIndex + 2)}-01`
+const formatDate = (date) => {
+  const y = date.getFullYear()
+  const m = pad(date.getMonth() + 1)
+  const d = pad(date.getDate())
+  return `${y}-${m}-${d}`
 }
 
-const weekStartSql = () => {
-  const now = new Date()
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - start.getDay())
-  const y = start.getFullYear()
-  const m = pad(start.getMonth() + 1)
-  const d = pad(start.getDate())
-  return `${y}-${m}-${d} 00:00:00`
+const formatDayMonth = (date) =>
+  date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+/** ISO week: Monday 00:00:00 through Sunday end; weekOffset 0 = current week. */
+const getWeekWindow = (weekOffset = 0) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const dayOfWeek = today.getDay()
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+
+  const monday = new Date(today)
+  monday.setDate(today.getDate() - daysFromMonday - weekOffset * 7)
+
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+
+  const nextMonday = new Date(monday)
+  nextMonday.setDate(monday.getDate() + 7)
+
+  return {
+    weekStart: `${formatDate(monday)} 00:00:00`,
+    weekEndExclusive: `${formatDate(nextMonday)} 00:00:00`,
+    weekLabel: `${formatDayMonth(monday)} – ${formatDayMonth(sunday)} ${sunday.getFullYear()}`,
+  }
 }
 
 router.use(requireAuth)
@@ -56,12 +71,16 @@ router.post('/log-client-action', validate(clientActionSchema), async (req, res,
 
 router.get('/me', async (req, res, next) => {
   try {
-    const now = new Date()
-    const year = now.getFullYear()
-    const monthIndex = now.getMonth()
-    const currentStart = `${monthStart(year, monthIndex)} 00:00:00`
-    const currentEnd = `${nextMonthStart(year, monthIndex)} 00:00:00`
-    const weekStart = weekStartSql()
+    const weekOffset = Math.max(0, Number.parseInt(req.query.weekOffset, 10) || 0)
+    const { weekStart, weekEndExclusive, weekLabel } = getWeekWindow(weekOffset)
+
+    const weekScoped = (eventType) => pool.query(
+      `SELECT COUNT(*)::int AS count FROM event_log
+       WHERE event_type = $1
+       AND created_at::timestamptz >= $2::timestamptz
+       AND created_at::timestamptz < $3::timestamptz`,
+      [eventType, weekStart, weekEndExclusive],
+    )
 
     const [
       { rows: loginRows },
@@ -72,59 +91,43 @@ router.get('/me', async (req, res, next) => {
       { rows: whatsappRows },
       { rows: daysActiveRows },
       { rows: lastActiveRows },
-      { rows: firstActivityRows },
     ] = await Promise.all([
-      pool.query(
-        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'login' AND created_at >= $1",
-        [weekStart],
-      ),
-      pool.query(
-        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
-        [currentStart, currentEnd],
-      ),
-      pool.query(
-        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'booking_edited' AND created_at >= $1 AND created_at < $2",
-        [currentStart, currentEnd],
-      ),
-      pool.query(
-        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'booking_viewed' AND created_at >= $1 AND created_at < $2",
-        [currentStart, currentEnd],
-      ),
-      pool.query(
-        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'change_logged' AND created_at >= $1 AND created_at < $2",
-        [currentStart, currentEnd],
-      ),
+      weekScoped('login'),
+      weekScoped('booking_created'),
+      weekScoped('booking_edited'),
+      weekScoped('booking_viewed'),
+      weekScoped('change_logged'),
       pool.query(
         `SELECT COUNT(*)::int AS count FROM event_log
          WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
-         AND created_at >= $1 AND created_at < $2`,
-        [currentStart, currentEnd],
+         AND created_at::timestamptz >= $1::timestamptz
+         AND created_at::timestamptz < $2::timestamptz`,
+        [weekStart, weekEndExclusive],
       ),
       pool.query(
         `SELECT COUNT(DISTINCT (created_at::timestamptz)::date)::int AS count
          FROM event_log
-         WHERE created_at >= $1 AND created_at < $2`,
-        [currentStart, currentEnd],
+         WHERE created_at::timestamptz >= $1::timestamptz
+         AND created_at::timestamptz < $2::timestamptz`,
+        [weekStart, weekEndExclusive],
       ),
       pool.query('SELECT MAX(created_at::timestamptz) AS last_active FROM event_log'),
-      pool.query('SELECT MIN(created_at::timestamptz) AS first_activity FROM event_log'),
     ])
 
     const lastActiveRaw = lastActiveRows[0].last_active
     const lastActiveAt = lastActiveRaw != null ? new Date(lastActiveRaw).toISOString() : null
-    const firstActivityRaw = firstActivityRows[0].first_activity
-    const firstActivityAt = firstActivityRaw != null ? new Date(firstActivityRaw).toISOString() : null
 
     res.status(200).json({
       loginsThisWeek: loginRows[0].count,
-      bookingsCreatedThisMonth: createdRows[0].count,
-      bookingsEditedThisMonth: editedRows[0].count,
-      bookingsViewedThisMonth: viewedRows[0].count,
-      changeNotesLoggedThisMonth: changeRows[0].count,
-      whatsappMessagesSentThisMonth: whatsappRows[0].count,
-      daysActiveThisMonth: daysActiveRows[0].count,
+      bookingsCreatedThisWeek: createdRows[0].count,
+      bookingsEditedThisWeek: editedRows[0].count,
+      bookingsViewedThisWeek: viewedRows[0].count,
+      changeNotesLoggedThisWeek: changeRows[0].count,
+      whatsappMessagesSentThisWeek: whatsappRows[0].count,
+      daysActiveThisWeek: daysActiveRows[0].count,
       lastActiveAt,
-      firstActivityAt,
+      weekLabel,
+      weekOffset,
     })
   } catch (err) {
     next(err)
