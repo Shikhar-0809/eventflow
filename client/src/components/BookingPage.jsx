@@ -840,7 +840,7 @@ export const BookingPage = () => {
   return (
     <>
       <div
-        className={`fixed inset-0 z-50 bg-slate-50 flex flex-col transition-all duration-200 ease-out ${
+        className={`fixed inset-0 z-[70] bg-slate-50 flex flex-col transition-all duration-200 ease-out ${
           visible
             ? 'opacity-100 translate-y-0 md:scale-100'
             : 'opacity-0 translate-y-full md:translate-y-0 md:scale-[0.98]'
