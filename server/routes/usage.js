@@ -63,40 +63,68 @@ router.get('/me', async (req, res, next) => {
     const currentEnd = `${nextMonthStart(year, monthIndex)} 00:00:00`
     const weekStart = weekStartSql()
 
-    const { rows: loginRows } = await pool.query(
-      "SELECT COUNT(*) AS count FROM event_log WHERE event_type = 'login' AND created_at >= $1",
-      [weekStart],
-    )
-    const loginsThisWeek = Number(loginRows[0].count)
+    const [
+      { rows: loginRows },
+      { rows: createdRows },
+      { rows: editedRows },
+      { rows: viewedRows },
+      { rows: changeRows },
+      { rows: whatsappRows },
+      { rows: daysActiveRows },
+      { rows: lastActiveRows },
+      { rows: firstActivityRows },
+    ] = await Promise.all([
+      pool.query(
+        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'login' AND created_at >= $1",
+        [weekStart],
+      ),
+      pool.query(
+        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
+        [currentStart, currentEnd],
+      ),
+      pool.query(
+        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'booking_edited' AND created_at >= $1 AND created_at < $2",
+        [currentStart, currentEnd],
+      ),
+      pool.query(
+        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'booking_viewed' AND created_at >= $1 AND created_at < $2",
+        [currentStart, currentEnd],
+      ),
+      pool.query(
+        "SELECT COUNT(*)::int AS count FROM event_log WHERE event_type = 'change_logged' AND created_at >= $1 AND created_at < $2",
+        [currentStart, currentEnd],
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS count FROM event_log
+         WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
+         AND created_at >= $1 AND created_at < $2`,
+        [currentStart, currentEnd],
+      ),
+      pool.query(
+        `SELECT COUNT(DISTINCT (created_at::timestamptz)::date)::int AS count
+         FROM event_log
+         WHERE created_at >= $1 AND created_at < $2`,
+        [currentStart, currentEnd],
+      ),
+      pool.query('SELECT MAX(created_at::timestamptz) AS last_active FROM event_log'),
+      pool.query('SELECT MIN(created_at::timestamptz) AS first_activity FROM event_log'),
+    ])
 
-    const { rows: createdRows } = await pool.query(
-      "SELECT COUNT(*) AS count FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
-      [currentStart, currentEnd],
-    )
-    const bookingsCreatedThisMonth = Number(createdRows[0].count)
-
-    const { rows: whatsappRows } = await pool.query(
-      `SELECT COUNT(*) AS count FROM event_log
-       WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
-       AND created_at >= $1 AND created_at < $2`,
-      [currentStart, currentEnd],
-    )
-    const whatsappMessagesSentThisMonth = Number(whatsappRows[0].count)
-
-    const { rows: lastActiveRows } = await pool.query(
-      'SELECT MAX(created_at) AS last_active FROM event_log',
-    )
-
-    const { rows: firstActivityRows } = await pool.query(
-      'SELECT MIN(created_at) AS first_activity FROM event_log',
-    )
+    const lastActiveRaw = lastActiveRows[0].last_active
+    const lastActiveAt = lastActiveRaw != null ? new Date(lastActiveRaw).toISOString() : null
+    const firstActivityRaw = firstActivityRows[0].first_activity
+    const firstActivityAt = firstActivityRaw != null ? new Date(firstActivityRaw).toISOString() : null
 
     res.status(200).json({
-      loginsThisWeek,
-      bookingsCreatedThisMonth,
-      whatsappMessagesSentThisMonth,
-      lastActiveAt: lastActiveRows[0].last_active ?? null,
-      firstActivityAt: firstActivityRows[0].first_activity ?? null,
+      loginsThisWeek: loginRows[0].count,
+      bookingsCreatedThisMonth: createdRows[0].count,
+      bookingsEditedThisMonth: editedRows[0].count,
+      bookingsViewedThisMonth: viewedRows[0].count,
+      changeNotesLoggedThisMonth: changeRows[0].count,
+      whatsappMessagesSentThisMonth: whatsappRows[0].count,
+      daysActiveThisMonth: daysActiveRows[0].count,
+      lastActiveAt,
+      firstActivityAt,
     })
   } catch (err) {
     next(err)
