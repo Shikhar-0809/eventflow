@@ -76,6 +76,7 @@ const createBooking = async (fields, inventoryLines) => {
     subtotal,
     discount,
     grand_total,
+    notes,
   } = fields
   const client = await pool.connect()
   try {
@@ -84,8 +85,8 @@ const createBooking = async (fields, inventoryLines) => {
     const { rows: insertRows } = await client.query(
       `INSERT INTO bookings (
          client_name, phone, event_type, event_date, guest_count, venue, advance, total,
-         subtotal, discount, grand_total
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+         subtotal, discount, grand_total, notes
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
       [
         client_name,
         phone,
@@ -98,6 +99,7 @@ const createBooking = async (fields, inventoryLines) => {
         subtotal ?? 0,
         discount ?? 0,
         grand_total ?? 0,
+        notes?.trim() || null,
       ],
     )
     const bookingId = insertRows[0].id
@@ -130,6 +132,7 @@ const updateBooking = async (id, fields, inventoryLines) => {
     subtotal,
     discount,
     grand_total,
+    notes,
   } = fields
   const updatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
@@ -141,8 +144,8 @@ const updateBooking = async (id, fields, inventoryLines) => {
       `UPDATE bookings
        SET client_name = $1, phone = $2, event_type = $3, event_date = $4, guest_count = $5,
            venue = $6, advance = $7, total = $8, subtotal = $9,
-           discount = $10, grand_total = $11, updated_at = $12
-       WHERE id = $13`,
+           discount = $10, grand_total = $11, notes = $12, updated_at = $13
+       WHERE id = $14`,
       [
         client_name,
         phone,
@@ -155,6 +158,7 @@ const updateBooking = async (id, fields, inventoryLines) => {
         subtotal ?? 0,
         discount ?? 0,
         grand_total ?? 0,
+        notes?.trim() || null,
         updatedAt,
         id,
       ],

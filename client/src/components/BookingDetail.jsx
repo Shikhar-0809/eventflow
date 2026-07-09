@@ -246,9 +246,100 @@ export const BookingDetail = () => {
             <DetailField label="Date" value={formatDisplayDate(display.event_date)} />
             <DetailField label="Guests" value={display.guest_count} />
             <DetailField label="Venue" value={display.venue?.trim() || '—'} />
-            <DetailField label="Advance Paid" value={formatCurrency(display.advance)} />
-            <DetailField label="Total Amount" value={formatCurrency(display.total)} />
           </div>
+
+          {(() => {
+            const pricedLines = inventoryReady
+              ? inventoryLines.filter((line) => line.quantity > 0)
+              : []
+            const hasPricingData = pricedLines.some(
+              (line) => line.unit_price > 0 || line.line_total > 0,
+            ) || (display.subtotal ?? 0) > 0 || (display.grand_total ?? 0) > 0
+
+            if (!inventoryReady) {
+              return null
+            }
+
+            if (!hasPricingData && pricedLines.length === 0) {
+              return (
+                <div className="grid grid-cols-2 gap-4">
+                  <DetailField label="Advance Paid" value={formatCurrency(display.advance)} />
+                  <DetailField label="Total Amount" value={formatCurrency(display.total)} />
+                </div>
+              )
+            }
+
+            const subtotal = display.subtotal ?? pricedLines.reduce(
+              (sum, line) => sum + (line.line_total ?? line.quantity * (line.unit_price ?? 0)),
+              0,
+            )
+            const discount = display.discount ?? 0
+            const grandTotal = display.grand_total ?? display.total ?? 0
+            const balanceDue = Math.max(0, grandTotal - (display.advance ?? 0))
+
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-slate-800">Bill Summary</h3>
+
+                {pricedLines.length === 0 ? (
+                  <p className="text-sm text-slate-400">No inventory attached to this booking.</p>
+                ) : (
+                  <ul className="space-y-2 border-b border-slate-100 pb-3">
+                    {pricedLines.map((line) => (
+                      <li
+                        key={line.item_id}
+                        className="flex items-start justify-between text-sm gap-3"
+                      >
+                        <div>
+                          <p className="text-slate-700">{line.name}</p>
+                          <p className="text-xs text-slate-400">× {line.quantity}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          {(line.unit_price ?? 0) > 0 && (
+                            <p className="text-xs text-slate-500">
+                              {formatCurrency(line.unit_price)}/event
+                            </p>
+                          )}
+                          <p className="font-medium text-slate-800">
+                            {formatCurrency(line.line_total ?? line.quantity * (line.unit_price ?? 0))}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Subtotal</span>
+                  <span className="font-medium text-slate-800">{formatCurrency(subtotal)}</span>
+                </div>
+
+                {discount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Discount</span>
+                    <span className="font-medium text-slate-800">{formatCurrency(discount)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-2 border-t border-slate-200">
+                  <span className="text-sm font-bold text-slate-800">Total</span>
+                  <span className="text-base font-bold text-teal-700">{formatCurrency(grandTotal)}</span>
+                </div>
+
+                <div className="flex justify-between text-sm pt-2 border-t border-slate-100">
+                  <span className="text-slate-600">Advance Paid</span>
+                  <span className="font-medium text-slate-800">{formatCurrency(display.advance)}</span>
+                </div>
+
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Balance Due</span>
+                  <span className={`font-medium ${balanceDue > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {formatCurrency(balanceDue)}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
 
           <div aria-busy={!inventoryReady}>
             <h3 className="text-sm font-semibold text-slate-800 mb-3">Inventory Used</h3>

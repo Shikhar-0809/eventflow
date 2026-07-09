@@ -7,7 +7,7 @@ import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
 import { UsageView } from './components/UsageView'
 import { InventoryView } from './components/InventoryView'
-import { BookingModal } from './components/BookingModal'
+import { BookingPage } from './components/BookingPage'
 import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
 
@@ -63,40 +63,43 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {mobileNavOpen && (
-        <button
-          type="button"
-          className="md:hidden fixed inset-0 bg-black/40 z-[55]"
-          aria-label="Close navigation menu"
-          onClick={() => setMobileNavOpen(false)}
-        />
-      )}
-
-      <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
-
-      <div className="flex-1 flex flex-col min-h-0 ml-60">
-        <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20">
+    <>
+      <div className="h-screen flex overflow-hidden">
+        {mobileNavOpen && (
           <button
             type="button"
-            onClick={() => setMobileNavOpen(true)}
-            className="p-1.5 text-slate-300 hover:text-white transition-all duration-200"
-            aria-label="Open navigation menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <span className="text-white font-bold text-sm">Bala Ji Tent House</span>
-        </header>
+            className="md:hidden fixed inset-0 bg-black/40 z-[55]"
+            aria-label="Close navigation menu"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        )}
 
-        <main className="flex-1 min-h-0 overflow-auto bg-slate-50 min-w-0">
-          {activeView === 'analytics' && <AnalyticsView />}
-          {activeView === 'usage' && <UsageView />}
-          {activeView === 'inventory' && <InventoryView />}
-          {activeView === 'calendar' && <CalendarView />}
-          <BookingModal />
-          <BookingDetail />
-        </main>
+        <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
+
+        <div className="flex-1 flex flex-col min-h-0 ml-60">
+          <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="p-1.5 text-slate-300 hover:text-white transition-all duration-200"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <span className="text-white font-bold text-sm">Bala Ji Tent House</span>
+          </header>
+
+          <main className="flex-1 min-h-0 overflow-auto bg-slate-50 min-w-0">
+            {activeView === 'analytics' && <AnalyticsView />}
+            {activeView === 'usage' && <UsageView />}
+            {activeView === 'inventory' && <InventoryView />}
+            {activeView === 'calendar' && <CalendarView />}
+            <BookingDetail />
+          </main>
+        </div>
       </div>
-    </div>
+
+      <BookingPage />
+    </>
   )
 }

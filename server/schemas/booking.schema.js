@@ -14,6 +14,7 @@ export const bookingSchema = z.object({
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   guest_count: z.number().int().positive().max(10000),
   venue: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(500).optional(),
   advance: z.number().int().nonnegative().max(10000000),
   total: z.number().int().nonnegative().max(10000000),
   subtotal: z.number().int().nonnegative().optional(),
