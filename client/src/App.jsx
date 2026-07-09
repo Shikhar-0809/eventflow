@@ -75,7 +75,7 @@ export default function App() {
 
       <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <div className="ml-60 flex-1 overflow-auto">
         <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20">
           <button
             type="button"
