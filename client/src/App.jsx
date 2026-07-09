@@ -63,7 +63,7 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col md:flex-row overflow-hidden">
+    <div className="h-screen flex overflow-hidden">
       {mobileNavOpen && (
         <button
           type="button"
@@ -75,7 +75,7 @@ export default function App() {
 
       <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
-      <div className="ml-60 flex-1 overflow-auto">
+      <div className="flex-1 flex flex-col min-h-0 ml-60">
         <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20">
           <button
             type="button"
@@ -88,7 +88,7 @@ export default function App() {
           <span className="text-white font-bold text-sm">Bala Ji Tent House</span>
         </header>
 
-        <main className="flex-1 relative overflow-hidden bg-slate-50 min-w-0">
+        <main className="flex-1 min-h-0 overflow-auto bg-slate-50 min-w-0">
           {activeView === 'analytics' && <AnalyticsView />}
           {activeView === 'usage' && <UsageView />}
           {activeView === 'inventory' && <InventoryView />}
