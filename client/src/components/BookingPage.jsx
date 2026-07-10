@@ -120,12 +120,17 @@ const buildPayload = (form, billing) => ({
   subtotal: billing.subtotal,
   discount: billing.discount,
   grand_total: billing.grandTotal,
-  inventory: billing.inventoryLines,
+  inventory: asArray(billing.inventoryLines).map((line) => ({
+    item_id: line.item_id,
+    quantity: line.quantity,
+    unit_price: line.unit_price != null ? Math.round(line.unit_price) : undefined,
+    line_total: line.line_total != null ? Math.round(line.line_total) : undefined,
+  })),
 })
 
 const bookingToForm = (booking) => ({
   client_name: booking?.client_name ?? '',
-  phone: booking?.phone != null ? String(booking.phone) : '',
+  phone: booking?.phone != null ? String(booking.phone).replace(/\D/g, '') : '',
   event_type: booking?.event_type ?? 'wedding',
   event_date: normalizeEventDate(booking?.event_date),
   guest_count: booking?.guest_count != null ? String(booking.guest_count) : '',
@@ -352,6 +357,24 @@ export const BookingPageContent = () => {
     [subtotal, discount, grandTotal, inventoryLines],
   )
 
+  const resolvedBilling = useMemo(() => {
+    if (!isEditMode || !selectedBooking || billing.inventoryLines.length > 0) {
+      return billing
+    }
+    const storedGrand = Number(selectedBooking.grand_total ?? selectedBooking.total ?? 0)
+    if (billing.grandTotal > 0 || storedGrand === 0) {
+      return billing
+    }
+    const storedSubtotal = Number(selectedBooking.subtotal ?? storedGrand)
+    const resolvedDiscount = Number(selectedBooking.discount ?? discount ?? 0)
+    return {
+      subtotal: storedSubtotal,
+      discount: resolvedDiscount,
+      grandTotal: Math.max(0, storedGrand),
+      inventoryLines: billing.inventoryLines,
+    }
+  }, [billing, discount, isEditMode, selectedBooking])
+
   const formIsDirty = useMemo(() => {
     if (isEditMode) {
       if (!selectedBooking) return false
@@ -413,7 +436,7 @@ export const BookingPageContent = () => {
   const validateField = (name, fieldValue) => {
     const formSnapshot =
       fieldValue !== undefined ? { ...form, [name]: fieldValue } : form
-    const payload = buildPayload(formSnapshot, billing)
+    const payload = buildPayload(formSnapshot, resolvedBilling)
     const result = bookingSchema.safeParse(payload)
 
     if (result.success) {
@@ -553,6 +576,7 @@ export const BookingPageContent = () => {
     runCheck()
     return () => {
       active = false
+      setConflictChecking(false)
     }
   }, [form.event_date, isModalOpen, isEditMode, selectedBooking?.id])
 
@@ -610,14 +634,14 @@ export const BookingPageContent = () => {
   ])
 
   const hasConflict = conflictBooking !== null
-  const payload = buildPayload(form, billing)
+  const payload = buildPayload(form, resolvedBilling)
   const isFormValid = bookingSchema.safeParse(payload).success
-  const canSubmit = isFormValid && !isSubmitting && !conflictChecking
+  const canSubmit = isFormValid && !isSubmitting
 
   const submitBooking = useCallback(async () => {
     if (submittingRef.current) return
 
-    const submitPayload = buildPayload(form, billing)
+    const submitPayload = buildPayload(form, resolvedBilling)
     const validation = bookingSchema.safeParse(submitPayload)
     if (!validation.success) return
 
@@ -661,7 +685,7 @@ export const BookingPageContent = () => {
     }
   }, [
     addBooking,
-    billing,
+    resolvedBilling,
     closeModal,
     conflictBooking,
     form,
@@ -676,7 +700,7 @@ export const BookingPageContent = () => {
     if (submittingRef.current) return
     setFormError(null)
 
-    const submitPayload = buildPayload(form, billing)
+    const submitPayload = buildPayload(form, resolvedBilling)
     const validation = bookingSchema.safeParse(submitPayload)
     if (!validation.success) {
       const errors = {}
@@ -869,7 +893,7 @@ export const BookingPageContent = () => {
         disabled={!canSubmit}
         className={`w-full mt-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
           canSubmit
-            ? 'bg-teal-600 hover:bg-teal-700 text-white'
+            ? 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
             : 'bg-slate-300 text-slate-500 cursor-not-allowed'
         }`}
       >
