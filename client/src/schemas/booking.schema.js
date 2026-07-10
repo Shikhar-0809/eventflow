@@ -23,13 +23,6 @@ export const bookingSchema = z.object({
   grand_total: z.number().int().nonnegative().optional(),
   inventory: z.array(bookingInventoryLineSchema).max(50).optional(),
 }).superRefine((data, ctx) => {
-  if (data.event_type === 'other' && !data.event_type_custom?.trim()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Please specify the event type.',
-      path: ['event_type_custom'],
-    })
-  }
   const grandTotal = data.grand_total ?? data.total ?? 0
   if (data.advance > grandTotal) {
     ctx.addIssue({

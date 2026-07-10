@@ -66,6 +66,14 @@ const replaceBookingInventory = async (client, bookingId, inventoryLines = []) =
 const resolveEventTypeCustom = (event_type, event_type_custom) =>
   event_type === 'other' ? (event_type_custom?.trim() || null) : null
 
+const rejectMissingEventTypeCustom = (fields, res) => {
+  if (fields.event_type === 'other' && !fields.event_type_custom?.trim()) {
+    res.status(400).json({ error: 'Please specify the event type.' })
+    return true
+  }
+  return false
+}
+
 const createBooking = async (fields, inventoryLines) => {
   const {
     client_name,
@@ -262,6 +270,7 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
 router.post('/', validate(bookingSchema), bookingCreateRateLimiter, trackUsage('booking_created'), async (req, res, next) => {
   try {
     const { inventory, ...fields } = req.body
+    if (rejectMissingEventTypeCustom(fields, res)) return
     const clash = await findDateConflict(fields.event_date)
     const newBooking = await createBooking(fields, inventory)
     res.locals.usageMetadata = { booking_id: Number(newBooking.id) }
@@ -307,6 +316,7 @@ router.patch('/:id', validate(bookingSchema), trackUsage('booking_edited'), asyn
     }
 
     const { inventory, ...fields } = req.body
+    if (rejectMissingEventTypeCustom(fields, res)) return
     const clash = await findDateConflict(fields.event_date, id)
     const updated = await updateBooking(id, fields, inventory)
     res.locals.usageMetadata = { booking_id: id }

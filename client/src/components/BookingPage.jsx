@@ -27,6 +27,12 @@ const EVENT_TYPE_LABELS = {
 const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
 const MAX_EVENT_TYPE_CUSTOM_LENGTH = 50
+const EVENT_TYPE_CUSTOM_ERROR = 'Please specify the event type.'
+
+const validateEventTypeCustom = (eventType, value) => {
+  if (eventType !== 'other') return null
+  return value?.trim() ? null : EVENT_TYPE_CUSTOM_ERROR
+}
 
 const EMPTY_FORM = {
   client_name: '',
@@ -138,7 +144,7 @@ const bookingToForm = (booking) => ({
   client_name: booking?.client_name ?? '',
   phone: booking?.phone != null ? String(booking.phone).replace(/\D/g, '') : '',
   event_type: booking?.event_type ?? 'wedding',
-  event_type_custom: booking?.event_type_custom ?? '',
+  event_type_custom: booking?.event_type_custom == null ? '' : String(booking.event_type_custom),
   event_date: normalizeEventDate(booking?.event_date),
   guest_count: booking?.guest_count != null ? String(booking.guest_count) : '',
   venue: booking?.venue ?? '',
@@ -471,6 +477,16 @@ export const BookingPageContent = () => {
 
   const handleBlur = (name, value) => {
     setTouched((prev) => ({ ...prev, [name]: true }))
+    if (name === 'event_type_custom') {
+      const error = validateEventTypeCustom(form.event_type, value)
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        if (error) next.event_type_custom = error
+        else delete next.event_type_custom
+        return next
+      })
+      return
+    }
     validateField(name, value)
   }
 
@@ -726,6 +742,15 @@ export const BookingPageContent = () => {
     e.preventDefault()
     if (submittingRef.current) return
     setFormError(null)
+
+    if (form.event_type === 'other' && !form.event_type_custom.trim()) {
+      setFieldErrors((prev) => ({ ...prev, event_type_custom: EVENT_TYPE_CUSTOM_ERROR }))
+      setTouched((prev) => ({
+        ...prev,
+        event_type_custom: true,
+      }))
+      return
+    }
 
     const submitPayload = buildPayload(form, resolvedBilling)
     const validation = bookingSchema.safeParse(submitPayload)
