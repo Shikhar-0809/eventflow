@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { X, Phone, MessageCircle, Bell, Loader2, Pencil } from 'lucide-react'
+import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
+import { getDaysUntilEvent } from '../utils/dateHelpers'
 import {
   confirmationMessage,
   paymentReminderMessage,
@@ -38,6 +39,39 @@ const displayEventType = (booking) =>
   booking?.event_type === 'other' && booking?.event_type_custom
     ? booking.event_type_custom
     : formatEventType(booking?.event_type)
+
+const getEventCountdownDisplay = (eventDate, bookingStatus) => {
+  if (bookingStatus === 'cancelled') return null
+
+  const daysUntil = getDaysUntilEvent(eventDate)
+  if (daysUntil === null || daysUntil > 30 || daysUntil < -90) return null
+
+  let label
+  if (daysUntil === 0) label = 'Event today'
+  else if (daysUntil === 1) label = 'Event tomorrow'
+  else if (daysUntil > 1) label = `Event in ${daysUntil} days`
+  else label = `Event was ${Math.abs(daysUntil)} days ago`
+
+  if (daysUntil >= 0 && daysUntil <= 3) {
+    return {
+      label,
+      className: 'inline-flex items-center gap-1.5 bg-teal-50 text-teal-700 font-semibold rounded-full px-3 py-1 text-sm',
+      showClock: true,
+    }
+  }
+  if (daysUntil >= 4) {
+    return {
+      label,
+      className: 'inline-flex items-center bg-slate-100 text-slate-600 rounded-full px-3 py-1 text-sm',
+      showClock: false,
+    }
+  }
+  return {
+    label,
+    className: 'text-sm text-slate-400 bg-slate-50',
+    showClock: false,
+  }
+}
 
 const formatDisplayDate = (dateStr) => {
   if (dateStr == null || dateStr === '') return '—'
@@ -223,6 +257,7 @@ export const BookingDetail = () => {
   const inventoryReady = !isLoading && booking != null && bookingIdsMatch(booking.id, selectedBooking.id)
   const inventoryLines = asArray(inventoryReady ? booking?.inventory : [])
   const safeChangeLog = asArray(changeLog)
+  const eventCountdown = getEventCountdownDisplay(display.event_date, status)
 
   return (
     <div className="absolute inset-0 z-50 flex justify-end pointer-events-none">
@@ -264,6 +299,14 @@ export const BookingDetail = () => {
                 {formatStatus(status)}
               </span>
             </div>
+            {eventCountdown && (
+              <div className="mt-2">
+                <span className={eventCountdown.className}>
+                  {eventCountdown.showClock && <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />}
+                  {eventCountdown.label}
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-2 mt-2 text-slate-600">
               <Phone className="w-4 h-4 shrink-0" />
               <span className="text-sm">{display.phone}</span>
