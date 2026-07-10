@@ -108,7 +108,7 @@ export const BookingDetail = () => {
           throw new Error('Booking data was incomplete.')
         }
         setBooking(data)
-        setChangeLog(data.change_log)
+        setChangeLog(asArray(data.change_log))
       } catch (err) {
         console.error('BookingDetail load failed:', err)
         if (err.status === 401) {
@@ -117,7 +117,7 @@ export const BookingDetail = () => {
           return
         }
         setFetchError(err.message ?? 'Something went wrong. Please try again.')
-        setBooking(selectedBooking)
+        setBooking(normalizeBookingDetail(selectedBooking))
         setChangeLog([])
       } finally {
         setIsLoading(false)
@@ -133,16 +133,10 @@ export const BookingDetail = () => {
       if (!prev || !bookingIdsMatch(prev.id, selectedBooking.id)) {
         return prev
       }
-      return {
+      return normalizeBookingDetail({
         ...prev,
         ...selectedBooking,
-        inventory: Array.isArray(selectedBooking.inventory)
-          ? selectedBooking.inventory
-          : (prev.inventory ?? []),
-        change_log: Array.isArray(selectedBooking.change_log)
-          ? selectedBooking.change_log
-          : (prev.change_log ?? []),
-      }
+      })
     })
   }, [selectedBooking, isDetailOpen])
 
@@ -191,7 +185,7 @@ export const BookingDetail = () => {
     if (!note || !booking?.id || isLogging) return
 
     setLogError(null)
-    const previousLog = changeLog
+    const previousLog = asArray(changeLog)
     const optimisticEntry = {
       id: `temp-${Date.now()}`,
       booking_id: booking.id,
@@ -199,7 +193,7 @@ export const BookingDetail = () => {
       logged_at: new Date().toISOString(),
     }
 
-    setChangeLog((prev) => [...prev, optimisticEntry])
+    setChangeLog((prev) => [...asArray(prev), optimisticEntry])
     setChangeNote('')
     setIsLogging(true)
 
@@ -222,7 +216,8 @@ export const BookingDetail = () => {
   const statusClass = STATUS_STYLES[status] ?? STATUS_STYLES.confirmed
   const charsRemaining = MAX_NOTE_LENGTH - changeNote.length
   const inventoryReady = !isLoading && booking != null && bookingIdsMatch(booking.id, selectedBooking.id)
-  const inventoryLines = asArray(booking?.inventory)
+  const inventoryLines = asArray(inventoryReady ? booking?.inventory : [])
+  const safeChangeLog = asArray(changeLog)
 
   return (
     <div className="absolute inset-0 z-50 flex justify-end pointer-events-none">
@@ -421,10 +416,10 @@ export const BookingDetail = () => {
           <div>
             <h3 className="text-sm font-semibold text-slate-800 mb-3">Change Log</h3>
             <div className="space-y-3 mb-4">
-              {changeLog.length === 0 ? (
+              {safeChangeLog.length === 0 ? (
                 <p className="text-sm text-slate-400">No changes logged yet.</p>
               ) : (
-                changeLog.map((entry) => (
+                safeChangeLog.map((entry) => (
                   <div key={entry.id} className="text-sm text-slate-600">
                     <p className="text-xs text-slate-400 mb-0.5">{formatLogTimestamp(entry.logged_at)}</p>
                     <p>{entry.change_note}</p>
