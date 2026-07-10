@@ -74,6 +74,14 @@ export const api = {
     const params = new URLSearchParams({ from, to })
     return request(`/reports/range?${params}`)
   },
+  getRecords: (params = {}) => {
+    const searchParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value != null && value !== '') searchParams.set(key, String(value))
+    })
+    const query = searchParams.toString()
+    return request(query ? `/records?${query}` : '/records')
+  },
   getMyUsage: (weekOffset = 0) => request(`/usage/me?weekOffset=${weekOffset}`),
   getInventory: () => request('/inventory'),
   addInventoryItem: (data) => request('/inventory', { method: 'POST', body: JSON.stringify(data) }),

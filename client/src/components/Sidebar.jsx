@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Tent, Calendar, Package, BarChart2, Activity } from 'lucide-react'
+import { Tent, Calendar, Package, TableProperties, BarChart2, Activity } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -146,6 +146,14 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         >
           <Package className="w-4 h-4" />
           Inventory
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('records')}
+          className={navButtonClass('records')}
+        >
+          <TableProperties className="w-4 h-4" />
+          Records
         </button>
         <button
           type="button"

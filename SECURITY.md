@@ -227,6 +227,7 @@ Cross-check against this table any time a new route is added — every row excep
 | `GET /api/settings` | Yes | No |
 | `PATCH /api/settings` | Yes | No |
 | `GET /api/reports/range` | Yes | No |
+| `GET /api/records` | Yes | No |
 
 ---
 

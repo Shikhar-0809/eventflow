@@ -7,6 +7,7 @@ import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
 import { UsageView } from './components/UsageView'
 import { InventoryView } from './components/InventoryView'
+import { RecordsView } from './components/RecordsView'
 import { BookingPage } from './components/BookingPage'
 import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
@@ -93,6 +94,7 @@ export default function App() {
             {activeView === 'analytics' && <AnalyticsView />}
             {activeView === 'usage' && <UsageView />}
             {activeView === 'inventory' && <InventoryView />}
+            {activeView === 'records' && <RecordsView />}
             {activeView === 'calendar' && <CalendarView />}
             <BookingDetail />
           </main>
