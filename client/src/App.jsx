@@ -98,11 +98,11 @@ export default function App() {
             {activeView === 'records' && <RecordsView />}
             {activeView === 'pending-balances' && <PendingBalancesView />}
             {activeView === 'calendar' && <CalendarView />}
-            <BookingDetail />
           </main>
         </div>
       </div>
 
+      <BookingDetail />
       <BookingPage />
     </>
   )

@@ -428,11 +428,21 @@ export const BookingDetail = () => {
   const eventCountdown = getEventCountdownDisplay(display.event_date, status)
 
   return (
-    <div className="absolute inset-0 z-50 flex justify-end pointer-events-none">
-      <div className="absolute inset-0 bg-black/40 pointer-events-none" aria-hidden="true" />
-      <div className="relative w-full max-w-[420px] h-full bg-white shadow-xl border-l border-slate-200 flex flex-col animate-[slideIn_0.2s_ease-out] pointer-events-auto">
+    <>
+      <div
+        className="fixed inset-0 bg-black/50 z-40"
+        onClick={closeDetail}
+        aria-hidden="true"
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="booking-detail-title"
+        className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-50 overflow-y-auto flex flex-col animate-[slideIn_0.2s_ease-out]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
-          <h2 className="text-xl font-semibold text-slate-900">Booking Details</h2>
+          <h2 id="booking-detail-title" className="text-xl font-semibold text-slate-900">Booking Details</h2>
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -877,6 +887,6 @@ export const BookingDetail = () => {
           if (!isDeletingExpense) setExpenseToDelete(null)
         }}
       />
-    </div>
+    </>
   )
 }
