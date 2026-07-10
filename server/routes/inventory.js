@@ -14,12 +14,44 @@ const router = Router()
 
 router.use(requireAuth)
 
+const REORDER_THRESHOLD = 0.2
+
 const todayDate = () => {
   const now = new Date()
   const y = now.getFullYear()
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const d = String(now.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+const currentMonthPrefix = () => {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
+const bookedThisMonthForItem = async (itemId, monthPrefix = currentMonthPrefix()) => {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(bi.quantity), 0) AS booked_this_month
+     FROM booking_inventory bi
+     INNER JOIN bookings b ON b.id = bi.booking_id
+     WHERE bi.item_id = $1 AND b.status != 'cancelled' AND b.event_date LIKE $2`,
+    [itemId, `${monthPrefix}%`],
+  )
+  return Number(rows[0].booked_this_month)
+}
+
+const bookedThisMonthByItem = async (monthPrefix = currentMonthPrefix()) => {
+  const { rows } = await pool.query(
+    `SELECT bi.item_id, COALESCE(SUM(bi.quantity), 0) AS booked_this_month
+     FROM booking_inventory bi
+     INNER JOIN bookings b ON b.id = bi.booking_id
+     WHERE b.status != 'cancelled' AND b.event_date LIKE $1
+     GROUP BY bi.item_id`,
+    [`${monthPrefix}%`],
+  )
+  return new Map(rows.map((row) => [Number(row.item_id), Number(row.booked_this_month)]))
 }
 
 const inUseOnDate = async (itemId, date) => {
@@ -55,14 +87,19 @@ const committedOnDate = async (itemId, date, excludeBookingId = null) => {
   return Number(rows[0].committed)
 }
 
-const withComputedFields = async (item, dateForInUse = todayDate()) => {
+const withComputedFields = async (item, dateForInUse = todayDate(), bookedThisMonth = null) => {
   const usable = item.total_quantity - item.damaged_quantity
   const in_use_today = await inUseOnDate(item.id, dateForInUse)
+  const booked_this_month = bookedThisMonth ?? await bookedThisMonthForItem(item.id)
+  const availability_ratio = usable > 0 ? (usable - booked_this_month) / usable : 0
+
   return {
     ...item,
     usable,
     in_use_today,
     available: usable - in_use_today,
+    booked_this_month,
+    availability_ratio,
   }
 }
 
@@ -74,8 +111,12 @@ const getItemRow = async (id) => {
 router.get('/', async (req, res, next) => {
   try {
     const today = todayDate()
+    const monthPrefix = currentMonthPrefix()
     const { rows } = await pool.query('SELECT * FROM inventory_items ORDER BY name ASC')
-    const items = await Promise.all(rows.map((row) => withComputedFields(row, today)))
+    const bookedByItem = await bookedThisMonthByItem(monthPrefix)
+    const items = await Promise.all(
+      rows.map((row) => withComputedFields(row, today, bookedByItem.get(Number(row.id)) ?? 0)),
+    )
     res.status(200).json(items)
   } catch (err) {
     next(err)

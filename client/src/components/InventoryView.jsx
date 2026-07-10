@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Plus } from 'lucide-react'
 import { api } from '../utils/api'
 import { useAuthStore } from '../store/authStore'
@@ -6,6 +6,8 @@ import { useInventoryStore } from '../store/inventoryStore'
 import { InventoryItemCard } from './InventoryItemCard'
 import { DamagedItemsPanel } from './DamagedItemsPanel'
 import { AddInventoryItemModal } from './AddInventoryItemModal'
+
+const REORDER_THRESHOLD = 0.2
 
 const CardSkeleton = () => (
   <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200 animate-pulse">
@@ -48,6 +50,13 @@ export const InventoryView = () => {
   const handleItemUpdated = (item) => {
     upsertItem(item)
   }
+
+  const lowStockItems = useMemo(
+    () => items.filter(
+      (item) => (item.usable ?? 0) > 0 && (item.availability_ratio ?? 1) < REORDER_THRESHOLD,
+    ),
+    [items],
+  )
 
   if (isLoading) {
     return (
@@ -98,6 +107,31 @@ export const InventoryView = () => {
           Add Item
         </button>
       </div>
+
+      {lowStockItems.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" aria-hidden="true" />
+            <p className="text-amber-800 font-semibold text-sm">
+              Heads up — some items are running low this month
+            </p>
+          </div>
+          <ul className="mt-2 space-y-1 pl-6">
+            {lowStockItems.map((item) => {
+              const usable = item.usable ?? 0
+              const bookedThisMonth = item.booked_this_month ?? 0
+              const unbooked = usable - bookedThisMonth
+              const percentAvailable = Math.round((item.availability_ratio ?? 0) * 100)
+
+              return (
+                <li key={item.id} className="text-sm text-amber-700">
+                  {item.name} — only {percentAvailable}% available ({unbooked} of {usable} unbooked this month)
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <p className="text-sm text-slate-500 bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center">

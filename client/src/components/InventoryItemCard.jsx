@@ -6,6 +6,8 @@ import { useInventoryStore } from '../store/inventoryStore'
 import { inventoryQuantityUpdateSchema } from '../schemas/inventory.schema.js'
 import { ConfirmDialog } from './ConfirmDialog'
 
+const REORDER_THRESHOLD = 0.2
+
 export const InventoryItemCard = ({ item, onUpdated }) => {
   const removeItem = useInventoryStore((state) => state.removeItem)
 
@@ -113,6 +115,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
 
   const inUseToday = item.in_use_today ?? 0
   const deleteInUseWarning = inUseToday > 0
+  const isLowStock = (item.usable ?? 0) > 0 && (item.availability_ratio ?? 1) < REORDER_THRESHOLD
 
   return (
     <>
@@ -124,14 +127,21 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
               <p className="text-xs text-slate-400 mt-0.5">{formatCurrency(unitPrice)} per unit</p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={openDeleteDialog}
-            className="p-1 text-slate-400 hover:text-red-600 transition-all duration-200 shrink-0"
-            aria-label={`Remove ${item.name}`}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isLowStock && (
+              <span className="text-amber-700 bg-amber-100 rounded-full px-2 py-0.5 text-xs font-medium">
+                Low
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={openDeleteDialog}
+              className="p-1 text-slate-400 hover:text-red-600 transition-all duration-200"
+              aria-label={`Remove ${item.name}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 space-y-2">
