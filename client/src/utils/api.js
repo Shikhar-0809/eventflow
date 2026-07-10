@@ -30,7 +30,7 @@ const request = async (path, options = {}) => {
     )
   }
 
-  if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+  if (body == null || typeof body !== 'object') {
     throw new ApiError('Something went wrong. Please try again.', res.status)
   }
 
@@ -42,7 +42,13 @@ export const api = {
   logout: () => request('/auth/logout', { method: 'POST' }),
   getMe: () => request('/auth/me'),
   getBookings: () => request('/bookings'),
-  getBooking: (id) => request(`/bookings/${id}`, { cache: 'no-store' }),
+  getBooking: async (id) => {
+    const body = await request(`/bookings/${id}`, { cache: 'no-store' })
+    if (Array.isArray(body)) {
+      throw new ApiError('Something went wrong. Please try again.', 200)
+    }
+    return body
+  },
   createBooking: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
   updateBooking: (id, data) => request(`/bookings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   checkConflict: (date, excludeId) => {

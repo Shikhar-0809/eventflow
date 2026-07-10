@@ -46,6 +46,7 @@ export const CalendarView = () => {
       const data = await api.getBookings()
       setBookings(data)
     } catch (err) {
+      console.error('[CalendarView] fetchBookings failed:', err)
       if (err.status === 401) {
         useAuthStore.setState({ isAuthenticated: false, isLoading: false })
         return
