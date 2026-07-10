@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
 
 export const ConfirmDialog = ({
@@ -30,7 +31,7 @@ export const ConfirmDialog = ({
     ? 'bg-red-600 hover:bg-red-700 text-white'
     : 'bg-teal-600 hover:bg-teal-700 text-white'
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 pointer-events-auto">
       <button
         type="button"
@@ -78,6 +79,7 @@ export const ConfirmDialog = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
