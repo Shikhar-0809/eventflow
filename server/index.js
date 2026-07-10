@@ -10,6 +10,7 @@ import inventoryRouter from './routes/inventory.js'
 import analyticsRouter from './routes/analytics.js'
 import usageRouter from './routes/usage.js'
 import settingsRouter from './routes/settings.js'
+import reportsRouter from './routes/reports.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const REQUIRED_ENV = ['JWT_SECRET', 'MERCHANT_PASSWORD_HASH', 'SESSION_COOKIE_NAME']
@@ -53,6 +54,7 @@ app.use('/api/inventory', inventoryRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/usage', usageRouter)
 app.use('/api/settings', settingsRouter)
+app.use('/api/reports', reportsRouter)
 
 app.use(errorHandler)
 

@@ -226,6 +226,7 @@ Cross-check against this table any time a new route is added — every row excep
 | `POST /api/inventory/check-availability` | Yes | No |
 | `GET /api/settings` | Yes | No |
 | `PATCH /api/settings` | Yes | No |
+| `GET /api/reports/range` | Yes | No |
 
 ---
 

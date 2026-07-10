@@ -8,12 +8,26 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { FileText, Loader2, X } from 'lucide-react'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
+import { openReportWindow } from '../utils/reportPrinter'
 import { useAuthStore } from '../store/authStore'
 import { useSettingsStore } from '../store/settingsStore'
 
 const MAX_MONTHLY_TARGET = 100000000
+
+const pad = (n) => String(n).padStart(2, '0')
+
+const firstDayOfCurrentMonth = () => {
+  const today = new Date()
+  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`
+}
+
+const todayDateString = () => {
+  const today = new Date()
+  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+}
 
 const formatMonthLabel = (yyyyMm) => {
   const [year, month] = yyyyMm.split('-')
@@ -88,6 +102,11 @@ export const AnalyticsView = () => {
   const [targetSaveError, setTargetSaveError] = useState(null)
   const [isSavingTarget, setIsSavingTarget] = useState(false)
   const [savedMessage, setSavedMessage] = useState(null)
+  const [reportFrom, setReportFrom] = useState(() => firstDayOfCurrentMonth())
+  const [reportTo, setReportTo] = useState(() => todayDateString())
+  const [reportDateError, setReportDateError] = useState(null)
+  const [reportApiError, setReportApiError] = useState(null)
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
   const { loadSettings, setMonthlyRevenueTarget } = useSettingsStore()
 
   const fetchSettings = useCallback(async () => {
@@ -164,6 +183,34 @@ export const AnalyticsView = () => {
       setTargetSaveError(err.message ?? 'Something went wrong. Please try again.')
     } finally {
       setIsSavingTarget(false)
+    }
+  }
+
+  const handleGenerateReport = async () => {
+    setReportApiError(null)
+
+    if (!reportFrom || !reportTo) {
+      setReportDateError('Start date must be before end date.')
+      return
+    }
+    if (reportFrom > reportTo) {
+      setReportDateError('Start date must be before end date.')
+      return
+    }
+    setReportDateError(null)
+
+    setIsGeneratingReport(true)
+    try {
+      const data = await api.getReport(reportFrom, reportTo)
+      openReportWindow(data)
+    } catch (err) {
+      if (err.status === 401) {
+        useAuthStore.setState({ isAuthenticated: false, isLoading: false })
+        return
+      }
+      setReportApiError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsGeneratingReport(false)
     }
   }
 
@@ -308,6 +355,77 @@ export const AnalyticsView = () => {
         )}
         {targetSaveError && !settingsLoading && !settingsError && (
           <p role="alert" className="mt-2 text-sm text-red-700">{targetSaveError}</p>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <FileText className="w-4 h-4 text-teal-600 shrink-0" aria-hidden="true" />
+          <h2 className="text-sm font-semibold text-slate-700">Export Report</h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label htmlFor="report_from" className="block text-xs text-slate-500 mb-1">
+              From
+            </label>
+            <input
+              id="report_from"
+              type="date"
+              value={reportFrom}
+              onChange={(e) => {
+                setReportFrom(e.target.value)
+                setReportDateError(null)
+                setReportApiError(null)
+              }}
+              className="border border-slate-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200"
+            />
+          </div>
+          <div>
+            <label htmlFor="report_to" className="block text-xs text-slate-500 mb-1">
+              To
+            </label>
+            <input
+              id="report_to"
+              type="date"
+              value={reportTo}
+              onChange={(e) => {
+                setReportTo(e.target.value)
+                setReportDateError(null)
+                setReportApiError(null)
+              }}
+              className="border border-slate-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200"
+            />
+          </div>
+        </div>
+        {reportDateError && (
+          <p role="alert" className="text-sm text-red-700 mb-3">
+            {reportDateError}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={handleGenerateReport}
+          disabled={isGeneratingReport}
+          className="w-full sm:w-auto px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2"
+        >
+          {isGeneratingReport && <Loader2 className="w-4 h-4 animate-spin" />}
+          {isGeneratingReport ? 'Generating…' : 'Generate Report'}
+        </button>
+        {reportApiError && (
+          <div
+            role="alert"
+            className="mt-3 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700 flex items-start justify-between gap-3"
+          >
+            <p className="flex-1">{reportApiError}</p>
+            <button
+              type="button"
+              onClick={() => setReportApiError(null)}
+              className="p-0.5 text-red-500 hover:text-red-800 shrink-0"
+              aria-label="Dismiss error"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
 

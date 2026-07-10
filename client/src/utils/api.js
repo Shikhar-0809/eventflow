@@ -70,6 +70,10 @@ export const api = {
   getMonthlyAnalytics: () => request('/analytics/monthly'),
   getSettings: () => request('/settings'),
   updateSettings: (data) => request('/settings', { method: 'PATCH', body: JSON.stringify(data) }),
+  getReport: (from, to) => {
+    const params = new URLSearchParams({ from, to })
+    return request(`/reports/range?${params}`)
+  },
   getMyUsage: (weekOffset = 0) => request(`/usage/me?weekOffset=${weekOffset}`),
   getInventory: () => request('/inventory'),
   addInventoryItem: (data) => request('/inventory', { method: 'POST', body: JSON.stringify(data) }),
