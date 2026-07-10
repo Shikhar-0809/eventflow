@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2, CheckCircle2, Send } from 'lucide-react'
+import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2, CheckCircle2, Send, XCircle } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
@@ -159,6 +159,9 @@ export const BookingDetail = () => {
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
   const [completeError, setCompleteError] = useState(null)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState(null)
   const [selfWhatsappError, setSelfWhatsappError] = useState(null)
 
   useEffect(() => {
@@ -179,6 +182,8 @@ export const BookingDetail = () => {
     setExpenseDeleteError(null)
     setShowCompleteConfirm(false)
     setCompleteError(null)
+    setShowCancelConfirm(false)
+    setCancelError(null)
     setSelfWhatsappError(null)
     setIsLoading(true)
 
@@ -389,6 +394,24 @@ export const BookingDetail = () => {
     }
   }
 
+  const handleCancelConfirm = async () => {
+    if (!booking?.id || isCancelling) return
+
+    setCancelError(null)
+    setIsCancelling(true)
+
+    try {
+      const updated = await api.updateBookingStatus(booking.id, 'cancelled')
+      setBooking((prev) => normalizeBookingDetail({ ...prev, ...updated }))
+      updateBooking(updated)
+      setShowCancelConfirm(false)
+    } catch (err) {
+      setCancelError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
   if (!isDetailOpen || !selectedBooking) return null
 
   const display = booking ?? selectedBooking
@@ -461,23 +484,49 @@ export const BookingDetail = () => {
                 {completeError}
               </p>
             )}
+            {cancelError && (
+              <p role="alert" className="mt-2 text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+                {cancelError}
+              </p>
+            )}
             {(status === 'confirmed' || status === 'pending') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCompleteError(null)
-                  setShowCompleteConfirm(true)
-                }}
-                className="mt-3 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-indigo-100"
-              >
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                Mark as Completed
-              </button>
+              <div className="mt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompleteError(null)
+                    setCancelError(null)
+                    setShowCompleteConfirm(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-indigo-100"
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  Mark as Completed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompleteError(null)
+                    setCancelError(null)
+                    setShowCancelConfirm(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-red-100"
+                >
+                  <XCircle className="w-4 h-4 shrink-0" />
+                  Cancel Booking
+                </button>
+              </div>
             )}
             {status === 'completed' && (
               <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 Event completed
+              </p>
+            )}
+            {status === 'cancelled' && (
+              <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400">
+                <XCircle className="w-4 h-4 shrink-0" />
+                Booking cancelled
               </p>
             )}
           </div>
@@ -798,6 +847,20 @@ export const BookingDetail = () => {
         onConfirm={handleMarkCompletedConfirm}
         onCancel={() => {
           if (!isCompleting) setShowCompleteConfirm(false)
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={showCancelConfirm}
+        title="Cancel Booking"
+        message="Cancel this booking? This cannot be undone. The booking will remain in your records as cancelled."
+        confirmLabel="Yes, Cancel Booking"
+        confirmVariant="danger"
+        confirmingLabel="Cancelling..."
+        isConfirming={isCancelling}
+        onConfirm={handleCancelConfirm}
+        onCancel={() => {
+          if (!isCancelling) setShowCancelConfirm(false)
         }}
       />
 
