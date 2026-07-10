@@ -209,6 +209,7 @@ Cross-check against this table any time a new route is added — every row excep
 | `GET /api/bookings` | Yes | No |
 | `POST /api/bookings` | Yes | Yes — `bookingCreateRateLimiter` |
 | `PATCH /api/bookings/:id` | Yes | No |
+| `PATCH /api/bookings/:id/status` | Yes | No |
 | `GET /api/bookings/:id` | Yes | No |
 | `PATCH /api/bookings/:id/log` | Yes | No |
 | `POST /api/bookings/:id/expenses` | Yes | No |

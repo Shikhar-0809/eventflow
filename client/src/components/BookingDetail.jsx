@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2 } from 'lucide-react'
+import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2, CheckCircle2 } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
@@ -18,12 +18,14 @@ const STATUS_STYLES = {
   confirmed: 'bg-teal-100 text-teal-800',
   pending: 'bg-amber-100 text-amber-800',
   cancelled: 'bg-red-100 text-red-700',
+  completed: 'bg-indigo-100 text-indigo-700',
 }
 
 const STATUS_LABELS = {
   confirmed: 'Confirmed',
   pending: 'Pending',
   cancelled: 'Cancelled',
+  completed: 'Completed',
 }
 
 const EVENT_TYPE_LABELS = {
@@ -42,7 +44,7 @@ const displayEventType = (booking) =>
     : formatEventType(booking?.event_type)
 
 const getEventCountdownDisplay = (eventDate, bookingStatus) => {
-  if (bookingStatus === 'cancelled') return null
+  if (bookingStatus === 'cancelled' || bookingStatus === 'completed') return null
 
   const daysUntil = getDaysUntilEvent(eventDate)
   if (daysUntil === null || daysUntil > 30 || daysUntil < -90) return null
@@ -136,7 +138,7 @@ const normalizeBookingDetail = (data) => ({
 })
 
 export const BookingDetail = () => {
-  const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal } = useBookingStore()
+  const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal, updateBooking } = useBookingStore()
   const [booking, setBooking] = useState(null)
   const [changeLog, setChangeLog] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -153,6 +155,9 @@ export const BookingDetail = () => {
   const [expenseToDelete, setExpenseToDelete] = useState(null)
   const [isDeletingExpense, setIsDeletingExpense] = useState(false)
   const [expenseDeleteError, setExpenseDeleteError] = useState(null)
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
+  const [isCompleting, setIsCompleting] = useState(false)
+  const [completeError, setCompleteError] = useState(null)
 
   useEffect(() => {
     if (!isDetailOpen || !selectedBooking?.id) return
@@ -170,6 +175,8 @@ export const BookingDetail = () => {
     setExpenseError(null)
     setExpenseToDelete(null)
     setExpenseDeleteError(null)
+    setShowCompleteConfirm(false)
+    setCompleteError(null)
     setIsLoading(true)
 
     const loadDetail = async () => {
@@ -345,6 +352,24 @@ export const BookingDetail = () => {
     }
   }
 
+  const handleMarkCompletedConfirm = async () => {
+    if (!booking?.id || isCompleting) return
+
+    setCompleteError(null)
+    setIsCompleting(true)
+
+    try {
+      const updated = await api.updateBookingStatus(booking.id, 'completed')
+      setBooking((prev) => normalizeBookingDetail({ ...prev, ...updated }))
+      updateBooking(updated)
+      setShowCompleteConfirm(false)
+    } catch (err) {
+      setCompleteError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsCompleting(false)
+    }
+  }
+
   if (!isDetailOpen || !selectedBooking) return null
 
   const display = booking ?? selectedBooking
@@ -412,6 +437,30 @@ export const BookingDetail = () => {
               <Phone className="w-4 h-4 shrink-0" />
               <span className="text-sm">{display.phone}</span>
             </div>
+            {completeError && (
+              <p role="alert" className="mt-2 text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+                {completeError}
+              </p>
+            )}
+            {(status === 'confirmed' || status === 'pending') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCompleteError(null)
+                  setShowCompleteConfirm(true)
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:bg-indigo-100"
+              >
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                Mark as Completed
+              </button>
+            )}
+            {status === 'completed' && (
+              <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                Event completed
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -708,6 +757,19 @@ export const BookingDetail = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={showCompleteConfirm}
+        title="Mark as Completed"
+        message="Mark this booking as completed? This means the event has taken place."
+        confirmLabel="Mark Completed"
+        confirmingLabel="Updating..."
+        isConfirming={isCompleting}
+        onConfirm={handleMarkCompletedConfirm}
+        onCancel={() => {
+          if (!isCompleting) setShowCompleteConfirm(false)
+        }}
+      />
 
       <ConfirmDialog
         isOpen={expenseToDelete != null}

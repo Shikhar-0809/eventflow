@@ -32,3 +32,7 @@ export const expenseSchema = z.object({
   label: z.string().trim().min(1).max(100),
   amount: z.number().int().positive().max(10000000),
 })
+
+export const bookingStatusSchema = z.object({
+  status: z.enum(['confirmed', 'pending', 'cancelled', 'completed']),
+})

@@ -13,6 +13,7 @@ const STATUS_COLORS = {
   confirmed: '#0f766e',
   pending: '#d97706',
   cancelled: '#dc2626',
+  completed: '#6366f1',
 }
 
 const EVENT_TYPE_LABELS = {
@@ -104,7 +105,7 @@ const toCalendarEvents = (bookings) =>
       date: booking.event_date,
       backgroundColor: color,
       borderColor: color,
-      extendedProps: { booking },
+      extendedProps: { booking, status: booking.status },
     }
   })
 
@@ -269,6 +270,11 @@ export const CalendarView = () => {
               dateClick={handleDateClick}
               eventMouseEnter={(info) => {
                 info.el.style.cursor = 'pointer'
+              }}
+              eventDidMount={(info) => {
+                if (info.event.extendedProps.status === 'completed') {
+                  info.el.style.opacity = '0.75'
+                }
               }}
             />
           </div>

@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   subtotal      INTEGER NOT NULL DEFAULT 0,
   discount      INTEGER NOT NULL DEFAULT 0,
   grand_total   INTEGER NOT NULL DEFAULT 0,
-  status        TEXT    DEFAULT 'confirmed',
+  status        TEXT    DEFAULT 'confirmed' CHECK (status IN ('confirmed', 'pending', 'cancelled', 'completed')),
   notes         TEXT,
   created_at    TEXT    DEFAULT NOW(),
   updated_at    TEXT    DEFAULT NOW()

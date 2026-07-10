@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js'
 import { validate } from '../middleware/validate.js'
 import { bookingCreateRateLimiter } from '../middleware/rateLimiter.js'
 import { trackUsage } from '../middleware/trackUsage.js'
-import { bookingSchema, changeLogSchema, expenseSchema } from '../schemas/booking.schema.js'
+import { bookingSchema, bookingStatusSchema, changeLogSchema, expenseSchema } from '../schemas/booking.schema.js'
 
 const router = Router()
 
@@ -368,6 +368,30 @@ router.delete('/:id/expenses/:expenseId', async (req, res, next) => {
     }
 
     res.status(200).json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.patch('/:id/status', validate(bookingStatusSchema), trackUsage('booking_status_updated'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const { rows: existingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [id])
+    if (!existingRows[0]) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+
+    const updatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
+    const { status } = req.body
+
+    await pool.query(
+      'UPDATE bookings SET status = $1, updated_at = $2 WHERE id = $3',
+      [status, updatedAt, id],
+    )
+
+    const { rows: bookingRows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [id])
+    res.locals.usageMetadata = { booking_id: id }
+    res.status(200).json(bookingRows[0])
   } catch (err) {
     next(err)
   }

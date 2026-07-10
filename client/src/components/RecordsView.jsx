@@ -9,12 +9,14 @@ const STATUS_STYLES = {
   confirmed: 'bg-teal-100 text-teal-800',
   pending: 'bg-amber-100 text-amber-800',
   cancelled: 'bg-red-100 text-red-700',
+  completed: 'bg-indigo-100 text-indigo-700',
 }
 
 const STATUS_LABELS = {
   confirmed: 'Confirmed',
   pending: 'Pending',
   cancelled: 'Cancelled',
+  completed: 'Completed',
 }
 
 const EVENT_TYPE_LABELS = {
@@ -241,6 +243,7 @@ export const RecordsView = () => {
               <option value="confirmed">Confirmed</option>
               <option value="pending">Pending</option>
               <option value="cancelled">Cancelled</option>
+              <option value="completed">Completed</option>
             </select>
           </div>
           <div>

@@ -51,6 +51,8 @@ export const api = {
   },
   createBooking: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
   updateBooking: (id, data) => request(`/bookings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  updateBookingStatus: (id, status) =>
+    request(`/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   checkConflict: (date, excludeId) => {
     const params = new URLSearchParams({ date })
     if (excludeId != null) params.set('excludeId', String(excludeId))
