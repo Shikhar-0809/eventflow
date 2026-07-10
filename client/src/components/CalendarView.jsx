@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import interactionPlugin from '@fullcalendar/interaction'
-import { AlertTriangle, Loader2, Plus, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, Loader2, Plus, Search, Sparkles, X } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
@@ -97,24 +97,80 @@ const buildBriefingLines = (bookings) => {
   return lines.slice(0, 3)
 }
 
-const toCalendarEvents = (bookings) =>
+const FADED_EVENT_COLOR = '#94a3b8'
+
+const bookingMatchesSearch = (booking, query) => {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+
+  const clientName = String(booking.client_name ?? '').toLowerCase()
+  const eventType = String(booking.event_type ?? '').toLowerCase()
+  const venue = String(booking.venue ?? '').toLowerCase()
+
+  return clientName.includes(q) || eventType.includes(q) || venue.includes(q)
+}
+
+const toCalendarEvents = (bookings, { faded = false } = {}) =>
   bookings.map((booking) => {
-    const color = STATUS_COLORS[booking.status] ?? STATUS_COLORS.confirmed
+    const color = faded
+      ? FADED_EVENT_COLOR
+      : (STATUS_COLORS[booking.status] ?? STATUS_COLORS.confirmed)
     return {
       title: `${booking.client_name} — ${eventTypeLabel(booking)}`,
       date: booking.event_date,
       backgroundColor: color,
       borderColor: color,
-      extendedProps: { booking, status: booking.status },
+      extendedProps: { booking, status: booking.status, faded },
     }
   })
+
+const buildCalendarEvents = (bookings, searchQuery) => {
+  const trimmed = searchQuery.trim()
+  if (!trimmed) {
+    return toCalendarEvents(bookings)
+  }
+
+  const matching = bookings.filter((booking) => bookingMatchesSearch(booking, trimmed))
+  const nonMatching = bookings.filter((booking) => !bookingMatchesSearch(booking, trimmed))
+
+  return [
+    ...toCalendarEvents(matching),
+    ...toCalendarEvents(nonMatching, { faded: true }),
+  ]
+}
 
 export const CalendarView = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [isBriefingDismissed, setIsBriefingDismissed] = useState(false)
   const [isBriefingExiting, setIsBriefingExiting] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const { bookings, setBookings, setSelectedBooking, openModal, postSaveConflictNotice, clearPostSaveConflictNotice } = useBookingStore()
+
+  useEffect(() => {
+    if (searchQuery === '') {
+      setDebouncedSearchQuery('')
+      return undefined
+    }
+
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  const calendarEvents = useMemo(
+    () => buildCalendarEvents(bookings, debouncedSearchQuery),
+    [bookings, debouncedSearchQuery],
+  )
+
+  const activeSearch = debouncedSearchQuery.trim()
+  const matchingCount = useMemo(() => {
+    if (!activeSearch) return 0
+    return bookings.filter((booking) => bookingMatchesSearch(booking, activeSearch)).length
+  }, [bookings, activeSearch])
 
   const briefingLines = useMemo(
     () => (isLoading ? [] : buildBriefingLines(bookings)),
@@ -164,6 +220,11 @@ export const CalendarView = () => {
 
   const handleDateClick = (info) => {
     openModal(info.dateStr)
+  }
+
+  const handleClearSearch = () => {
+    setSearchQuery('')
+    setDebouncedSearchQuery('')
   }
 
   if (isLoading) {
@@ -247,16 +308,50 @@ export const CalendarView = () => {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 shrink-0">
-            <h1 className="text-xl md:text-2xl font-bold text-slate-800">Booking Calendar</h1>
-            <button
-              type="button"
-              onClick={() => openModal()}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
-            >
-              <Plus className="w-4 h-4" />
-              New Booking
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4 shrink-0">
+            <h1 className="text-xl md:text-2xl font-bold text-slate-800 shrink-0">Booking Calendar</h1>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-3 w-full sm:w-auto sm:justify-end">
+              <div className="flex flex-col">
+                <div className="relative">
+                  <Search
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none"
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search bookings..."
+                    className="border border-slate-300 rounded-lg pl-9 pr-8 py-2 text-sm w-full sm:w-64 text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 transition-all duration-200"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {activeSearch && (
+                  <p className={`mt-1 text-xs ${matchingCount === 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                    {matchingCount === 0
+                      ? 'No bookings found'
+                      : `${matchingCount} booking${matchingCount === 1 ? '' : 's'} found`}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => openModal()}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                New Booking
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 min-h-0">
@@ -265,15 +360,19 @@ export const CalendarView = () => {
               initialView="dayGridMonth"
               headerToolbar={{ left: 'prev,next today', center: 'title', right: '' }}
               height="100%"
-              events={toCalendarEvents(bookings)}
+              events={calendarEvents}
               eventClick={handleEventClick}
               dateClick={handleDateClick}
               eventMouseEnter={(info) => {
                 info.el.style.cursor = 'pointer'
               }}
               eventDidMount={(info) => {
-                if (info.event.extendedProps.status === 'completed') {
+                if (info.event.extendedProps.faded) {
+                  info.el.style.opacity = '0.25'
+                } else if (info.event.extendedProps.status === 'completed') {
                   info.el.style.opacity = '0.75'
+                } else {
+                  info.el.style.opacity = '1'
                 }
               }}
             />
