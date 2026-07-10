@@ -27,3 +27,8 @@ export const bookingSchema = z.object({
 export const changeLogSchema = z.object({
   note: z.string().trim().min(1, 'Note is required').max(500),
 })
+
+export const expenseSchema = z.object({
+  label: z.string().trim().min(1).max(100),
+  amount: z.number().int().positive().max(10000000),
+})

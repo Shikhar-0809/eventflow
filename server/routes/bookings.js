@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/requireAuth.js'
 import { validate } from '../middleware/validate.js'
 import { bookingCreateRateLimiter } from '../middleware/rateLimiter.js'
 import { trackUsage } from '../middleware/trackUsage.js'
-import { bookingSchema, changeLogSchema } from '../schemas/booking.schema.js'
+import { bookingSchema, changeLogSchema, expenseSchema } from '../schemas/booking.schema.js'
 
 const router = Router()
 
@@ -257,10 +257,24 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
       name: row.name ?? '',
     }))
 
+    const { rows: expenseRows } = await pool.query(
+      'SELECT id, booking_id, label, amount, created_at FROM booking_expenses WHERE booking_id = $1 ORDER BY created_at ASC',
+      [booking.id],
+    )
+
+    const expenses = (expenseRows ?? []).map((row) => ({
+      id: Number(row.id),
+      booking_id: Number(row.booking_id),
+      label: row.label ?? '',
+      amount: Number(row.amount ?? 0),
+      created_at: row.created_at,
+    }))
+
     res.status(200).json({
       ...booking,
       change_log: changeLog ?? [],
       inventory,
+      expenses,
     })
   } catch (err) {
     next(err)
@@ -300,6 +314,60 @@ router.patch('/:id/log', validate(changeLogSchema), trackUsage('change_logged'),
     )
 
     res.status(200).json(changeLog)
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.post('/:id/expenses', validate(expenseSchema), async (req, res, next) => {
+  try {
+    const bookingId = Number(req.params.id)
+    const { rows: bookingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [bookingId])
+    if (!bookingRows[0]) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+
+    const { label, amount } = req.body
+    const { rows } = await pool.query(
+      `INSERT INTO booking_expenses (booking_id, label, amount)
+       VALUES ($1, $2, $3)
+       RETURNING id, booking_id, label, amount, created_at`,
+      [bookingId, label, amount],
+    )
+
+    const expense = rows[0]
+    res.status(201).json({
+      id: Number(expense.id),
+      booking_id: Number(expense.booking_id),
+      label: expense.label,
+      amount: Number(expense.amount),
+      created_at: expense.created_at,
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.delete('/:id/expenses/:expenseId', async (req, res, next) => {
+  try {
+    const bookingId = Number(req.params.id)
+    const expenseId = Number(req.params.expenseId)
+
+    const { rows: bookingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [bookingId])
+    if (!bookingRows[0]) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+
+    const { rowCount } = await pool.query(
+      'DELETE FROM booking_expenses WHERE id = $1 AND booking_id = $2',
+      [expenseId, bookingId],
+    )
+
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Expense not found.' })
+    }
+
+    res.status(200).json({ ok: true })
   } catch (err) {
     next(err)
   }

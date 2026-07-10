@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock } from 'lucide-react'
+import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2 } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getDaysUntilEvent } from '../utils/dateHelpers'
+import { ConfirmDialog } from './ConfirmDialog'
 import {
   confirmationMessage,
   paymentReminderMessage,
@@ -111,10 +112,27 @@ const bookingIdsMatch = (left, right) => Number(left) === Number(right)
 
 const asArray = (value) => (Array.isArray(value) ? value : [])
 
+const MAX_EXPENSE_LABEL_LENGTH = 100
+const MAX_EXPENSE_AMOUNT = 10000000
+
+const validateExpenseInput = (label, amountRaw) => {
+  const trimmedLabel = label.trim()
+  if (!trimmedLabel) return 'Enter an expense label.'
+  if (trimmedLabel.length > MAX_EXPENSE_LABEL_LENGTH) return 'Label is too long (max 100 characters).'
+
+  const amount = Number(amountRaw)
+  if (amountRaw === '' || !Number.isFinite(amount) || !Number.isInteger(amount) || amount <= 0) {
+    return 'Enter a valid amount greater than 0.'
+  }
+  if (amount > MAX_EXPENSE_AMOUNT) return 'Amount is too large.'
+  return null
+}
+
 const normalizeBookingDetail = (data) => ({
   ...data,
   inventory: asArray(data?.inventory),
   change_log: asArray(data?.change_log),
+  expenses: asArray(data?.expenses),
 })
 
 export const BookingDetail = () => {
@@ -127,6 +145,14 @@ export const BookingDetail = () => {
   const [isLogging, setIsLogging] = useState(false)
   const [logError, setLogError] = useState(null)
   const [whatsappError, setWhatsappError] = useState(null)
+  const [expenses, setExpenses] = useState([])
+  const [expenseLabel, setExpenseLabel] = useState('')
+  const [expenseAmount, setExpenseAmount] = useState('')
+  const [expenseError, setExpenseError] = useState(null)
+  const [isAddingExpense, setIsAddingExpense] = useState(false)
+  const [expenseToDelete, setExpenseToDelete] = useState(null)
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false)
+  const [expenseDeleteError, setExpenseDeleteError] = useState(null)
 
   useEffect(() => {
     if (!isDetailOpen || !selectedBooking?.id) return
@@ -138,6 +164,12 @@ export const BookingDetail = () => {
     setDetailNoteDirty(false)
     setBooking(null)
     setChangeLog([])
+    setExpenses([])
+    setExpenseLabel('')
+    setExpenseAmount('')
+    setExpenseError(null)
+    setExpenseToDelete(null)
+    setExpenseDeleteError(null)
     setIsLoading(true)
 
     const loadDetail = async () => {
@@ -148,6 +180,7 @@ export const BookingDetail = () => {
         }
         setBooking(data)
         setChangeLog(asArray(data.change_log))
+        setExpenses(asArray(data.expenses))
       } catch (err) {
         console.error('BookingDetail load failed:', err)
         if (err.status === 401) {
@@ -158,6 +191,7 @@ export const BookingDetail = () => {
         setFetchError(err.message ?? 'Something went wrong. Please try again.')
         setBooking(normalizeBookingDetail(selectedBooking))
         setChangeLog([])
+        setExpenses([])
       } finally {
         setIsLoading(false)
       }
@@ -248,6 +282,69 @@ export const BookingDetail = () => {
     }
   }
 
+  const handleAddExpense = async (e) => {
+    e.preventDefault()
+    const validationError = validateExpenseInput(expenseLabel, expenseAmount)
+    if (validationError || !booking?.id || isAddingExpense) {
+      setExpenseError(validationError)
+      return
+    }
+
+    const label = expenseLabel.trim()
+    const amount = Number(expenseAmount)
+    setExpenseError(null)
+    setIsAddingExpense(true)
+
+    const previousExpenses = asArray(expenses)
+    const optimisticExpense = {
+      id: `temp-${Date.now()}`,
+      booking_id: booking.id,
+      label,
+      amount,
+      created_at: new Date().toISOString(),
+    }
+
+    setExpenses((prev) => [...asArray(prev), optimisticExpense])
+    setExpenseLabel('')
+    setExpenseAmount('')
+
+    try {
+      const created = await api.addExpense(booking.id, { label, amount })
+      setExpenses((prev) => [
+        ...asArray(prev).filter((entry) => entry.id !== optimisticExpense.id),
+        created,
+      ])
+    } catch (err) {
+      setExpenses(previousExpenses)
+      setExpenseLabel(label)
+      setExpenseAmount(String(amount))
+      setExpenseError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsAddingExpense(false)
+    }
+  }
+
+  const handleDeleteExpenseConfirm = async () => {
+    if (!expenseToDelete || !booking?.id || isDeletingExpense) return
+
+    setExpenseDeleteError(null)
+    setIsDeletingExpense(true)
+    const previousExpenses = asArray(expenses)
+    const targetId = expenseToDelete.id
+
+    setExpenses((prev) => asArray(prev).filter((entry) => entry.id !== targetId))
+
+    try {
+      await api.deleteExpense(booking.id, targetId)
+      setExpenseToDelete(null)
+    } catch (err) {
+      setExpenses(previousExpenses)
+      setExpenseDeleteError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsDeletingExpense(false)
+    }
+  }
+
   if (!isDetailOpen || !selectedBooking) return null
 
   const display = booking ?? selectedBooking
@@ -257,6 +354,10 @@ export const BookingDetail = () => {
   const inventoryReady = !isLoading && booking != null && bookingIdsMatch(booking.id, selectedBooking.id)
   const inventoryLines = asArray(inventoryReady ? booking?.inventory : [])
   const safeChangeLog = asArray(changeLog)
+  const safeExpenses = asArray(inventoryReady ? expenses : [])
+  const totalExpenses = safeExpenses.reduce((sum, entry) => sum + Number(entry.amount ?? 0), 0)
+  const bookingTotal = Number(display.total ?? 0)
+  const estimatedProfit = bookingTotal - totalExpenses
   const eventCountdown = getEventCountdownDisplay(display.event_date, status)
 
   return (
@@ -434,6 +535,103 @@ export const BookingDetail = () => {
             )}
           </div>
 
+          <div aria-busy={!inventoryReady}>
+            <div className="flex items-center gap-2 mb-3">
+              <Receipt className="w-4 h-4 text-teal-600 shrink-0" aria-hidden="true" />
+              <h3 className="text-sm font-semibold text-slate-800">Expenses & Profit</h3>
+            </div>
+            {!inventoryReady ? (
+              <InventoryUsedSkeleton />
+            ) : (
+              <>
+                {safeExpenses.length === 0 ? (
+                  <p className="text-sm text-slate-400 mb-3">No expenses logged.</p>
+                ) : (
+                  <ul className="space-y-2 mb-3">
+                    {safeExpenses.map((entry) => (
+                      <li
+                        key={entry.id}
+                        className="flex items-center justify-between gap-3 text-sm bg-slate-50 rounded-lg px-3 py-2"
+                      >
+                        <span className="text-slate-700">{entry.label}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-semibold text-slate-800">{formatCurrency(entry.amount)}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpenseDeleteError(null)
+                              setExpenseToDelete(entry)
+                            }}
+                            className="p-0.5 text-slate-400 hover:text-red-500 transition-all duration-200"
+                            aria-label={`Delete ${entry.label}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <form onSubmit={handleAddExpense} className="space-y-2 mb-3">
+                  {expenseError && (
+                    <p role="alert" className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+                      {expenseError}
+                    </p>
+                  )}
+                  {expenseDeleteError && (
+                    <p role="alert" className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+                      {expenseDeleteError}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-end gap-2">
+                    <input
+                      type="text"
+                      value={expenseLabel}
+                      onChange={(e) => {
+                        setExpenseLabel(e.target.value.slice(0, MAX_EXPENSE_LABEL_LENGTH))
+                        if (expenseError) setExpenseError(null)
+                      }}
+                      placeholder="e.g. Labour, Transport"
+                      className="flex-1 min-w-[140px] border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={expenseAmount}
+                      onChange={(e) => {
+                        setExpenseAmount(e.target.value)
+                        if (expenseError) setExpenseError(null)
+                      }}
+                      placeholder="Amount"
+                      className="w-28 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isAddingExpense}
+                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 ${
+                        !isAddingExpense
+                          ? 'bg-teal-600 hover:bg-teal-700 text-white'
+                          : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {isAddingExpense && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      Add
+                    </button>
+                  </div>
+                </form>
+
+                <p className="text-sm text-slate-600">
+                  Total Expenses: {formatCurrency(totalExpenses)} | Estimated Profit:{' '}
+                  <span className={`font-bold ${estimatedProfit >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {formatCurrency(estimatedProfit)}
+                  </span>
+                </p>
+              </>
+            )}
+          </div>
+
           <div>
             <h3 className="text-sm font-semibold text-slate-800 mb-3">Send to Client</h3>
             {whatsappError && (
@@ -510,6 +708,20 @@ export const BookingDetail = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={expenseToDelete != null}
+        title="Delete Expense"
+        message="Delete this expense?"
+        confirmLabel="Delete"
+        confirmVariant="danger"
+        confirmingLabel="Deleting..."
+        isConfirming={isDeletingExpense}
+        onConfirm={handleDeleteExpenseConfirm}
+        onCancel={() => {
+          if (!isDeletingExpense) setExpenseToDelete(null)
+        }}
+      />
     </div>
   )
 }

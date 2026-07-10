@@ -57,6 +57,10 @@ export const api = {
     return request(`/bookings/check-conflict?${params}`)
   },
   logChange: (id, note) => request(`/bookings/${id}/log`, { method: 'PATCH', body: JSON.stringify({ note }) }),
+  addExpense: (bookingId, data) =>
+    request(`/bookings/${bookingId}/expenses`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteExpense: (bookingId, expenseId) =>
+    request(`/bookings/${bookingId}/expenses/${expenseId}`, { method: 'DELETE' }),
   logClientAction: (eventType, bookingId) =>
     request('/usage/log-client-action', {
       method: 'POST',

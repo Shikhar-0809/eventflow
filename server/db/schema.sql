@@ -62,3 +62,11 @@ CREATE TABLE IF NOT EXISTS merchant_settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS booking_expenses (
+  id          SERIAL PRIMARY KEY,
+  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  label       TEXT NOT NULL,
+  amount      INTEGER NOT NULL CHECK (amount > 0),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
