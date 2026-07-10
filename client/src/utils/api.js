@@ -42,6 +42,7 @@ export const api = {
   logout: () => request('/auth/logout', { method: 'POST' }),
   getMe: () => request('/auth/me'),
   getBookings: () => request('/bookings'),
+  getPendingBalances: () => request('/bookings/pending-balances'),
   getBooking: async (id) => {
     const body = await request(`/bookings/${id}`, { cache: 'no-store' })
     if (Array.isArray(body)) {

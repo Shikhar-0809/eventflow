@@ -226,6 +226,42 @@ router.get('/check-conflict', async (req, res, next) => {
   }
 })
 
+router.get('/pending-balances', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT
+         id, client_name, phone, event_type, event_date, venue,
+         guest_count, status, advance, total,
+         (total - advance) AS pending_balance,
+         (event_date::date - CURRENT_DATE) AS days_until_event
+       FROM bookings
+       WHERE status IN ('confirmed', 'pending')
+         AND (total - advance) > 0
+         AND event_date::date >= CURRENT_DATE
+       ORDER BY event_date ASC`,
+    )
+
+    const bookings = rows.map((row) => ({
+      id: Number(row.id),
+      client_name: row.client_name,
+      phone: row.phone,
+      event_type: row.event_type,
+      event_date: row.event_date,
+      venue: row.venue,
+      guest_count: Number(row.guest_count),
+      status: row.status,
+      advance: Number(row.advance ?? 0),
+      total: Number(row.total ?? 0),
+      pending_balance: Number(row.pending_balance ?? 0),
+      days_until_event: Number(row.days_until_event ?? 0),
+    }))
+
+    res.status(200).json(bookings)
+  } catch (err) {
+    next(err)
+  }
+})
+
 router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
   try {
     const { rows: bookingRows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [req.params.id])

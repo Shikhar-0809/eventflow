@@ -54,3 +54,33 @@ export const paymentReminderMessage = (booking) => {
 
   return buildWaLink(phone, message)
 }
+
+const toINR = (n) => Number(n).toLocaleString('en-IN')
+
+export const selfSummaryMessage = (booking) => {
+  const merchantPhone = String(import.meta.env.VITE_MERCHANT_PHONE ?? '').trim()
+  if (!merchantPhone) return null
+
+  const phone = validatePhoneForWhatsApp(merchantPhone)
+  if (!phone) return null
+
+  const clientName = sanitizeText(booking?.client_name, 100)
+  const eventDate = sanitizeText(booking?.event_date, 10)
+  const eventType = formatEventType(booking?.event_type)
+  const venue = sanitizeText(booking?.venue, 200) || 'TBD'
+  const guestCount = Number(booking?.guest_count)
+  const total = Number(booking?.total) || 0
+  const advance = Number(booking?.advance) || 0
+  const pending = Math.max(0, total - advance)
+
+  if (!clientName || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) return null
+  if (!Number.isFinite(guestCount) || guestCount <= 0) return null
+
+  const message =
+    `EventFlow Booking Summary — ${clientName}'s ${eventType} on ${eventDate}. ` +
+    `Venue: ${venue}. Guests: ${guestCount}. ` +
+    `Total: ₹${toINR(total)}. Advance: ₹${toINR(advance)}. Pending: ₹${toINR(pending)}. ` +
+    '- Bala Ji Tent House'
+
+  return buildWaLink(phone, message)
+}

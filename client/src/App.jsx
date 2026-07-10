@@ -8,6 +8,7 @@ import { AnalyticsView } from './components/AnalyticsView'
 import { UsageView } from './components/UsageView'
 import { InventoryView } from './components/InventoryView'
 import { RecordsView } from './components/RecordsView'
+import { PendingBalancesView } from './components/PendingBalancesView'
 import { BookingPage } from './components/BookingPage'
 import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
@@ -95,6 +96,7 @@ export default function App() {
             {activeView === 'usage' && <UsageView />}
             {activeView === 'inventory' && <InventoryView />}
             {activeView === 'records' && <RecordsView />}
+            {activeView === 'pending-balances' && <PendingBalancesView />}
             {activeView === 'calendar' && <CalendarView />}
             <BookingDetail />
           </main>

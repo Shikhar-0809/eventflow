@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Tent, Calendar, Package, TableProperties, BarChart2, Activity } from 'lucide-react'
+import { Tent, Calendar, Package, TableProperties, BarChart2, Activity, IndianRupee } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -40,6 +40,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [logoutError, setLogoutError] = useState(null)
+  const [pendingBalanceCount, setPendingBalanceCount] = useState(null)
   const { logout } = useAuthStore()
   const { activeView, setActiveView, bookings } = useBookingStore()
   const { monthlyRevenueTarget, loadSettings } = useSettingsStore()
@@ -74,6 +75,17 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
       }
     }
     loadRevenue()
+    const loadPendingBalanceCount = async () => {
+      try {
+        const data = await api.getPendingBalances()
+        if (Array.isArray(data)) {
+          setPendingBalanceCount(data.length)
+        }
+      } catch {
+        // Silent fail — badge hidden on error
+      }
+    }
+    loadPendingBalanceCount()
   }, [loadSettings])
 
   useEffect(() => {
@@ -146,6 +158,19 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         >
           <Package className="w-4 h-4" />
           Inventory
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('pending-balances')}
+          className={navButtonClass('pending-balances')}
+        >
+          <IndianRupee className="w-4 h-4 shrink-0" />
+          <span className="flex-1 text-left">Pending Balances</span>
+          {pendingBalanceCount > 0 && (
+            <span className="rounded-full bg-amber-500 text-white text-xs px-1.5 font-medium">
+              {pendingBalanceCount}
+            </span>
+          )}
         </button>
         <button
           type="button"

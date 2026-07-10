@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2, CheckCircle2 } from 'lucide-react'
+import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2, CheckCircle2, Send } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
@@ -9,6 +9,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import {
   confirmationMessage,
   paymentReminderMessage,
+  selfSummaryMessage,
   validatePhoneForWhatsApp,
 } from '../utils/whatsapp'
 
@@ -158,6 +159,7 @@ export const BookingDetail = () => {
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
   const [isCompleting, setIsCompleting] = useState(false)
   const [completeError, setCompleteError] = useState(null)
+  const [selfWhatsappError, setSelfWhatsappError] = useState(null)
 
   useEffect(() => {
     if (!isDetailOpen || !selectedBooking?.id) return
@@ -177,6 +179,7 @@ export const BookingDetail = () => {
     setExpenseDeleteError(null)
     setShowCompleteConfirm(false)
     setCompleteError(null)
+    setSelfWhatsappError(null)
     setIsLoading(true)
 
     const loadDetail = async () => {
@@ -234,6 +237,7 @@ export const BookingDetail = () => {
 
   const handleWhatsApp = (type) => {
     setWhatsappError(null)
+    setSelfWhatsappError(null)
     const target = booking ?? selectedBooking
     if (!target) return
 
@@ -257,6 +261,21 @@ export const BookingDetail = () => {
       ? 'whatsapp_confirmation_sent'
       : 'whatsapp_reminder_sent'
     void api.logClientAction(eventType, target.id).catch(() => {})
+  }
+
+  const handleSelfWhatsApp = () => {
+    setSelfWhatsappError(null)
+    setWhatsappError(null)
+    const target = booking ?? selectedBooking
+    if (!target) return
+
+    const url = selfSummaryMessage(target)
+    if (!url) {
+      setSelfWhatsappError('Set VITE_MERCHANT_PHONE in .env to use this.')
+      return
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   const handleLogChange = async (e) => {
@@ -705,6 +724,17 @@ export const BookingDetail = () => {
                 <Bell className="w-4 h-4" />
                 Send Payment Reminder
               </button>
+              <button
+                type="button"
+                onClick={handleSelfWhatsApp}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-slate-700 border border-slate-300 hover:bg-slate-50 transition-all duration-200"
+              >
+                <Send className="w-4 h-4" />
+                Send to My WhatsApp
+              </button>
+              {selfWhatsappError && (
+                <p className="text-red-500 text-xs">{selfWhatsappError}</p>
+              )}
             </div>
           </div>
 
