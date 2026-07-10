@@ -24,7 +24,7 @@ export const bookingSchema = z.object({
   inventory: z.array(bookingInventoryLineSchema).max(50).optional(),
 }).superRefine((data, ctx) => {
   const grandTotal = data.grand_total ?? data.total ?? 0
-  if (data.advance > grandTotal) {
+  if (grandTotal > 0 && data.advance > grandTotal) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Advance cannot exceed total.',

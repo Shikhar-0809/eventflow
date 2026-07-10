@@ -371,14 +371,18 @@ export const BookingPageContent = () => {
   )
 
   const resolvedBilling = useMemo(() => {
-    if (!isEditMode || !selectedBooking || billing.inventoryLines.length > 0) {
+    if (!isEditMode || !selectedBooking) {
       return billing
     }
-    const storedGrand = Number(selectedBooking.grand_total ?? selectedBooking.total ?? 0)
-    if (billing.grandTotal > 0 || storedGrand === 0) {
+    if (billing.inventoryLines.length > 0) {
       return billing
     }
-    const storedSubtotal = Number(selectedBooking.subtotal ?? storedGrand)
+    const storedGrand = Number(selectedBooking.grand_total ?? 0) > 0
+      ? Number(selectedBooking.grand_total)
+      : Number(selectedBooking.total ?? 0)
+    const storedSubtotal = Number(selectedBooking.subtotal ?? 0) > 0
+      ? Number(selectedBooking.subtotal)
+      : storedGrand
     const resolvedDiscount = Number(selectedBooking.discount ?? discount ?? 0)
     return {
       subtotal: storedSubtotal,
