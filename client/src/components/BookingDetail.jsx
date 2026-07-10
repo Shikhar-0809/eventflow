@@ -34,6 +34,11 @@ const EVENT_TYPE_LABELS = {
 const formatStatus = (status) => STATUS_LABELS[status] ?? 'Confirmed'
 const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
+const displayEventType = (booking) =>
+  booking?.event_type === 'other' && booking?.event_type_custom
+    ? booking.event_type_custom
+    : formatEventType(booking?.event_type)
+
 const formatDisplayDate = (dateStr) => {
   if (dateStr == null || dateStr === '') return '—'
   const normalized = String(dateStr).slice(0, 10)
@@ -266,7 +271,7 @@ export const BookingDetail = () => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <DetailField label="Event Type" value={formatEventType(display.event_type)} />
+            <DetailField label="Event Type" value={displayEventType(display)} />
             <DetailField label="Date" value={formatDisplayDate(display.event_date)} />
             <DetailField label="Guests" value={display.guest_count} />
             <DetailField label="Venue" value={display.venue?.trim() || '—'} />

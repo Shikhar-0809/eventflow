@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   client_name   TEXT    NOT NULL,
   phone         TEXT    NOT NULL,
   event_type    TEXT    NOT NULL,
+  event_type_custom TEXT,
   event_date    TEXT    NOT NULL,
   guest_count   INTEGER NOT NULL,
   venue         TEXT,

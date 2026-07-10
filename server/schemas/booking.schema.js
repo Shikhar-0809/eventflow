@@ -11,6 +11,7 @@ export const bookingSchema = z.object({
   client_name: z.string().trim().min(2, 'Name is too short').max(100),
   phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
   event_type: z.enum(['wedding', 'birthday', 'corporate', 'other']),
+  event_type_custom: z.string().trim().max(50).optional(),
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   guest_count: z.number().int().positive().max(10000),
   venue: z.string().trim().max(200).optional(),
@@ -21,6 +22,14 @@ export const bookingSchema = z.object({
   discount: z.number().int().nonnegative().max(10000000).optional(),
   grand_total: z.number().int().nonnegative().optional(),
   inventory: z.array(bookingInventoryLineSchema).max(50).optional(),
+}).superRefine((data, ctx) => {
+  if (data.event_type === 'other' && !data.event_type_custom?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify the event type.',
+      path: ['event_type_custom'],
+    })
+  }
 })
 
 export const changeLogSchema = z.object({

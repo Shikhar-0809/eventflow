@@ -22,11 +22,16 @@ const EVENT_TYPE_LABELS = {
 
 const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
+const eventTypeLabel = (booking) =>
+  booking.event_type === 'other' && booking.event_type_custom
+    ? booking.event_type_custom
+    : formatEventType(booking.event_type)
+
 const toCalendarEvents = (bookings) =>
   bookings.map((booking) => {
     const color = STATUS_COLORS[booking.status] ?? STATUS_COLORS.confirmed
     return {
-      title: `${booking.client_name} — ${booking.event_type}`,
+      title: `${booking.client_name} — ${eventTypeLabel(booking)}`,
       date: booking.event_date,
       backgroundColor: color,
       borderColor: color,

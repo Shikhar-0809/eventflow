@@ -20,6 +20,7 @@ const COLUMN_MIGRATIONS = [
   'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS subtotal INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS grand_total INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS event_type_custom TEXT',
 ]
 
 export const initDb = async () => {

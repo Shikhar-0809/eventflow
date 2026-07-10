@@ -26,10 +26,13 @@ const EVENT_TYPE_LABELS = {
 
 const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
 
+const MAX_EVENT_TYPE_CUSTOM_LENGTH = 50
+
 const EMPTY_FORM = {
   client_name: '',
   phone: '',
   event_type: 'wedding',
+  event_type_custom: '',
   event_date: '',
   guest_count: '',
   venue: '',
@@ -111,6 +114,9 @@ const buildPayload = (form, billing) => ({
   client_name: form.client_name.trim(),
   phone: form.phone.trim(),
   event_type: form.event_type,
+  ...(form.event_type === 'other'
+    ? { event_type_custom: form.event_type_custom.trim() }
+    : {}),
   event_date: form.event_date,
   guest_count: Number(form.guest_count),
   venue: form.venue.trim() || undefined,
@@ -132,6 +138,7 @@ const bookingToForm = (booking) => ({
   client_name: booking?.client_name ?? '',
   phone: booking?.phone != null ? String(booking.phone).replace(/\D/g, '') : '',
   event_type: booking?.event_type ?? 'wedding',
+  event_type_custom: booking?.event_type_custom ?? '',
   event_date: normalizeEventDate(booking?.event_date),
   guest_count: booking?.guest_count != null ? String(booking.guest_count) : '',
   venue: booking?.venue ?? '',
@@ -384,6 +391,7 @@ export const BookingPageContent = () => {
         form.client_name.trim() !== baseline.client_name
         || form.phone.trim() !== baseline.phone
         || form.event_type !== baseline.event_type
+        || form.event_type_custom.trim() !== (baseline.event_type_custom ?? '').trim()
         || form.event_date !== baseline.event_date
         || form.guest_count !== baseline.guest_count
         || form.venue.trim() !== (baseline.venue ?? '').trim()
@@ -401,6 +409,7 @@ export const BookingPageContent = () => {
       form.client_name.trim() !== ''
       || form.phone.trim() !== ''
       || form.event_type !== baseline.event_type
+      || form.event_type_custom.trim() !== ''
       || form.event_date !== baseline.event_date
       || form.guest_count !== ''
       || form.venue.trim() !== ''
@@ -467,6 +476,24 @@ export const BookingPageContent = () => {
 
   const handleChange = (name, value) => {
     const nextValue = name === 'phone' ? value.trim() : value
+    if (name === 'event_type') {
+      setForm((prev) => ({
+        ...prev,
+        event_type: nextValue,
+        event_type_custom: nextValue === 'other' ? prev.event_type_custom : '',
+      }))
+      if (touched.event_type) {
+        validateField('event_type', nextValue)
+      }
+      if (nextValue !== 'other') {
+        setFieldErrors((prev) => {
+          const next = { ...prev }
+          delete next.event_type_custom
+          return next
+        })
+      }
+      return
+    }
     setForm((prev) => ({ ...prev, [name]: nextValue }))
     if (touched[name]) {
       validateField(name, nextValue)
@@ -713,6 +740,7 @@ export const BookingPageContent = () => {
         client_name: true,
         phone: true,
         event_type: true,
+        event_type_custom: true,
         event_date: true,
         guest_count: true,
         venue: true,
@@ -1020,6 +1048,32 @@ export const BookingPageContent = () => {
                 </select>
                 {touched.event_type && fieldErrors.event_type && (
                   <p className="mt-1 text-sm text-red-700">{fieldErrors.event_type}</p>
+                )}
+                {form.event_type === 'other' && (
+                  <div className="mt-3 space-y-1 transition-all duration-200 ease-out">
+                    <label htmlFor="event_type_custom" className="block text-sm font-medium text-slate-700">
+                      Specify Event Type
+                    </label>
+                    <input
+                      id="event_type_custom"
+                      type="text"
+                      value={form.event_type_custom}
+                      onChange={(e) => handleChange('event_type_custom', e.target.value.slice(0, MAX_EVENT_TYPE_CUSTOM_LENGTH))}
+                      onBlur={(e) => handleBlur('event_type_custom', e.target.value)}
+                      placeholder="e.g. Jagran, Puja, Anniversary..."
+                      className={inputClass(touched.event_type_custom && fieldErrors.event_type_custom)}
+                    />
+                    <div className="flex items-center justify-between gap-2">
+                      {touched.event_type_custom && fieldErrors.event_type_custom ? (
+                        <p role="alert" className="text-sm text-red-700">{fieldErrors.event_type_custom}</p>
+                      ) : (
+                        <span />
+                      )}
+                      <span className="text-xs text-slate-400 shrink-0">
+                        {MAX_EVENT_TYPE_CUSTOM_LENGTH - form.event_type_custom.length} characters left
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
 

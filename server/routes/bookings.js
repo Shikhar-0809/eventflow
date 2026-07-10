@@ -63,11 +63,15 @@ const replaceBookingInventory = async (client, bookingId, inventoryLines = []) =
   }
 }
 
+const resolveEventTypeCustom = (event_type, event_type_custom) =>
+  event_type === 'other' ? (event_type_custom?.trim() || null) : null
+
 const createBooking = async (fields, inventoryLines) => {
   const {
     client_name,
     phone,
     event_type,
+    event_type_custom,
     event_date,
     guest_count,
     venue,
@@ -84,13 +88,14 @@ const createBooking = async (fields, inventoryLines) => {
 
     const { rows: insertRows } = await client.query(
       `INSERT INTO bookings (
-         client_name, phone, event_type, event_date, guest_count, venue, advance, total,
+         client_name, phone, event_type, event_type_custom, event_date, guest_count, venue, advance, total,
          subtotal, discount, grand_total, notes
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
       [
         client_name,
         phone,
         event_type,
+        resolveEventTypeCustom(event_type, event_type_custom),
         event_date,
         guest_count,
         venue ?? null,
@@ -124,6 +129,7 @@ const updateBooking = async (id, fields, inventoryLines) => {
     client_name,
     phone,
     event_type,
+    event_type_custom,
     event_date,
     guest_count,
     venue,
@@ -142,14 +148,15 @@ const updateBooking = async (id, fields, inventoryLines) => {
 
     await client.query(
       `UPDATE bookings
-       SET client_name = $1, phone = $2, event_type = $3, event_date = $4, guest_count = $5,
-           venue = $6, advance = $7, total = $8, subtotal = $9,
-           discount = $10, grand_total = $11, notes = $12, updated_at = $13
-       WHERE id = $14`,
+       SET client_name = $1, phone = $2, event_type = $3, event_type_custom = $4, event_date = $5, guest_count = $6,
+           venue = $7, advance = $8, total = $9, subtotal = $10,
+           discount = $11, grand_total = $12, notes = $13, updated_at = $14
+       WHERE id = $15`,
       [
         client_name,
         phone,
         event_type,
+        resolveEventTypeCustom(event_type, event_type_custom),
         event_date,
         guest_count,
         venue ?? null,
