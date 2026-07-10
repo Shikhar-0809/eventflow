@@ -11,6 +11,9 @@ import {
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { useAuthStore } from '../store/authStore'
+import { useSettingsStore } from '../store/settingsStore'
+
+const MAX_MONTHLY_TARGET = 100000000
 
 const formatMonthLabel = (yyyyMm) => {
   const [year, month] = yyyyMm.split('-')
@@ -79,6 +82,33 @@ export const AnalyticsView = () => {
   const [monthly, setMonthly] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [settingsLoading, setSettingsLoading] = useState(true)
+  const [settingsError, setSettingsError] = useState(null)
+  const [targetInput, setTargetInput] = useState('')
+  const [targetSaveError, setTargetSaveError] = useState(null)
+  const [isSavingTarget, setIsSavingTarget] = useState(false)
+  const [savedMessage, setSavedMessage] = useState(null)
+  const { loadSettings, setMonthlyRevenueTarget } = useSettingsStore()
+
+  const fetchSettings = useCallback(async () => {
+    setSettingsLoading(true)
+    setSettingsError(null)
+    try {
+      const data = await api.getSettings()
+      const parsed = Number.parseInt(data.monthly_revenue_target, 10)
+      const value = Number.isFinite(parsed) ? parsed : 0
+      setTargetInput(value > 0 ? String(value) : '')
+      setMonthlyRevenueTarget(value)
+    } catch (err) {
+      if (err.status === 401) {
+        useAuthStore.setState({ isAuthenticated: false, isLoading: false })
+        return
+      }
+      setSettingsError(err.message)
+    } finally {
+      setSettingsLoading(false)
+    }
+  }, [setMonthlyRevenueTarget])
 
   const fetchAnalytics = useCallback(async () => {
     setIsLoading(true)
@@ -103,7 +133,39 @@ export const AnalyticsView = () => {
 
   useEffect(() => {
     fetchAnalytics()
-  }, [fetchAnalytics])
+    fetchSettings()
+  }, [fetchAnalytics, fetchSettings])
+
+  const handleSaveTarget = async (e) => {
+    e.preventDefault()
+    setTargetSaveError(null)
+    setSavedMessage(null)
+
+    const trimmed = targetInput.trim()
+    const parsed = trimmed === '' ? 0 : Number(trimmed)
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_MONTHLY_TARGET) {
+      setTargetSaveError(`Enter a whole number from 0 to ${MAX_MONTHLY_TARGET.toLocaleString('en-IN')}.`)
+      return
+    }
+
+    setIsSavingTarget(true)
+    try {
+      await api.updateSettings({ monthly_revenue_target: parsed })
+      setMonthlyRevenueTarget(parsed)
+      setTargetInput(parsed > 0 ? String(parsed) : '')
+      setSavedMessage('Saved')
+      await loadSettings()
+      setTimeout(() => setSavedMessage(null), 2500)
+    } catch (err) {
+      if (err.status === 401) {
+        useAuthStore.setState({ isAuthenticated: false, isLoading: false })
+        return
+      }
+      setTargetSaveError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsSavingTarget(false)
+    }
+  }
 
   const chartData = useMemo(
     () =>
@@ -192,6 +254,61 @@ export const AnalyticsView = () => {
           </p>
           <p className="text-sm text-slate-500 mt-1">Total Clients</p>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm p-4 border border-slate-200">
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">Set Monthly Target</h2>
+        {settingsLoading ? (
+          <div className="animate-pulse space-y-2">
+            <div className="h-10 bg-slate-100 rounded-lg" />
+            <div className="h-8 bg-slate-100 rounded w-20" />
+          </div>
+        ) : settingsError ? (
+          <div>
+            <p className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2 mb-3">
+              {settingsError}
+            </p>
+            <button
+              type="button"
+              onClick={fetchSettings}
+              className="px-3 py-1.5 text-sm bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSaveTarget} className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1 min-w-0">
+              <label htmlFor="monthly_revenue_target" className="block text-xs text-slate-500 mb-1">
+                Monthly revenue target (₹)
+              </label>
+              <input
+                id="monthly_revenue_target"
+                type="number"
+                min="0"
+                max={MAX_MONTHLY_TARGET}
+                step="1"
+                value={targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+                placeholder="e.g. 200000"
+                className="border border-slate-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isSavingTarget}
+              className="px-4 py-2 text-sm bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-lg font-medium transition-all duration-200 shrink-0"
+            >
+              {isSavingTarget ? 'Saving…' : 'Save'}
+            </button>
+            {savedMessage && (
+              <p className="text-sm text-teal-700 font-medium sm:pb-2">{savedMessage}</p>
+            )}
+          </form>
+        )}
+        {targetSaveError && !settingsLoading && !settingsError && (
+          <p role="alert" className="mt-2 text-sm text-red-700">{targetSaveError}</p>
+        )}
       </div>
 
       {!hasEnoughData ? (

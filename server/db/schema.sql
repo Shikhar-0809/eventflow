@@ -57,3 +57,8 @@ CREATE TABLE IF NOT EXISTS inventory_damage_log (
   note        TEXT,
   logged_at   TEXT    DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS merchant_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

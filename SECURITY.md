@@ -222,6 +222,8 @@ Cross-check against this table any time a new route is added — every row excep
 | `PATCH /api/inventory/:id` | Yes | No |
 | `POST /api/inventory/:id/damage` | Yes | No |
 | `POST /api/inventory/check-availability` | Yes | No |
+| `GET /api/settings` | Yes | No |
+| `PATCH /api/settings` | Yes | No |
 
 ---
 

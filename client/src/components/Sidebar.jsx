@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Tent, Calendar, Package, BarChart2, Activity } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
+import { useSettingsStore } from '../store/settingsStore'
 import { api } from '../utils/api'
+import { formatCurrency } from '../utils/formatCurrency'
 
 const formatEventDate = (dateStr) => {
   if (!dateStr || dateStr === '—') return '—'
@@ -34,11 +36,13 @@ const computeStats = (bookings) => {
 
 export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   const [stats, setStats] = useState({ thisMonth: 0, pendingAdvances: 0, nextEvent: '—' })
+  const [revenueThisMonth, setRevenueThisMonth] = useState(null)
   const [error, setError] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [logoutError, setLogoutError] = useState(null)
   const { logout } = useAuthStore()
   const { activeView, setActiveView, bookings } = useBookingStore()
+  const { monthlyRevenueTarget, loadSettings } = useSettingsStore()
 
   const navButtonClass = (view) =>
     view === activeView
@@ -60,7 +64,23 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
 
   useEffect(() => {
     fetchStats()
-  }, [])
+    loadSettings()
+    const loadRevenue = async () => {
+      try {
+        const summary = await api.getAnalyticsSummary()
+        setRevenueThisMonth(Number(summary.revenueThisMonth) || 0)
+      } catch {
+        setRevenueThisMonth(null)
+      }
+    }
+    loadRevenue()
+  }, [loadSettings])
+
+  useEffect(() => {
+    if (activeView === 'analytics') {
+      loadSettings()
+    }
+  }, [activeView, loadSettings])
 
   useEffect(() => {
     if (bookings.length > 0) {
@@ -80,6 +100,19 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
     } catch (err) {
       setLogoutError(err.message)
     }
+  }
+
+  const target = monthlyRevenueTarget ?? 0
+  const revenue = revenueThisMonth ?? 0
+  const showRevenueTarget = monthlyRevenueTarget != null && revenueThisMonth != null
+  const targetReached = showRevenueTarget && target > 0 && revenue >= target
+  const progressPct = showRevenueTarget && target > 0
+    ? Math.min(100, (revenue / target) * 100)
+    : 0
+
+  const openTargetSettings = () => {
+    setActiveView('analytics')
+    onMobileClose?.()
   }
 
   return (
@@ -157,6 +190,37 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
               {isLoading ? '…' : error ? '—' : formatEventDate(stats.nextEvent)}
             </p>
           </div>
+
+          {showRevenueTarget && target > 0 && (
+            <div className="bg-slate-800 rounded-lg p-3">
+              <p className="text-xs text-slate-400 mb-2">
+                {targetReached ? 'Target reached! 🎯' : 'Revenue Target'}
+              </p>
+              <div className="h-2 w-full bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-200 ${
+                    targetReached ? 'bg-emerald-500' : 'bg-teal-500'
+                  }`}
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-300 mt-2">
+                {formatCurrency(revenue)} of {formatCurrency(target)} target
+              </p>
+            </div>
+          )}
+
+          {showRevenueTarget && target <= 0 && (
+            <div className="bg-slate-800 rounded-lg p-3">
+              <button
+                type="button"
+                onClick={openTargetSettings}
+                className="text-xs text-slate-400 hover:text-slate-200 transition-all duration-200"
+              >
+                Set target →
+              </button>
+            </div>
+          )}
         </div>
 
         {logoutError && (
