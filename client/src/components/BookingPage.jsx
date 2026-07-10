@@ -681,9 +681,6 @@ export const BookingPageContent = () => {
   ])
 
   const hasConflict = conflictBooking !== null
-  const payload = buildPayload(form, resolvedBilling)
-  const isFormValid = bookingSchema.safeParse(payload).success
-  const canSubmit = isFormValid && !isSubmitting
 
   const submitBooking = useCallback(async () => {
     if (submittingRef.current) return
@@ -947,9 +944,9 @@ export const BookingPageContent = () => {
       <button
         type="submit"
         form="booking-page-form"
-        disabled={!canSubmit}
+        disabled={isSubmitting}
         className={`w-full mt-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-          canSubmit
+          !isSubmitting
             ? 'bg-teal-600 hover:bg-teal-700 text-white cursor-pointer'
             : 'bg-slate-300 text-slate-500 cursor-not-allowed'
         }`}
