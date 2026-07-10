@@ -59,7 +59,7 @@ const normalizeEventDate = (value) => {
 
 const quantitiesFromInventoryLines = (lines) => {
   const quantities = {}
-  for (const line of lines ?? []) {
+  for (const line of asArray(lines)) {
     if (line?.item_id == null) continue
     quantities[line.item_id] = line.quantity ?? 0
   }
@@ -68,7 +68,7 @@ const quantitiesFromInventoryLines = (lines) => {
 
 const unitPricesFromInventoryLines = (lines) => {
   const prices = {}
-  for (const line of lines ?? []) {
+  for (const line of asArray(lines)) {
     if (line?.item_id == null || line.unit_price == null) continue
     prices[line.item_id] = line.unit_price
   }
@@ -80,9 +80,11 @@ const baselineCreateForm = (prefillDate) => ({
   event_date: prefillDate ?? '',
 })
 
+const asArray = (value) => (Array.isArray(value) ? value : [])
+
 const inventoryLinesEqual = (a = [], b = []) => {
-  const mapA = new Map(a.map((line) => [line.item_id, line.quantity]))
-  const mapB = new Map(b.map((line) => [line.item_id, line.quantity]))
+  const mapA = new Map(asArray(a).map((line) => [line.item_id, line.quantity]))
+  const mapB = new Map(asArray(b).map((line) => [line.item_id, line.quantity]))
   if (mapA.size !== mapB.size) return false
   for (const [id, qty] of mapA) {
     if (mapB.get(id) !== qty) return false
@@ -95,6 +97,14 @@ const unitPricesEqual = (a = {}, b = {}) => {
   const keysB = Object.keys(b)
   if (keysA.length !== keysB.length) return false
   return keysA.every((key) => a[key] === b[key])
+}
+
+const quantitiesEqual = (a = {}, b = {}) => {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
+  for (const key of keys) {
+    if ((a[key] ?? 0) !== (b[key] ?? 0)) return false
+  }
+  return true
 }
 
 const buildPayload = (form, billing) => ({
@@ -125,11 +135,12 @@ const bookingToForm = (booking) => ({
 })
 
 const formatShortfallConfirmMessage = (shortfalls) => {
-  if (shortfalls.length === 1) {
-    const row = shortfalls[0]
+  const rows = asArray(shortfalls)
+  if (rows.length === 1) {
+    const row = rows[0]
     return `Not enough ${row.name} for this date. Confirm anyway?`
   }
-  const summary = shortfalls.map((row) => row.name).join(', ')
+  const summary = rows.map((row) => row.name).join(', ')
   return `Not enough inventory for this date (${summary}). Confirm anyway?`
 }
 
@@ -147,6 +158,7 @@ export const BookingPageContent = () => {
   } = useBookingStore()
 
   const { items: inventoryItems, setItems } = useInventoryStore()
+  const safeInventoryItems = asArray(inventoryItems)
 
   const isEditMode = modalMode === 'edit'
   const [visible, setVisible] = useState(false)
@@ -245,7 +257,7 @@ export const BookingPageContent = () => {
       try {
         const data = await api.getBooking(selectedBooking.id)
         if (!active) return
-        const lines = data?.inventory ?? []
+        const lines = asArray(data?.inventory)
         setForm(bookingToForm(data))
         setInventoryQuantities(quantitiesFromInventoryLines(lines))
         const savedPrices = unitPricesFromInventoryLines(lines)
@@ -275,7 +287,7 @@ export const BookingPageContent = () => {
 
     let active = true
     const loadInventory = async () => {
-      if ((inventoryItems ?? []).length > 0) return
+      if (safeInventoryItems.length > 0) return
       try {
         const data = await api.getInventory()
         if (active) setItems(data)
@@ -288,10 +300,10 @@ export const BookingPageContent = () => {
     return () => {
       active = false
     }
-  }, [isModalOpen, inventoryItems.length, setItems])
+  }, [isModalOpen, safeInventoryItems.length, setItems])
 
   const billLines = useMemo(() => {
-    return (inventoryItems ?? [])
+    return safeInventoryItems
       .map((item) => {
         const quantity = inventoryQuantities[item.id] || 0
         if (quantity <= 0) return null
@@ -308,7 +320,7 @@ export const BookingPageContent = () => {
         }
       })
       .filter(Boolean)
-  }, [inventoryItems, inventoryQuantities, unitPriceOverrides])
+  }, [safeInventoryItems, inventoryQuantities, unitPriceOverrides])
 
   const subtotal = useMemo(
     () => billLines.reduce((sum, line) => sum + line.line_total, 0),
@@ -355,7 +367,7 @@ export const BookingPageContent = () => {
         || form.notes.trim() !== (baseline.notes ?? '').trim()
         || form.advance !== baseline.advance
         || discount !== baselineDiscount
-        || !inventoryLinesEqual(inventoryQuantities, baselineQty)
+        || !quantitiesEqual(inventoryQuantities, baselineQty)
         || !unitPricesEqual(unitPriceOverrides, baselineUnitPrices)
       )
     }
@@ -456,7 +468,7 @@ export const BookingPageContent = () => {
     if (quantity > 0) {
       setUnitPriceOverrides((prev) => {
         if (prev[itemId] != null) return prev
-        const item = inventoryItems.find((row) => row.id === itemId)
+        const item = safeInventoryItems.find((row) => row.id === itemId)
         return { ...prev, [itemId]: item?.unit_price ?? 0 }
       })
     }
@@ -545,7 +557,7 @@ export const BookingPageContent = () => {
   }, [form.event_date, isModalOpen, isEditMode, selectedBooking?.id])
 
   useEffect(() => {
-    if (!isModalOpen || (inventoryItems ?? []).length === 0) return
+    if (!isModalOpen || safeInventoryItems.length === 0) return
 
     let active = true
     const timer = setTimeout(async () => {
@@ -559,7 +571,7 @@ export const BookingPageContent = () => {
 
       setInventoryChecking(true)
       try {
-        const items = (inventoryItems ?? []).map((item) => ({
+        const items = safeInventoryItems.map((item) => ({
           item_id: item.id,
           quantity: inventoryQuantities[item.id] || 0,
         }))
@@ -569,9 +581,9 @@ export const BookingPageContent = () => {
           excludeBookingId: isEditMode && selectedBooking?.id ? selectedBooking.id : undefined,
         })
         if (!active) return
-        setShortfalls(result.shortfalls ?? [])
+        setShortfalls(asArray(result.shortfalls))
         const nextAvailability = {}
-        for (const row of result.availability ?? []) {
+        for (const row of asArray(result.availability)) {
           nextAvailability[row.item_id] = row.available
         }
         setAvailabilityByItem(nextAvailability)
@@ -591,7 +603,7 @@ export const BookingPageContent = () => {
   }, [
     form.event_date,
     inventoryQuantities,
-    inventoryItems,
+    safeInventoryItems,
     isModalOpen,
     isEditMode,
     selectedBooking?.id,
@@ -1084,11 +1096,11 @@ export const BookingPageContent = () => {
                   )}
                 </div>
 
-                {(inventoryItems ?? []).length === 0 ? (
+                {safeInventoryItems.length === 0 ? (
                   <p className="text-sm text-slate-500">No data yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {(inventoryItems ?? []).map((item) => {
+                    {safeInventoryItems.map((item) => {
                       const usable = item.total_quantity - item.damaged_quantity
                       const available = availabilityByItem[item.id] ?? usable
                       const qty = inventoryQuantities[item.id] ?? 0
