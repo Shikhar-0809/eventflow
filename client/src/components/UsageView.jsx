@@ -147,7 +147,7 @@ export const UsageView = () => {
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard value={usage?.loginsThisWeek ?? 0} label="Logins This Week" />
-        <StatCard value={usage?.bookingsCreatedThisWeek ?? 0} label="Bookings Created This Week" />
+        <StatCard value={usage?.bookingsThisWeek ?? 0} label="Bookings This Week" />
         <StatCard value={usage?.whatsappMessagesSentThisWeek ?? 0} label="WhatsApp Messages Sent This Week" />
         <StatCard value={lastActiveLabel} label="Last Active" />
       </div>

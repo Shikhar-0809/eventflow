@@ -40,9 +40,14 @@ const getWeekWindow = (weekOffset = 0) => {
   const nextMonday = new Date(monday)
   nextMonday.setDate(monday.getDate() + 7)
 
+  const weekStartDate = formatDate(monday)
+  const weekEndDate = formatDate(sunday)
+
   return {
-    weekStart: `${formatDate(monday)} 00:00:00`,
+    weekStart: `${weekStartDate} 00:00:00`,
     weekEndExclusive: `${formatDate(nextMonday)} 00:00:00`,
+    weekStartDate,
+    weekEndDate,
     weekLabel: `${formatDayMonth(monday)} – ${formatDayMonth(sunday)} ${sunday.getFullYear()}`,
   }
 }
@@ -72,7 +77,7 @@ router.post('/log-client-action', validate(clientActionSchema), async (req, res,
 router.get('/me', async (req, res, next) => {
   try {
     const weekOffset = Math.max(0, Number.parseInt(req.query.weekOffset, 10) || 0)
-    const { weekStart, weekEndExclusive, weekLabel } = getWeekWindow(weekOffset)
+    const { weekStart, weekEndExclusive, weekStartDate, weekEndDate, weekLabel } = getWeekWindow(weekOffset)
 
     const weekScoped = (eventType) => pool.query(
       `SELECT COUNT(*)::int AS count FROM event_log
@@ -84,7 +89,7 @@ router.get('/me', async (req, res, next) => {
 
     const [
       { rows: loginRows },
-      { rows: createdRows },
+      { rows: bookingsRows },
       { rows: editedRows },
       { rows: viewedRows },
       { rows: changeRows },
@@ -95,9 +100,9 @@ router.get('/me', async (req, res, next) => {
       weekScoped('login'),
       pool.query(
         `SELECT COUNT(*)::int AS count FROM bookings
-         WHERE created_at::timestamptz >= $1::timestamptz
-         AND created_at::timestamptz < $2::timestamptz`,
-        [weekStart, weekEndExclusive],
+         WHERE event_date >= $1 AND event_date <= $2
+         AND status != 'cancelled'`,
+        [weekStartDate, weekEndDate],
       ),
       weekScoped('booking_edited'),
       weekScoped('booking_viewed'),
@@ -124,7 +129,7 @@ router.get('/me', async (req, res, next) => {
 
     res.status(200).json({
       loginsThisWeek: loginRows[0].count,
-      bookingsCreatedThisWeek: createdRows[0].count,
+      bookingsThisWeek: bookingsRows[0].count,
       bookingsEditedThisWeek: editedRows[0].count,
       bookingsViewedThisWeek: viewedRows[0].count,
       changeNotesLoggedThisWeek: changeRows[0].count,
