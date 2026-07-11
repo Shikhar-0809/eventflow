@@ -214,6 +214,7 @@ Cross-check against this table any time a new route is added — every row excep
 | `PATCH /api/bookings/:id/log` | Yes | No |
 | `POST /api/bookings/:id/expenses` | Yes | No |
 | `DELETE /api/bookings/:id/expenses/:expenseId` | Yes | No |
+| `DELETE /api/bookings/:id` | Yes | No |
 | `GET /api/bookings/check-conflict` | Yes | No |
 | `GET /api/bookings/pending-balances` | Yes | No |
 | `GET /api/analytics/summary` | Yes | No |

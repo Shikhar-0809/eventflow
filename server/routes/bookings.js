@@ -433,6 +433,21 @@ router.patch('/:id/status', validate(bookingStatusSchema), trackUsage('booking_s
   }
 })
 
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id)
+    const { rows: existingRows } = await pool.query('SELECT id FROM bookings WHERE id = $1', [id])
+    if (!existingRows[0]) {
+      return res.status(404).json({ error: 'Booking not found.' })
+    }
+
+    await pool.query('DELETE FROM bookings WHERE id = $1', [id])
+    res.status(200).json({ deleted: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 router.patch('/:id', validate(bookingSchema), trackUsage('booking_edited'), async (req, res, next) => {
   try {
     const id = Number(req.params.id)

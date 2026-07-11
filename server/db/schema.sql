@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS bookings (
 
 CREATE TABLE IF NOT EXISTS change_log (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  booking_id  INTEGER REFERENCES bookings(id),
+  booking_id  INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
   change_note TEXT    NOT NULL,
   logged_at   TEXT    DEFAULT NOW()
 );
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
 
 CREATE TABLE IF NOT EXISTS booking_inventory (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  booking_id  INTEGER NOT NULL REFERENCES bookings(id),
+  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
   quantity    INTEGER NOT NULL CHECK (quantity > 0),
   unit_price  INTEGER NOT NULL DEFAULT 0,

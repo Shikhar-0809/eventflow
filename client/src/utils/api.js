@@ -52,6 +52,7 @@ export const api = {
   },
   createBooking: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
   updateBooking: (id, data) => request(`/bookings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteBooking: (id) => request(`/bookings/${id}`, { method: 'DELETE' }),
   updateBookingStatus: (id, status) =>
     request(`/bookings/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   checkConflict: (date, excludeId) => {

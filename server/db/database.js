@@ -23,11 +23,22 @@ const COLUMN_MIGRATIONS = [
   'ALTER TABLE bookings ADD COLUMN IF NOT EXISTS event_type_custom TEXT',
 ]
 
+const FK_MIGRATIONS = [
+  'ALTER TABLE change_log DROP CONSTRAINT IF EXISTS change_log_booking_id_fkey',
+  'ALTER TABLE change_log ADD CONSTRAINT change_log_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE',
+  'ALTER TABLE booking_inventory DROP CONSTRAINT IF EXISTS booking_inventory_booking_id_fkey',
+  'ALTER TABLE booking_inventory ADD CONSTRAINT booking_inventory_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE',
+]
+
 export const initDb = async () => {
   const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8')
   await pool.query(schema)
 
   for (const sql of COLUMN_MIGRATIONS) {
+    await pool.query(sql)
+  }
+
+  for (const sql of FK_MIGRATIONS) {
     await pool.query(sql)
   }
 

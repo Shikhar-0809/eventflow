@@ -37,6 +37,10 @@ export const useBookingStore = create((set, get) => ({
       selectedBooking:
         state.selectedBooking?.id === booking.id ? booking : state.selectedBooking,
     })),
+  removeBooking: (id) =>
+    set((state) => ({
+      bookings: state.bookings.filter((row) => Number(row.id) !== Number(id)),
+    })),
   setPostSaveConflictNotice: (postSaveConflictNotice) => set({ postSaveConflictNotice }),
   clearPostSaveConflictNotice: () => set({ postSaveConflictNotice: null }),
   setModalFormDirty: (modalFormDirty) => set({ modalFormDirty }),

@@ -139,7 +139,7 @@ const normalizeBookingDetail = (data) => ({
 })
 
 export const BookingDetail = () => {
-  const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal, updateBooking } = useBookingStore()
+  const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal, updateBooking, removeBooking } = useBookingStore()
   const [booking, setBooking] = useState(null)
   const [changeLog, setChangeLog] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -163,6 +163,9 @@ export const BookingDetail = () => {
   const [isCancelling, setIsCancelling] = useState(false)
   const [cancelError, setCancelError] = useState(null)
   const [selfWhatsappError, setSelfWhatsappError] = useState(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
 
   useEffect(() => {
     if (!isDetailOpen || !selectedBooking?.id) return
@@ -185,6 +188,8 @@ export const BookingDetail = () => {
     setShowCancelConfirm(false)
     setCancelError(null)
     setSelfWhatsappError(null)
+    setShowDeleteConfirm(false)
+    setDeleteError(null)
     setIsLoading(true)
 
     const loadDetail = async () => {
@@ -409,6 +414,25 @@ export const BookingDetail = () => {
       setCancelError(err.message ?? 'Something went wrong. Please try again.')
     } finally {
       setIsCancelling(false)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedBooking?.id || isDeleting) return
+
+    setDeleteError(null)
+    setIsDeleting(true)
+
+    try {
+      await api.deleteBooking(selectedBooking.id)
+      removeBooking(selectedBooking.id)
+      setShowDeleteConfirm(false)
+      setDetailNoteDirty(false)
+      closeDetail()
+    } catch (err) {
+      setDeleteError(err.message ?? 'Something went wrong. Please try again.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -844,6 +868,25 @@ export const BookingDetail = () => {
               </div>
             </form>
           </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteError(null)
+                setShowDeleteConfirm(true)
+              }}
+              className="inline-flex items-center gap-1.5 text-red-500 text-sm underline bg-transparent border-0 p-0 cursor-pointer hover:text-red-600 transition-all duration-200"
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              Delete Booking
+            </button>
+            {deleteError && (
+              <p role="alert" className="mt-2 text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+                {deleteError}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -885,6 +928,20 @@ export const BookingDetail = () => {
         onConfirm={handleDeleteExpenseConfirm}
         onCancel={() => {
           if (!isDeletingExpense) setExpenseToDelete(null)
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Booking"
+        message="Permanently delete this booking? This cannot be undone. All expenses, inventory, and change log entries for this booking will also be deleted."
+        confirmLabel="Delete Permanently"
+        confirmVariant="danger"
+        confirmingLabel="Deleting..."
+        isConfirming={isDeleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => {
+          if (!isDeleting) setShowDeleteConfirm(false)
         }}
       />
     </>
