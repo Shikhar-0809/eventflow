@@ -1,15 +1,11 @@
+import { escapeHtml } from './sanitize.js'
+
 const EVENT_TYPE_LABELS = {
   wedding: 'Wedding',
   birthday: 'Birthday',
   corporate: 'Corporate',
   other: 'Other',
 }
-
-const escapeHtml = (value) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
 
 const toINR = (amount) => Number(amount).toLocaleString('en-IN', {
   style: 'currency',
@@ -26,15 +22,15 @@ const formatEventType = (booking) => {
 
 const formatDisplayDate = (dateStr) => {
   const normalized = String(dateStr).slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return escapeHtml(dateStr)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return String(dateStr ?? '')
   const date = new Date(`${normalized}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return escapeHtml(dateStr)
+  if (Number.isNaN(date.getTime())) return String(dateStr ?? '')
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 const formatGeneratedAt = (isoString) => {
   const date = new Date(isoString)
-  if (Number.isNaN(date.getTime())) return escapeHtml(isoString)
+  if (Number.isNaN(date.getTime())) return String(isoString ?? '')
   return date.toLocaleString('en-IN', {
     day: 'numeric',
     month: 'short',
@@ -53,7 +49,7 @@ const buildExpensesSection = (booking) => {
   const rows = booking.expenses.map((expense) => `
     <tr>
       <td>${escapeHtml(expense.label)}</td>
-      <td class="amount">${toINR(expense.amount)}</td>
+      <td class="amount">${escapeHtml(toINR(expense.amount))}</td>
     </tr>
   `).join('')
 
@@ -67,11 +63,11 @@ const buildExpensesSection = (booking) => {
           ${rows}
           <tr class="expenses-total-row">
             <td>Total Expenses</td>
-            <td class="amount">${toINR(booking.total_expenses)}</td>
+            <td class="amount">${escapeHtml(toINR(booking.total_expenses))}</td>
           </tr>
           <tr class="expenses-profit-row ${profitClass}">
             <td>Profit</td>
-            <td class="amount">${toINR(booking.profit)}</td>
+            <td class="amount">${escapeHtml(toINR(booking.profit))}</td>
           </tr>
         </tbody>
       </table>
@@ -96,15 +92,15 @@ const buildBookingCard = (booking) => {
         </div>
       </div>
       <p class="booking-details">
-        ${formatDisplayDate(booking.event_date)}
+        ${escapeHtml(formatDisplayDate(booking.event_date))}
         | ${escapeHtml(booking.venue?.trim() || '—')}
         | ${escapeHtml(booking.guest_count)} guests
         | ${escapeHtml(booking.phone)}
       </p>
       <p class="booking-financials">
-        Total ${toINR(booking.total)}
-        | Advance ${toINR(booking.advance)}
-        | Balance Due ${toINR(booking.pending_balance)}
+        Total ${escapeHtml(toINR(booking.total))}
+        | Advance ${escapeHtml(toINR(booking.advance))}
+        | Balance Due ${escapeHtml(toINR(booking.pending_balance))}
       </p>
       ${buildExpensesSection(booking)}
     </article>
@@ -116,6 +112,9 @@ const buildReportHtml = (reportData) => {
   const printedAt = formatGeneratedAt(new Date().toISOString())
   const netProfitClass = summary.netProfit >= 0 ? 'profit-positive' : 'profit-negative'
   const reportMetaJson = JSON.stringify({ from, to })
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
 
   const bookingCards = bookings.length > 0
     ? bookings.map(buildBookingCard).join('')
@@ -364,45 +363,45 @@ const buildReportHtml = (reportData) => {
     <header class="report-header">
       <h1>Bala Ji Tent House</h1>
       <h2>EventFlow Report</h2>
-      <p>Date range: ${formatRangeDate(from)} to ${formatRangeDate(to)}</p>
-      <p>Generated: ${formatGeneratedAt(generatedAt)}</p>
+      <p>Date range: ${escapeHtml(formatRangeDate(from))} to ${escapeHtml(formatRangeDate(to))}</p>
+      <p>Generated: ${escapeHtml(formatGeneratedAt(generatedAt))}</p>
     </header>
 
     <section class="summary-box">
       <div class="summary-item">
         <label>Total Bookings</label>
-        <strong>${summary.totalBookings}</strong>
+        <strong>${escapeHtml(summary.totalBookings)}</strong>
       </div>
       <div class="summary-item">
         <label>Total Revenue</label>
-        <strong>${toINR(summary.totalRevenue)}</strong>
+        <strong>${escapeHtml(toINR(summary.totalRevenue))}</strong>
       </div>
       <div class="summary-item">
         <label>Advance Collected</label>
-        <strong>${toINR(summary.totalAdvanceCollected)}</strong>
+        <strong>${escapeHtml(toINR(summary.totalAdvanceCollected))}</strong>
       </div>
       <div class="summary-item">
         <label>Pending Balance</label>
-        <strong>${toINR(summary.totalPendingBalance)}</strong>
+        <strong>${escapeHtml(toINR(summary.totalPendingBalance))}</strong>
       </div>
       <div class="summary-item">
         <label>Total Expenses</label>
-        <strong>${toINR(summary.totalExpenses)}</strong>
+        <strong>${escapeHtml(toINR(summary.totalExpenses))}</strong>
       </div>
       <div class="summary-item">
         <label>Net Profit</label>
-        <strong class="${netProfitClass}">${toINR(summary.netProfit)}</strong>
+        <strong class="${netProfitClass}">${escapeHtml(toINR(summary.netProfit))}</strong>
       </div>
     </section>
 
     <section>
-      <h2 class="section-heading">Bookings (${summary.totalBookings})</h2>
+      <h2 class="section-heading">Bookings (${escapeHtml(summary.totalBookings)})</h2>
       ${bookingCards}
     </section>
 
     <footer class="footer">
       <p>Generated by EventFlow — Bala Ji Tent House</p>
-      <p>Printed at: ${printedAt}</p>
+      <p>Printed at: ${escapeHtml(printedAt)}</p>
     </footer>
     </div>
   </div>
