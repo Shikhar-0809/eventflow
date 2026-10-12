@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: join(__dirname, '../.env') })
@@ -58,13 +59,12 @@ async function countRows(pool, table) {
 }
 
 async function run() {
-  const connectionString = process.env.DATABASE_URL
-  const host = validateDatabaseUrl(connectionString)
+  const host = assertConfirmedDatabaseHost()
+  validateDatabaseUrl(process.env.DATABASE_URL)
 
   console.log('='.repeat(60))
   console.log('EventFlow production data wipe (handoff)')
   console.log('='.repeat(60))
-  console.log(`Target database host: ${host}`)
   console.log(`Mode: ${confirmed ? 'LIVE WIPE (--confirm)' : 'DRY RUN (no changes)'}`)
   console.log('')
 
@@ -84,7 +84,7 @@ async function run() {
     console.log('')
     console.log('No data was modified.')
     console.log('To execute the wipe, run:')
-    console.log('  node server/scripts/wipe-for-handoff.mjs --confirm')
+    console.log(`  node server/scripts/wipe-for-handoff.mjs --confirm-host=${host} --confirm`)
     await pool.end()
     return
   }

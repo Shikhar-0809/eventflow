@@ -1,4 +1,8 @@
-import { pool } from '../db/database.js'
+import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
+
+assertConfirmedDatabaseHost()
+
+const { pool } = await import('../db/database.js')
 
 const MODE = process.argv[2] // snapshot | clear | restore
 

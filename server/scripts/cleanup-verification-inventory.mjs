@@ -1,4 +1,8 @@
-import { pool } from '../db/database.js'
+import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
+
+assertConfirmedDatabaseHost()
+
+const { pool } = await import('../db/database.js')
 
 const TEST_BOOKING_NAMES = [
   'Inventory Test Client',

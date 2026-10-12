@@ -1,4 +1,8 @@
-import { pool } from '../db/database.js'
+import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
+
+assertConfirmedDatabaseHost()
+
+const { pool } = await import('../db/database.js')
 
 const SEED_NAMES = [
   'Ramesh Sharma',

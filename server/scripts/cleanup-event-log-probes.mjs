@@ -1,4 +1,8 @@
-import { pool } from '../db/database.js'
+import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
+
+assertConfirmedDatabaseHost()
+
+const { pool } = await import('../db/database.js')
 
 const { rowCount: deleted } = await pool.query(
   "DELETE FROM event_log WHERE event_type IN ('timing_probe', 'broken_probe', 'order_probe')",

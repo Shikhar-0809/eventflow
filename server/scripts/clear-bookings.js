@@ -1,24 +1,8 @@
-import dotenv from 'dotenv'
-import pg from 'pg'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 
-if (process.env.CONFIRM_CLEAR !== 'yes-delete-all-bookings') {
-  console.log(
-    'Safety check failed. Set CONFIRM_CLEAR=yes-delete-all-bookings to run this script.',
-  )
-  process.exit(1)
-}
+assertConfirmedDatabaseHost()
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-dotenv.config({ path: join(__dirname, '../.env') })
-
-const { Pool } = pg
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const { pool } = await import('../db/database.js')
 
 const TABLES = ['booking_inventory', 'change_log', 'event_log', 'bookings']
 
