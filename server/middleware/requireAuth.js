@@ -8,7 +8,7 @@ export const requireAuth = (req, res, next) => {
   }
 
   try {
-    jwt.verify(token, process.env.JWT_SECRET)
+    jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
     next()
   } catch (err) {
     return res.status(401).json({ error: 'Your session has expired. Please log in again.' })

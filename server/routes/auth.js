@@ -5,6 +5,13 @@ import { loginRateLimiter } from '../middleware/rateLimiter.js'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { trackUsage } from '../middleware/trackUsage.js'
 
+const sessionCookieOptions = (isProd) => ({
+  httpOnly: true,
+  secure: isProd,
+  sameSite: 'lax',
+  path: '/',
+})
+
 const router = Router()
 
 router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, next) => {
@@ -21,14 +28,15 @@ router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, ne
       return res.status(401).json({ error: 'Incorrect password.' })
     }
 
-    const token = jwt.sign({}, process.env.JWT_SECRET, { expiresIn: '7d' })
+    const token = jwt.sign({}, process.env.JWT_SECRET, {
+      algorithm: 'HS256',
+      expiresIn: '7d',
+    })
 
     const isProd = process.env.NODE_ENV === 'production'
 
     res.cookie(process.env.SESSION_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
+      ...sessionCookieOptions(isProd),
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
 
