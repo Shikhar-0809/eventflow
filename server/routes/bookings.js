@@ -317,7 +317,7 @@ router.get('/:id', trackUsage('booking_viewed'), async (req, res, next) => {
   }
 })
 
-router.post('/', validate(bookingSchema), bookingCreateRateLimiter, trackUsage('booking_created'), async (req, res, next) => {
+router.post('/', bookingCreateRateLimiter, validate(bookingSchema), trackUsage('booking_created'), async (req, res, next) => {
   try {
     const { inventory, ...fields } = req.body
     if (rejectMissingEventTypeCustom(fields, res)) return

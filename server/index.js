@@ -13,6 +13,7 @@ import settingsRouter from './routes/settings.js'
 import reportsRouter from './routes/reports.js'
 import recordsRouter from './routes/records.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { requireAuth } from './middleware/requireAuth.js'
 
 const REQUIRED_ENV = ['JWT_SECRET', 'MERCHANT_PASSWORD_HASH', 'SESSION_COOKIE_NAME']
 
@@ -47,6 +48,15 @@ app.use('/api', (req, res, next) => {
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok' })
+})
+
+// Temporary: measure proxy hops before setting trust proxy. Remove with that change.
+app.get('/api/debug/ip', requireAuth, (req, res) => {
+  res.status(200).json({
+    ip: req.ip,
+    ips: req.ips,
+    xff: req.headers['x-forwarded-for'] ?? null,
+  })
 })
 
 app.use('/api/auth', authRouter)
