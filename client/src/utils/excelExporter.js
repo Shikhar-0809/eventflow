@@ -7,7 +7,25 @@ const EVENT_TYPE_LABELS = {
   other: 'Other',
 }
 
-const formatEventType = (type) => EVENT_TYPE_LABELS[type] ?? 'Other'
+const SPREADSHEET_FORMULA_START = /^[=+\-@\t\r]/
+
+const excelText = (value) => {
+  const text = value == null ? '' : String(value)
+  if (SPREADSHEET_FORMULA_START.test(text)) return `'${text}`
+  return text
+}
+
+const protectCell = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  return excelText(value)
+}
+
+const formatEventType = (record) => {
+  if (record?.event_type === 'other' && record.event_type_custom) {
+    return record.event_type_custom
+  }
+  return EVENT_TYPE_LABELS[record?.event_type] ?? 'Other'
+}
 
 const formatDisplayDate = (dateStr) => {
   const normalized = String(dateStr).slice(0, 10)
@@ -49,7 +67,7 @@ const colWidthsFromRows = (rows) => {
 }
 
 const buildSheet = (headers, dataRows) => {
-  const rows = [headers, ...dataRows]
+  const rows = [headers, ...dataRows].map((row) => row.map(protectCell))
   const worksheet = XLSX.utils.aoa_to_sheet(rows)
   worksheet['!cols'] = colWidthsFromRows(rows)
   worksheet['!views'] = [{ state: 'frozen', ySplit: 1, activeCell: 'A2' }]
@@ -90,7 +108,7 @@ export const exportToExcel = (records, { from, to } = {}) => {
   const summaryRows = records.map((record, index) => [
     index + 1,
     record.client_name,
-    formatEventType(record.event_type),
+    formatEventType(record),
     formatDisplayDate(record.event_date),
     record.status,
     Number(record.total ?? 0),
@@ -104,7 +122,7 @@ export const exportToExcel = (records, { from, to } = {}) => {
     index + 1,
     record.client_name,
     record.phone,
-    formatEventType(record.event_type),
+    formatEventType(record),
     formatDisplayDate(record.event_date),
     record.venue ?? '',
     Number(record.guest_count ?? 0),
@@ -134,7 +152,7 @@ export const exportToExcel = (records, { from, to } = {}) => {
     ['EventFlow — Bala Ji Tent House'],
     [`Exported on: ${exportedAt}`],
     [`Total bookings in export: ${records.length}`],
-  ])
+  ].map((row) => row.map(protectCell)))
   XLSX.utils.book_append_sheet(workbook, aboutSheet, 'About')
 
   const filename = from && to
