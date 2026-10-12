@@ -10,7 +10,7 @@ const __dirname = dirname(__filename)
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
 })
 
 const COLUMN_MIGRATIONS = [
