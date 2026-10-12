@@ -47,7 +47,10 @@ router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, ne
 })
 
 router.post('/logout', requireAuth, (req, res) => {
-  res.clearCookie(process.env.SESSION_COOKIE_NAME)
+  res.clearCookie(
+    process.env.SESSION_COOKIE_NAME,
+    sessionCookieOptions(process.env.NODE_ENV === 'production'),
+  )
   res.status(200).json({ authenticated: false })
 })
 

@@ -56,6 +56,7 @@ No open bugs as of pre-Prompt-15 gate — all v1 issues resolved.
 | 047 | [SECURITY] API and frontend responses had no baseline security headers | High | Fixed | `helmet()` is mounted before routes. `crossOriginResourcePolicy` is `cross-origin` so local Vite on port 5173 can still read the API. `client/vercel.json` (Vercel root directory `client`) sets nosniff, strict-origin-when-cross-origin, DENY, Permissions-Policy, HSTS, and Content-Security-Policy-Report-Only. Report-only violations while using the app: FullCalendar's icon font (`data:` URL) falls through to default-src; the report window has two inline scripts and one inline onclick handler blocked by script-src. PDF download still succeeded because the policy is report-only. |
 | 048 | [SECURITY] Admin access key was compared with a plain inequality | High | Fixed | `requireAdminKey` uses `crypto.timingSafeEqual`. Different lengths return false without throwing. |
 | 049 | [SECURITY] JWT sign and verify did not pin the HMAC algorithm | High | Fixed | `jwt.sign` passes `{ algorithm: 'HS256' }` and `jwt.verify` passes `{ algorithms: ['HS256'] }`. |
+| 050 | [SECURITY] Logout did not clear the session cookie with the same options used to set it | High | Fixed | `res.clearCookie` now sends httpOnly, secure when production, sameSite lax, and path `/`, matching the cookie set on login. |
 
 Carried forward from the prior build pass — see `HANDOFF.md` for the full archive of #001–#019. Log new bugs found during the rebrand/inventory/edit-booking work below this line as they're found.
 
