@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import express from 'express'
+import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import { initDb } from './db/database.js'
@@ -33,6 +34,11 @@ const PORT = process.env.PORT || 3001
 
 // JSON API only — Express default ETag can respond 304 with an empty body on repeat GETs.
 app.set('etag', false)
+
+// cross-origin: local Vite (5173) reads this API (3001). Same-origin CORP would block that.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}))
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
