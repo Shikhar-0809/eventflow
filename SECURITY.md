@@ -67,6 +67,7 @@ res.cookie(process.env.SESSION_COOKIE_NAME, token, {
   httpOnly: true,
   secure: isProd, // NEVER hardcode true — breaks login on local http://localhost
   sameSite: 'lax',
+  path: '/',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, in milliseconds
 })
 ```
@@ -99,7 +100,7 @@ export const requireAuth = (req, res, next) => {
   }
 
   try {
-    jwt.verify(token, process.env.JWT_SECRET)
+    jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
     next()
   } catch (err) {
     return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
@@ -137,7 +138,7 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
       return res.status(401).json({ error: 'Incorrect password.' })
     }
 
-    const token = jwt.sign({}, process.env.JWT_SECRET, { expiresIn: '7d' })
+    const token = jwt.sign({}, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' })
 
     const isProd = process.env.NODE_ENV === 'production'
 
@@ -145,6 +146,7 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
       httpOnly: true,
       secure: isProd,
       sameSite: 'lax',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     })
 
@@ -155,7 +157,12 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
 })
 
 router.post('/logout', (req, res) => {
-  res.clearCookie(process.env.SESSION_COOKIE_NAME)
+  res.clearCookie(process.env.SESSION_COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+  })
   res.status(200).json({ authenticated: false })
 })
 
@@ -191,7 +198,7 @@ export const bookingCreateRateLimiter = rateLimit({
 })
 ```
 
-`loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only — high enough that a real merchant double-clicking submit never hits it, low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
+`loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only, and it must run **before** `validate(bookingSchema)` so invalid bodies still consume a slot. The limit is high enough that a real merchant double-clicking submit never hits it, and low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
 
 Inventory and booking-edit routes are **not** separately rate limited — they're low-volume, manually-triggered actions for a single merchant, and adding limiters there would be solving a problem that doesn't exist at this scale. Don't add them speculatively.
 
@@ -242,9 +249,20 @@ Since there's no multi-user system to grant a "developer" role, the simplest cor
 
 ```js
 // middleware/requireAdminKey.js
+import { timingSafeEqual } from 'crypto'
+
+const adminKeysMatch = (provided, expected) => {
+  if (typeof provided !== 'string' || typeof expected !== 'string' || expected.length === 0) {
+    return false
+  }
+  const providedBuf = Buffer.from(provided)
+  const expectedBuf = Buffer.from(expected)
+  if (providedBuf.length !== expectedBuf.length) return false
+  return timingSafeEqual(providedBuf, expectedBuf)
+}
+
 export const requireAdminKey = (req, res, next) => {
-  const key = req.headers['x-admin-key']
-  if (!key || key !== process.env.ADMIN_ACCESS_KEY) {
+  if (!adminKeysMatch(req.headers['x-admin-key'], process.env.ADMIN_ACCESS_KEY)) {
     return res.status(401).json({ error: 'Not authorized.' })
   }
   next()
