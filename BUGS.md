@@ -51,6 +51,7 @@ No open bugs as of pre-Prompt-15 gate — all v1 issues resolved.
 | 042 | [SECURITY] The report window built HTML with booking text and document.write | High | Fixed | `escapeHtml` in `client/src/utils/sanitize.js` encodes `& < > " '`. Every interpolated report value, including currency strings, passes through it. A booking named `<img src=x onerror=alert(1)>` rendered as text and did not run the handler. |
 | 043 | [SECURITY] Report window loaded jsPDF and html2canvas from a CDN without integrity checks | High | Fixed | Pinned cdnjs URLs to jspdf 2.5.1 and html2canvas 1.4.1 and added sha384 integrity with crossorigin=anonymous. Download PDF succeeded for a one-day report. |
 | 044 | [SECURITY] Records Excel export could store user text as formulas | High | Fixed | String cells that start with `=`, `+`, `-`, `@`, tab, or carriage return are prefixed with a single quote before they are written. Covers every string cell, including client name, phone, venue, status, and `event_type_custom` when that field is present on the record. Notes and expense labels are not columns in this workbook. |
+| 045 | [SECURITY] Client depended on unmaintained npm xlsx 0.18.5 | High | Fixed | Replaced with SheetJS 0.20.3 installed from `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`. Production build succeeded and the records export action completed without a page error. |
 
 Carried forward from the prior build pass — see `HANDOFF.md` for the full archive of #001–#019. Log new bugs found during the rebrand/inventory/edit-booking work below this line as they're found.
 
