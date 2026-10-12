@@ -58,6 +58,7 @@ No open bugs as of pre-Prompt-15 gate — all v1 issues resolved.
 | 049 | [SECURITY] JWT sign and verify did not pin the HMAC algorithm | High | Fixed | `jwt.sign` passes `{ algorithm: 'HS256' }` and `jwt.verify` passes `{ algorithms: ['HS256'] }`. |
 | 050 | [SECURITY] Logout did not clear the session cookie with the same options used to set it | High | Fixed | `res.clearCookie` now sends httpOnly, secure when production, sameSite lax, and path `/`, matching the cookie set on login. |
 | 051 | [SECURITY] Destructive scripts could delete data without naming the database host | High | Fixed | `server/scripts/lib/confirmDatabaseHost.mjs` prints the host only and refuses to run unless `--confirm-host` equals that host. Used by wipe-for-handoff, clear-bookings, cleanup-verification-bookings, cleanup-verification-inventory, cleanup-event-log-probes, clean-neon-duplicates, and simulate-empty-event-log. |
+| 052 | [SECURITY] Dev boot printed demo client names to the server log | High | Fixed | `logDevBookings` now prints the row count plus id, date, and status only. |
 
 Carried forward from the prior build pass — see `HANDOFF.md` for the full archive of #001–#019. Log new bugs found during the rebrand/inventory/edit-booking work below this line as they're found.
 

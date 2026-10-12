@@ -267,12 +267,12 @@ export const seedKapilTomarBooking = async (pool) => {
 
 export const logDevBookings = async (pool) => {
   const { rows } = await pool.query(
-    'SELECT id, client_name, event_date, status FROM bookings ORDER BY event_date, id',
+    'SELECT id, event_date, status FROM bookings ORDER BY event_date, id',
   )
 
-  console.log('Demo bookings (dev boot):')
+  console.log(`Demo bookings (dev boot): count=${rows.length}`)
   for (const row of rows) {
-    console.log(`  id=${row.id}  ${row.event_date}  ${row.client_name}  (${row.status})`)
+    console.log(`  id=${row.id}  date=${row.event_date}  status=${row.status}`)
   }
 
   return rows
