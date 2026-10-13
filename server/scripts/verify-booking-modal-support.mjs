@@ -2,7 +2,8 @@
  * Support script for BookingModal verification — API/DB helpers.
  * UI checks are driven via Cursor MCP browser.
  */
-import db from '../db/database.js'
+import 'dotenv/config'
+import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
@@ -19,11 +20,14 @@ const login = async () => {
   return cookie
 }
 
-const countBookings = () => db.prepare('SELECT COUNT(*) AS c FROM bookings').get().c
+const countBookings = async () => {
+  const { rows } = await pool.query('SELECT COUNT(*) AS c FROM bookings')
+  return Number(rows[0].c)
+}
 
-const findFreeDate = () => {
-  const rows = db.prepare('SELECT event_date FROM bookings').all().map((r) => r.event_date)
-  const booked = new Set(rows)
+const findFreeDate = async () => {
+  const { rows } = await pool.query('SELECT event_date FROM bookings')
+  const booked = new Set(rows.map((row) => row.event_date))
   for (let d = 1; d <= 28; d++) {
     const date = `2026-06-${String(d).padStart(2, '0')}`
     if (!booked.has(date)) return date
@@ -44,33 +48,39 @@ const createBookingApi = async (cookie, data) => {
 export const helpers = { login, countBookings, findFreeDate, createBookingApi, BASE }
 
 const cmd = process.argv[2]
-if (cmd === 'count') {
-  console.log(countBookings())
-} else if (cmd === 'free-date') {
-  console.log(findFreeDate())
-} else if (cmd === 'conflict-date') {
-  const row = db.prepare(`
-    SELECT event_date, event_type
-    FROM bookings
-    WHERE event_date IN (SELECT event_date FROM bookings GROUP BY event_date HAVING COUNT(*) > 1)
-    LIMIT 1
-  `).get()
-  console.log(JSON.stringify(row ?? { event_date: '2026-06-25', event_type: 'wedding' }))
-} else if (cmd === 'race-book') {
-  const date = process.argv[3]
-  const cookie = await login()
-  const result = await createBookingApi(cookie, {
-    client_name: 'Race Script Booking',
-    phone: '9876500001',
-    event_type: 'other',
-    event_date: date,
-    guest_count: 50,
-    advance: 5000,
-    total: 25000,
-  })
-  console.log(JSON.stringify({
-    status: result.status,
-    created: result.status === 201,
-    bookingId: result.body?.id ?? null,
-  }))
+try {
+  if (cmd === 'count') {
+    console.log(await countBookings())
+  } else if (cmd === 'free-date') {
+    console.log(await findFreeDate())
+  } else if (cmd === 'conflict-date') {
+    const { rows } = await pool.query(`
+      SELECT event_date, event_type
+      FROM bookings
+      WHERE event_date IN (SELECT event_date FROM bookings GROUP BY event_date HAVING COUNT(*) > 1)
+      LIMIT 1
+    `)
+    console.log(JSON.stringify(rows[0] ?? { event_date: '2026-06-25', event_type: 'wedding' }))
+  } else if (cmd === 'race-book') {
+    const date = process.argv[3]
+    const cookie = await login()
+    const result = await createBookingApi(cookie, {
+      client_name: 'Race Script Booking',
+      phone: '9876500001',
+      event_type: 'other',
+      event_date: date,
+      guest_count: 50,
+      advance: 5000,
+      total: 25000,
+    })
+    console.log(JSON.stringify({
+      status: result.status,
+      created: result.status === 201,
+      bookingId: result.body?.id ?? null,
+    }))
+  }
+  await pool.end()
+} catch (err) {
+  console.error(err.message)
+  process.exit(1)
 }

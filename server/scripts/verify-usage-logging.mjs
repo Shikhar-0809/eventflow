@@ -1,4 +1,5 @@
-import db from '../db/database.js'
+import 'dotenv/config'
+import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
@@ -27,7 +28,7 @@ const request = async (path, { method = 'GET', body, cookie } = {}) => {
 
 const cookieHeader = (setCookie) => setCookie.map((c) => c.split(';')[0]).join('; ')
 
-const beforeCount = db.prepare('SELECT COUNT(*) AS n FROM event_log').get().n
+const beforeCount = Number((await pool.query('SELECT COUNT(*) AS n FROM event_log')).rows[0].n)
 
 const login = await request('/auth/login', { method: 'POST', body: { password: PASSWORD } })
 if (login.status !== 200) {
@@ -76,9 +77,9 @@ if (whatsapp.status !== 204) {
   process.exit(1)
 }
 
-const rows = db
-  .prepare('SELECT event_type, metadata, created_at FROM event_log ORDER BY id DESC LIMIT 10')
-  .all()
+const rows = (await pool.query(
+  'SELECT event_type, metadata, created_at FROM event_log ORDER BY id DESC LIMIT 10',
+)).rows
 
 const newRows = rows.filter((r) => {
   const types = ['login', 'booking_created', 'booking_viewed', 'whatsapp_confirmation_sent']
@@ -100,7 +101,7 @@ const piiLeak = rows.some((r) => {
 
 console.log(JSON.stringify({
   beforeCount,
-  afterCount: db.prepare('SELECT COUNT(*) AS n FROM event_log').get().n,
+  afterCount: Number((await pool.query('SELECT COUNT(*) AS n FROM event_log')).rows[0].n),
   bookingId,
   eventsLogged: {
     login: Boolean(rows.find((r) => r.event_type === 'login')),
@@ -112,4 +113,5 @@ console.log(JSON.stringify({
   piiLeak,
 }, null, 2))
 
+await pool.end()
 if (piiLeak) process.exit(1)

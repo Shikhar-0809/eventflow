@@ -160,6 +160,6 @@ try {
 
   console.log('\nAll inventory backend checks passed.')
 } finally {
-  deleteBookingById(createdBookingId)
-  deleteInventoryItemById(createdItemId)
+  await deleteBookingById(createdBookingId)
+  await deleteInventoryItemById(createdItemId)
 }

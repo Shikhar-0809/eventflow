@@ -1,4 +1,5 @@
-import db from '../db/database.js'
+import 'dotenv/config'
+import { pool } from '../db/database.js'
 import { deleteInventoryItemById } from './lib/verifyDbCleanup.mjs'
 import { authFetch, loginVerifySession, readJson } from './lib/verifyScriptAuth.mjs'
 
@@ -20,8 +21,12 @@ const run = async () => {
   const { cookieHeader } = await loginVerifySession()
 
   try {
-    for (const row of db.prepare('SELECT id FROM inventory_items WHERE name = ?').all(ITEM_NAME)) {
-      deleteInventoryItemById(row.id)
+    const existing = await pool.query(
+      'SELECT id FROM inventory_items WHERE name = $1',
+      [ITEM_NAME],
+    )
+    for (const row of existing.rows) {
+      await deleteInventoryItemById(row.id)
     }
 
     const createRes = await readJson(
@@ -73,9 +78,12 @@ const run = async () => {
       } else {
         fail('cleanup PATCH qty 0', `PATCH status ${patchRes.status}`)
       }
-      deleteInventoryItemById(createdItemId)
+      await deleteInventoryItemById(createdItemId)
     }
-    const leftover = db.prepare('SELECT id FROM inventory_items WHERE name = ?').all(ITEM_NAME)
+    const leftover = (await pool.query(
+      'SELECT id FROM inventory_items WHERE name = $1',
+      [ITEM_NAME],
+    )).rows
     if (leftover.length === 0) pass('cleanup DB', 'ZZZ_TEST item removed from database')
     else fail('cleanup DB', `leftover ids: ${leftover.map((r) => r.id).join(', ')}`)
   }
@@ -85,8 +93,8 @@ const run = async () => {
   process.exit(failed.length ? 1 : 0)
 }
 
-run().catch((err) => {
-  if (createdItemId) deleteInventoryItemById(createdItemId)
-  console.error(err)
+run().catch(async (err) => {
+  if (createdItemId) await deleteInventoryItemById(createdItemId)
+  console.error(err.message)
   process.exit(1)
 })

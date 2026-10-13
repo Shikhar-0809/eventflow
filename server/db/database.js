@@ -44,28 +44,3 @@ export const initDb = async () => {
 
   console.log('Schema initialized')
 }
-
-const toPgSql = (sql) => {
-  let index = 0
-  return sql.replace(/\?/g, () => `$${++index}`)
-}
-
-/** Legacy shim for middleware/scripts still on the sync prepare API. */
-const db = {
-  prepare(sql) {
-    const pgSql = toPgSql(sql)
-    return {
-      run(...params) {
-        pool.query(pgSql, params).catch(() => {})
-      },
-      get(...params) {
-        throw new Error('db.prepare().get() is not supported — use pool.query() instead')
-      },
-      all(...params) {
-        throw new Error('db.prepare().all() is not supported — use pool.query() instead')
-      },
-    }
-  },
-}
-
-export default db

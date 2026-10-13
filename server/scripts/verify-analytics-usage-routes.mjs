@@ -1,4 +1,5 @@
-import db from '../db/database.js'
+import 'dotenv/config'
+import { pool } from '../db/database.js'
 import jwt from 'jsonwebtoken'
 import 'dotenv/config'
 
@@ -51,9 +52,10 @@ console.log(
       usageMe: { status: usageMe.status, body: usageMe.json },
       adminNoKey: { status: adminNoKey.status },
       adminWithKey: { status: adminWithKey.status, total: adminWithKey.json?.total, rows: adminWithKey.json?.data?.length },
-      eventLogCount: db.prepare('SELECT COUNT(*) n FROM event_log').get().n,
+      eventLogCount: Number((await pool.query('SELECT COUNT(*) AS n FROM event_log')).rows[0].n),
     },
     null,
     2,
   ),
 )
+await pool.end()

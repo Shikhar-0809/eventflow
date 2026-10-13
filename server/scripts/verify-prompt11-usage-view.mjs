@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
@@ -55,29 +55,26 @@ const currentStart = `${monthStart(year, monthIndex)} 00:00:00`
 const currentEnd = `${nextMonthStart(year, monthIndex)} 00:00:00`
 const weekStart = weekStartSql()
 
-const dbLoginsWeek = db
-  .prepare(
-    "SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'login' AND created_at >= ?",
-  )
-  .get(weekStart).n
+const dbLoginsWeek = Number((await pool.query(
+  "SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'login' AND created_at >= $1",
+  [weekStart],
+)).rows[0].n)
 
-const dbBookingsMonth = db
-  .prepare(
-    "SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'booking_created' AND created_at >= ? AND created_at < ?",
-  )
-  .get(currentStart, currentEnd).n
+const dbBookingsMonth = Number((await pool.query(
+  "SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
+  [currentStart, currentEnd],
+)).rows[0].n)
 
-const dbWhatsappMonth = db
-  .prepare(
-    `SELECT COUNT(*) AS n FROM event_log
-     WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
-     AND created_at >= ? AND created_at < ?`,
-  )
-  .get(currentStart, currentEnd).n
+const dbWhatsappMonth = Number((await pool.query(
+  `SELECT COUNT(*) AS n FROM event_log
+   WHERE event_type IN ('whatsapp_confirmation_sent', 'whatsapp_reminder_sent')
+   AND created_at >= $1 AND created_at < $2`,
+  [currentStart, currentEnd],
+)).rows[0].n)
 
-const dbFirst = db.prepare('SELECT MIN(created_at) AS v FROM event_log').get().v
-const dbLast = db.prepare('SELECT MAX(created_at) AS v FROM event_log').get().v
-const eventLogCount = db.prepare('SELECT COUNT(*) AS n FROM event_log').get().n
+const dbFirst = (await pool.query('SELECT MIN(created_at) AS v FROM event_log')).rows[0].v
+const dbLast = (await pool.query('SELECT MAX(created_at) AS v FROM event_log')).rows[0].v
+const eventLogCount = Number((await pool.query('SELECT COUNT(*) AS n FROM event_log')).rows[0].n)
 
 const unauth = await request('/usage/me')
 const authed = await request('/usage/me', { cookie })
@@ -124,3 +121,4 @@ console.log(
     2,
   ),
 )
+await pool.end()

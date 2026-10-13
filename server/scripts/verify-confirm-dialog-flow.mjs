@@ -1,4 +1,5 @@
-import db from '../db/database.js'
+import 'dotenv/config'
+import { pool } from '../db/database.js'
 import { deleteBookingById } from './lib/verifyDbCleanup.mjs'
 import { authFetch, loginVerifySession, readJson } from './lib/verifyScriptAuth.mjs'
 
@@ -130,17 +131,21 @@ const run = async () => {
       )
     }
 
-    const dbLines = db
-      .prepare('SELECT item_id, quantity FROM booking_inventory WHERE booking_id = ?')
-      .all(testBookingId)
+    const dbLines = (await pool.query(
+      'SELECT item_id, quantity FROM booking_inventory WHERE booking_id = $1',
+      [testBookingId],
+    )).rows
     if (dbLines.some((row) => row.item_id === item.id && row.quantity === requested)) {
       pass('booking_inventory rows', JSON.stringify(dbLines))
     } else {
       fail('booking_inventory rows', `expected item ${item.id} qty ${requested}; got ${JSON.stringify(dbLines)}`)
     }
   } finally {
-    deleteBookingById(testBookingId)
-    const leftover = db.prepare('SELECT id FROM bookings WHERE client_name = ?').all(CLIENT_NAME)
+    await deleteBookingById(testBookingId)
+    const leftover = (await pool.query(
+      'SELECT id FROM bookings WHERE client_name = $1',
+      [CLIENT_NAME],
+    )).rows
     if (leftover.length === 0) pass('cleanup', 'test booking removed')
     else fail('cleanup', `leftover bookings: ${leftover.map((r) => r.id).join(', ')}`)
   }
@@ -150,8 +155,8 @@ const run = async () => {
   process.exit(failed.length ? 1 : 0)
 }
 
-run().catch((err) => {
-  deleteBookingById(testBookingId)
-  console.error(err)
+run().catch(async (err) => {
+  await deleteBookingById(testBookingId)
+  console.error(err.message)
   process.exit(1)
 })

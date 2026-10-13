@@ -1,4 +1,5 @@
-import db from '../db/database.js'
+import 'dotenv/config'
+import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001'
 const COOKIE_NAME = 'eventflow_session'
@@ -26,8 +27,13 @@ const request = async (method, path, { body, cookie } = {}) => {
   return { status: res.status, json, text }
 }
 
-const countOnDate = (date) =>
-  db.prepare('SELECT COUNT(*) AS c FROM bookings WHERE event_date = ?').get(date).c
+const countOnDate = async (date) => {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*) AS c FROM bookings WHERE event_date = $1',
+    [date],
+  )
+  return Number(rows[0].c)
+}
 
 const validBooking = (overrides = {}) => ({
   client_name: 'Verify Test Client',
@@ -62,24 +68,24 @@ const run = async () => {
   }
 
   // Find seeded conflict date
-  const conflictRow = db.prepare(`
+  const conflictRow = (await pool.query(`
     SELECT event_date, COUNT(*) AS c FROM bookings
-    GROUP BY event_date HAVING c >= 1
+    GROUP BY event_date HAVING COUNT(*) >= 1
     ORDER BY c DESC, event_date ASC LIMIT 1
-  `).get()
-  const conflictDate = db.prepare(`
+  `)).rows[0]
+  const conflictDate = (await pool.query(`
     SELECT event_date FROM bookings
     GROUP BY event_date HAVING COUNT(*) >= 2
     LIMIT 1
-  `).get()?.event_date ?? conflictRow?.event_date ?? '2026-06-25'
+  `)).rows[0]?.event_date ?? conflictRow?.event_date ?? '2026-06-25'
 
   // 1. empty client_name
-  const beforeCount = db.prepare('SELECT COUNT(*) AS c FROM bookings').get().c
+  const beforeCount = Number((await pool.query('SELECT COUNT(*) AS c FROM bookings')).rows[0].c)
   const r1 = await request('POST', '/api/bookings', {
     cookie: token,
     body: validBooking({ client_name: '' }),
   })
-  const after1 = db.prepare('SELECT COUNT(*) AS c FROM bookings').get().c
+  const after1 = Number((await pool.query('SELECT COUNT(*) AS c FROM bookings')).rows[0].c)
   record(1, 'POST empty client_name → 400, no DB row',
     r1.status === 400 && r1.json?.error && after1 === beforeCount,
     `status=${r1.status}, error=${r1.json?.error}, rows=${beforeCount}→${after1}`)
@@ -112,12 +118,12 @@ const run = async () => {
     `status=${r4.status}, error=${r4.json?.error}`)
 
   // 5. conflict date POST
-  const countBeforeConflict = countOnDate(conflictDate)
+  const countBeforeConflict = await countOnDate(conflictDate)
   const r5 = await request('POST', '/api/bookings', {
     cookie: token,
     body: validBooking({ event_date: conflictDate }),
   })
-  const countAfterConflict = countOnDate(conflictDate)
+  const countAfterConflict = await countOnDate(conflictDate)
   record(5, `POST on conflict date ${conflictDate} → 409, no extra row`,
     r5.status === 409 && r5.json?.conflict === true && r5.json?.booking && countAfterConflict === countBeforeConflict,
     `status=${r5.status}, body=${JSON.stringify(r5.json)}, rows=${countBeforeConflict}→${countAfterConflict}`)
@@ -126,9 +132,9 @@ const run = async () => {
   const noAuthGet = await request('GET', '/api/bookings')
   record(6, 'GET /api/bookings no auth → 401', noAuthGet.status === 401, `status=${noAuthGet.status}`)
 
-  const beforeNoAuthPost = db.prepare('SELECT COUNT(*) AS c FROM bookings').get().c
+  const beforeNoAuthPost = Number((await pool.query('SELECT COUNT(*) AS c FROM bookings')).rows[0].c)
   const noAuthPost = await request('POST', '/api/bookings', { body: validBooking({ event_date: '2026-12-20' }) })
-  const afterNoAuthPost = db.prepare('SELECT COUNT(*) AS c FROM bookings').get().c
+  const afterNoAuthPost = Number((await pool.query('SELECT COUNT(*) AS c FROM bookings')).rows[0].c)
   record(7, 'POST /api/bookings no auth → 401, no row',
     noAuthPost.status === 401 && afterNoAuthPost === beforeNoAuthPost,
     `status=${noAuthPost.status}, rows=${beforeNoAuthPost}→${afterNoAuthPost}`)
@@ -144,11 +150,11 @@ const run = async () => {
 
   // 11. double-submit same payload
   const doubleDate = '2026-12-25'
-  db.prepare('DELETE FROM bookings WHERE event_date = ?').run(doubleDate)
+  await pool.query('DELETE FROM bookings WHERE event_date = $1', [doubleDate])
   const payload = validBooking({ event_date: doubleDate, phone: '9876543298' })
   const d1 = await request('POST', '/api/bookings', { cookie: token, body: payload })
   const d2 = await request('POST', '/api/bookings', { cookie: token, body: payload })
-  const doubleCount = countOnDate(doubleDate)
+  const doubleCount = await countOnDate(doubleDate)
   const doubleHandled = d1.status === 201 && d2.status === 409 && doubleCount === 1
   record(11, 'Double-submit same payload → not two rows',
     doubleHandled,

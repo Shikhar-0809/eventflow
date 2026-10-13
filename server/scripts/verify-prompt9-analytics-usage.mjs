@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
@@ -74,29 +74,31 @@ const currentStartDt = `${currentStart} 00:00:00`
 const currentEndDt = `${currentEnd} 00:00:00`
 const weekStart = weekStartSql()
 
-const dbRevenue = db
-  .prepare('SELECT COALESCE(SUM(total), 0) AS v FROM bookings WHERE event_date >= ? AND event_date < ?')
-  .get(currentStart, currentEnd).v
-const dbBookingsMonth = db
-  .prepare('SELECT COUNT(*) AS v FROM bookings WHERE event_date >= ? AND event_date < ?')
-  .get(currentStart, currentEnd).v
-const dbTotalClients = db.prepare('SELECT COUNT(DISTINCT phone) AS v FROM bookings').get().v
-const dbPeak = db
-  .prepare(
-    `SELECT strftime('%Y-%m', event_date) AS month, COUNT(*) AS count
-     FROM bookings WHERE event_date >= ? GROUP BY month ORDER BY count DESC, month DESC LIMIT 1`,
-  )
-  .get(sixMonthStart)
+const dbRevenue = Number((await pool.query(
+  'SELECT COALESCE(SUM(total), 0) AS v FROM bookings WHERE event_date >= $1 AND event_date < $2',
+  [currentStart, currentEnd],
+)).rows[0].v)
+const dbBookingsMonth = Number((await pool.query(
+  'SELECT COUNT(*) AS v FROM bookings WHERE event_date >= $1 AND event_date < $2',
+  [currentStart, currentEnd],
+)).rows[0].v)
+const dbTotalClients = Number((await pool.query('SELECT COUNT(DISTINCT phone) AS v FROM bookings')).rows[0].v)
+const dbPeakRow = (await pool.query(
+  `SELECT to_char(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS count
+   FROM bookings WHERE event_date >= $1 GROUP BY 1 ORDER BY count DESC, month DESC LIMIT 1`,
+  [sixMonthStart],
+)).rows[0]
+const dbPeak = dbPeakRow ? { month: dbPeakRow.month, count: Number(dbPeakRow.count) } : undefined
 
-const dbLoginsWeek = db
-  .prepare("SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'login' AND created_at >= ?")
-  .get(weekStart).v
-const dbBookingsCreatedMonth = db
-  .prepare(
-    "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'booking_created' AND created_at >= ? AND created_at < ?",
-  )
-  .get(currentStartDt, currentEndDt).v
-const dbLastActive = db.prepare('SELECT MAX(created_at) AS v FROM event_log').get().v
+const dbLoginsWeek = Number((await pool.query(
+  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'login' AND created_at >= $1",
+  [weekStart],
+)).rows[0].v)
+const dbBookingsCreatedMonth = Number((await pool.query(
+  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
+  [currentStartDt, currentEndDt],
+)).rows[0].v)
+const dbLastActive = (await pool.query('SELECT MAX(created_at) AS v FROM event_log')).rows[0].v
 
 const envExample = await import('fs').then((fs) =>
   fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8'),
@@ -201,10 +203,10 @@ results.check7_envPlaceholder.pass =
   !results.check7_envPlaceholder.valuesMatch
 
 results.check12_queries = {
-  analyticsSummary: "db.prepare('... WHERE event_date >= ? AND event_date < ?').get(currentStart, currentEnd)",
-  analyticsMonthly: "db.prepare('... WHERE event_date >= ?').all(sixMonthStart)",
-  usageMe: 'all date bounds passed as ? parameters',
-  usageAdmin: "db.prepare('... LIMIT ? OFFSET ?').all(limit, offset)",
+  analyticsSummary: "pool.query('... WHERE event_date >= $1 AND event_date < $2', [currentStart, currentEnd])",
+  analyticsMonthly: "pool.query('... WHERE event_date >= $1', [sixMonthStart])",
+  usageMe: 'all date bounds passed as $n parameters',
+  usageAdmin: "pool.query('... LIMIT $1 OFFSET $2', [limit, offset])",
 }
 
 results.check16_routeMatrix = {
@@ -238,4 +240,5 @@ const allPass = [
 ].every(Boolean)
 
 console.log(JSON.stringify({ allPass, results }, null, 2))
+await pool.end()
 process.exit(allPass ? 0 : 1)

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
@@ -39,7 +39,7 @@ const cookie = cookieHeader(loginRes.headers.getSetCookie?.() ?? [])
 const summaryRes = await request('/analytics/summary', { cookie })
 const monthlyRes = await request('/analytics/monthly', { cookie })
 
-const bookingCount = db.prepare('SELECT COUNT(*) AS n FROM bookings').get().n
+const bookingCount = Number((await pool.query('SELECT COUNT(*) AS n FROM bookings')).rows[0].n)
 const monthsWithBookings = (monthlyRes.json ?? []).filter((r) => r.bookings > 0)
 
 console.log(
@@ -57,3 +57,4 @@ console.log(
     2,
   ),
 )
+await pool.end()

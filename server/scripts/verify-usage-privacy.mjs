@@ -1,5 +1,6 @@
+import 'dotenv/config'
 import express from 'express'
-import db from '../db/database.js'
+import { pool } from '../db/database.js'
 import { trackUsage } from '../middleware/trackUsage.js'
 
 const BASE = 'http://localhost:3001/api'
@@ -31,8 +32,13 @@ const request = async (path, { method = 'GET', body, cookie } = {}) => {
 
 const cookieHeader = (setCookie) => setCookie.map((c) => c.split(';')[0]).join('; ')
 
-const countByType = (type) =>
-  db.prepare('SELECT COUNT(*) AS n FROM event_log WHERE event_type = ?').get(type).n
+const countByType = async (type) => {
+  const { rows } = await pool.query(
+    'SELECT COUNT(*) AS n FROM event_log WHERE event_type = $1',
+    [type],
+  )
+  return Number(rows[0].n)
+}
 
 const piiPatterns = [
   'client_name',
@@ -52,21 +58,16 @@ const metadataHasPii = (metadata) => {
   return piiPatterns.some((p) => lower.includes(p))
 }
 
-const originalPrepare = db.prepare.bind(db)
+const originalQuery = pool.query.bind(pool)
 
 const runFireAndForgetTimingTest = async () => {
-  db.prepare = (sql) => {
-    const stmt = originalPrepare(sql)
-    if (!sql.includes('event_log')) return stmt
-    return {
-      run: (...args) => {
-        const start = Date.now()
-        while (Date.now() - start < 1500) {
-          // deliberate slow sync insert in finish handler
-        }
-        return stmt.run(...args)
-      },
+  let insertFinished = false
+  pool.query = async (sql, params) => {
+    if (String(sql).includes('event_log')) {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      insertFinished = true
     }
+    return originalQuery(sql, params)
   }
 
   const app = express()
@@ -80,27 +81,24 @@ const runFireAndForgetTimingTest = async () => {
   const res = await fetch(`http://127.0.0.1:${port}/timing-test`, { method: 'POST' })
   const clientMs = Math.round(performance.now() - t0)
   const body = await res.json()
-  await new Promise((r) => setTimeout(r, 50))
   server.close()
-  db.prepare = originalPrepare
+  pool.query = originalQuery
 
   return {
     status: res.status,
     clientMs,
     body,
+    insertFinished,
     pass: res.status === 201 && clientMs < 800,
   }
 }
 
 const runBrokenInsertTest = async () => {
-  db.prepare = (sql) => {
-    const stmt = originalPrepare(sql)
-    if (!sql.includes('event_log')) return stmt
-    return {
-      run: () => {
-        throw new Error('simulated event_log insert failure')
-      },
+  pool.query = async (sql, params) => {
+    if (String(sql).includes('event_log')) {
+      throw new Error('simulated event_log insert failure')
     }
+    return originalQuery(sql, params)
   }
 
   const app = express()
@@ -112,11 +110,13 @@ const runBrokenInsertTest = async () => {
   const port = server.address().port
   const res = await fetch(`http://127.0.0.1:${port}/broken-test`, { method: 'POST' })
   const body = await res.json()
-  await new Promise((r) => setTimeout(r, 50))
+  await new Promise((resolve) => setTimeout(resolve, 50))
   server.close()
-  db.prepare = originalPrepare
+  pool.query = originalQuery
 
-  const leaked = db.prepare("SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'broken_probe'").get().n
+  const leaked = Number((await pool.query(
+    "SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'broken_probe'",
+  )).rows[0].n)
 
   return {
     status: res.status,
@@ -129,11 +129,11 @@ const runBrokenInsertTest = async () => {
 const results = {}
 
 // --- Auth + baseline counts ---
-const loginFailBefore = countByType('login')
-const bookingCreatedBefore = countByType('booking_created')
+const loginFailBefore = await countByType('login')
+const bookingCreatedBefore = await countByType('booking_created')
 
 const badLogin = await request('/auth/login', { method: 'POST', body: { password: 'definitely-wrong-password' } })
-const loginFailAfter = countByType('login')
+const loginFailAfter = await countByType('login')
 
 results.check5_badLogin = {
   status: badLogin.status,
@@ -150,7 +150,7 @@ const cookie = cookieHeader(login.setCookie)
 
 // 409 conflict — should not log booking_created
 const conflictDate = '2026-06-03'
-const createdBeforeConflict = countByType('booking_created')
+const createdBeforeConflict = await countByType('booking_created')
 const conflict = await request('/bookings', {
   method: 'POST',
   cookie,
@@ -164,7 +164,7 @@ const conflict = await request('/bookings', {
     total: 5000,
   },
 })
-const createdAfterConflict = countByType('booking_created')
+const createdAfterConflict = await countByType('booking_created')
 
 results.check5_conflict409 = {
   status: conflict.status,
@@ -173,13 +173,13 @@ results.check5_conflict409 = {
 }
 
 // 400 validation — should not log booking_created
-const createdBefore400 = countByType('booking_created')
+const createdBefore400 = await countByType('booking_created')
 const badCreate = await request('/bookings', {
   method: 'POST',
   cookie,
   body: { client_name: '', phone: 'bad', event_type: 'other', event_date: 'not-a-date', guest_count: -1 },
 })
-const createdAfter400 = countByType('booking_created')
+const createdAfter400 = await countByType('booking_created')
 
 results.check5_validation400 = {
   status: badCreate.status,
@@ -208,17 +208,17 @@ results.createBooking = { status: create.status, elapsedMs: create.elapsedMs, id
 const bookingId = create.json?.id ?? 1
 
 // change_logged with PII in note
-const changeLoggedBefore = countByType('change_logged')
+const changeLoggedBefore = await countByType('change_logged')
 const piiNote = 'Called Ramesh, confirmed via phone 9876543210'
 const change = await request(`/bookings/${bookingId}/log`, {
   method: 'PATCH',
   cookie,
   body: { note: piiNote },
 })
-const changeLoggedAfter = countByType('change_logged')
-const changeRow = db
-  .prepare("SELECT metadata FROM event_log WHERE event_type = 'change_logged' ORDER BY id DESC LIMIT 1")
-  .get()
+const changeLoggedAfter = await countByType('change_logged')
+const changeRow = (await pool.query(
+  "SELECT metadata FROM event_log WHERE event_type = 'change_logged' ORDER BY id DESC LIMIT 1",
+)).rows[0]
 
 results.check2_changeLogged = {
   status: change.status,
@@ -237,9 +237,9 @@ const arbitrary = await request('/usage/log-client-action', {
   cookie,
   body: { event_type: 'something_arbitrary', booking_id: bookingId },
 })
-const arbitraryCount = db
-  .prepare("SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'something_arbitrary'")
-  .get().n
+const arbitraryCount = Number((await pool.query(
+  "SELECT COUNT(*) AS n FROM event_log WHERE event_type = 'something_arbitrary'",
+)).rows[0].n)
 
 results.check6_allowlist = {
   status: arbitrary.status,
@@ -288,7 +288,9 @@ results.check3_timing = await runFireAndForgetTimingTest()
 results.check4_brokenInsert = await runBrokenInsertTest()
 
 // Full metadata dump
-const allRows = db.prepare('SELECT id, event_type, metadata, created_at FROM event_log ORDER BY id').all()
+const allRows = (await pool.query(
+  'SELECT id, event_type, metadata, created_at FROM event_log ORDER BY id',
+)).rows
 const allMetadataClean = allRows.every((r) => !metadataHasPii(r.metadata))
 
 results.check1_allRows = allRows
@@ -306,7 +308,7 @@ results.check10_routes = {
   pass: noAuth.status === 401,
 }
 
-results.check11_query = "db.prepare('INSERT INTO event_log (event_type, metadata) VALUES (?, ?)').run(eventType, metadata ? JSON.stringify(metadata) : null)"
+results.check11_query = "pool.query('INSERT INTO event_log (event_type, metadata) VALUES ($1, $2)', [eventType, metadata ? JSON.stringify(metadata) : null])"
 
 console.log(JSON.stringify(results, null, 2))
 

@@ -141,7 +141,7 @@ try {
 
   console.log('\nAll booking-inventory flow checks passed.')
 } finally {
-  deleteBookingById(overBookingId)
-  deleteBookingById(okBookingId)
-  deleteInventoryItemById(testItemId)
+  await deleteBookingById(overBookingId)
+  await deleteBookingById(okBookingId)
+  await deleteInventoryItemById(testItemId)
 }
