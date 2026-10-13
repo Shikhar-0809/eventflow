@@ -98,7 +98,7 @@ Do not proceed past this section until every item is true:
    ```
    VITE_API_URL=/api
    ```
-   Must stay a **relative** path, not the full `onrender.com` URL. `client/vercel.json` rewrites `/api/*` to the Render backend so all browser requests are same-origin on the Vercel domain — see `SECURITY.md`'s Session cookie configuration section for why this matters (mobile ITP / cross-site cookie blocking).
+   Must stay a **relative** path, not the full `onrender.com` URL. the root `vercel.json` rewrites `/api/*` to the Render backend so all browser requests are same-origin on the Vercel domain — see `SECURITY.md`'s Session cookie configuration section for why this matters (mobile ITP / cross-site cookie blocking).
 4. Deploy. Vercel assigns a URL like `https://eventflow.vercel.app`
 5. **Go back to Render** and update `CORS_ORIGIN` to this exact Vercel URL (Step 2's config had a placeholder for this). Redeploy the backend so the new CORS origin takes effect.
 

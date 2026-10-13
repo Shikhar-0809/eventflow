@@ -37,7 +37,7 @@ Render/Railway/Vercel free tiers use **ephemeral filesystems** — anything writ
 ### Production `/api` proxy (Vercel → Render)
 In production the browser uses same-origin `/api` (`client/.env.production`: `VITE_API_URL=/api`). Vercel rewrites `/api/:path*` to the Render API host so the session cookie stays first-party. See SECURITY.md and DEPLOYMENT.md.
 
-**Request path (production):** browser -> Vercel (`client/vercel.json`: a `routes` transform sets `x-proxy-secret` from the `PROXY_SHARED_SECRET` env var, then the `/api/:path*` rewrite proxies to Render) -> Cloudflare -> Render load balancer -> Express. Express has `trust proxy` = 4 and, in production, `requireProxySecret` rejects any request without the right `x-proxy-secret` (403) except `GET /api/health`. Direct requests to the Render URL are therefore refused.
+**Request path (production):** browser -> Vercel (root `vercel.json`: a `routes` transform sets `x-proxy-secret` from the `PROXY_SHARED_SECRET` env var, then the `/api/:path*` rewrite proxies to Render) -> Cloudflare -> Render load balancer -> Express. Express has `trust proxy` = 4 and, in production, `requireProxySecret` rejects any request without the right `x-proxy-secret` (403) except `GET /api/health`. Direct requests to the Render URL are therefore refused.
 
 ---
 
@@ -50,7 +50,6 @@ eventflow/
 │   ├── package.json
 │   ├── postcss.config.js
 │   ├── tailwind.config.js
-│   ├── vercel.json                # /api rewrite to Render + SPA fallback
 │   ├── vite.config.js
 │   ├── .env.example               # VITE_API_URL, VITE_MERCHANT_PHONE
 │   ├── .env.production            # VITE_API_URL=/api
@@ -131,7 +130,7 @@ eventflow/
 │
 ├── .gitignore
 ├── package.json                   # Root package with workspaces
-├── vercel.json                    # Root Vercel build + /api rewrite to Render
+├── vercel.json                    # The ONLY Vercel config (project root = repo root): build, /api rewrite to Render, SPA fallback, security headers, x-proxy-secret transform
 ├── README.md
 ├── ARCHITECTURE.md
 ├── CODING_STANDARDS.md
