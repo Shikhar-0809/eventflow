@@ -1,4 +1,19 @@
 {
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "continue": true,
+      "transforms": [
+        {
+          "type": "request.headers",
+          "op": "set",
+          "target": { "key": "x-proxy-secret" },
+          "args": "$PROXY_SHARED_SECRET",
+          "env": ["PROXY_SHARED_SECRET"]
+        }
+      ]
+    }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://eventflow-api-qb06.onrender.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }

@@ -204,9 +204,21 @@ Inventory and booking-edit routes are **not** separately rate limited — they'r
 
 ---
 
+## Proxy-only origin lock (`x-proxy-secret`) — production
+
+The Render API must only be reachable through our Vercel proxy (BUGS #056). Without this, a direct request to the Render URL has one fewer hop than `trust proxy` = 4 expects, so a forged `X-Forwarded-For` could become `req.ip` and evade the rate limiters.
+
+- **Env var:** `PROXY_SHARED_SECRET`, same value in the Render and Vercel dashboards. Server-side only: it must **never** start with `VITE_` (those are baked into the public JS bundle) and its value never goes in any file in the repo. Required at boot **only when `NODE_ENV === 'production'`**; local dev does not need it.
+- **Vercel side:** `client/vercel.json` has a `routes` entry for `/api/(.*)` with `continue: true` and a `request.headers` transform that sets `x-proxy-secret` from `$PROXY_SHARED_SECRET` (read through the transform's `env` allowlist, so no literal value is in the file). The existing `/api` rewrite to Render, SPA fallback and security headers are unchanged. If the Vercel variable is missing, the header becomes the literal text `$PROXY_SHARED_SECRET` and the API answers 403 (fails closed).
+- **Server side:** `server/middleware/requireProxySecret.js`, mounted in `server/index.js` right after `trust proxy` and before helmet and everything else, **production only**. It compares `x-proxy-secret` with `crypto.timingSafeEqual` (a length mismatch returns false without throwing). Missing or wrong header: `403 { "error": "Not found." }`, no other detail, the header value is never logged.
+- **Exempt:** `GET /api/health` only (Render's health check).
+- **Rotating the secret:** change it in Render and Vercel, then redeploy both. Requests fail with 403 between the two changes.
+
 ## Route auth matrix
 
 Cross-check against this table any time a new route is added — every business row needs `requireAuth` checked. Only login and health are intentionally unauthenticated.
+
+**Production only:** every route in this table, `GET /api/health` excepted, also requires a valid `x-proxy-secret` header (see the proxy-only origin lock section above). Requests without it get `403 { "error": "Not found." }` before any other middleware runs.
 
 | Route | `requireAuth`? | Rate limited? |
 |---|---|---|

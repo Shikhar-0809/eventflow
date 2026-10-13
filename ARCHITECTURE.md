@@ -37,6 +37,8 @@ Render/Railway/Vercel free tiers use **ephemeral filesystems** — anything writ
 ### Production `/api` proxy (Vercel → Render)
 In production the browser uses same-origin `/api` (`client/.env.production`: `VITE_API_URL=/api`). Vercel rewrites `/api/:path*` to the Render API host so the session cookie stays first-party. See SECURITY.md and DEPLOYMENT.md.
 
+**Request path (production):** browser -> Vercel (`client/vercel.json`: a `routes` transform sets `x-proxy-secret` from the `PROXY_SHARED_SECRET` env var, then the `/api/:path*` rewrite proxies to Render) -> Cloudflare -> Render load balancer -> Express. Express has `trust proxy` = 4 and, in production, `requireProxySecret` rejects any request without the right `x-proxy-secret` (403) except `GET /api/health`. Direct requests to the Render URL are therefore refused.
+
 ---
 
 ## Folder structure
@@ -95,7 +97,7 @@ eventflow/
 ├── server/                        # Express backend
 │   ├── index.js                   # Express entry: CORS, mounts, initDb+seed, listen
 │   ├── package.json
-│   ├── .env.example               # JWT_SECRET, DATABASE_URL, MERCHANT_PASSWORD_HASH, ADMIN_ACCESS_KEY, …
+│   ├── .env.example               # JWT_SECRET, DATABASE_URL, MERCHANT_PASSWORD_HASH, ADMIN_ACCESS_KEY, PROXY_SHARED_SECRET, …
 │   ├── db/
 │   │   ├── database.js            # pg Pool, schema.sql apply, column/FK migrations
 │   │   ├── schema.sql             # Postgres DDL (source of truth at boot)
@@ -319,6 +321,7 @@ MERCHANT_PASSWORD_HASH=    # bcrypt hash, never the plaintext password
 CORS_ORIGIN=http://localhost:5173
 SESSION_COOKIE_NAME=eventflow_session
 ADMIN_ACCESS_KEY=          # for GET /api/usage/admin (x-admin-key header)
+PROXY_SHARED_SECRET=       # production only; also set as a server-side (non-VITE_) Vercel env var
 ```
 
 Required at boot: `JWT_SECRET`, `MERCHANT_PASSWORD_HASH`, `SESSION_COOKIE_NAME`.

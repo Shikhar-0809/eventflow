@@ -14,8 +14,14 @@ import settingsRouter from './routes/settings.js'
 import reportsRouter from './routes/reports.js'
 import recordsRouter from './routes/records.js'
 import { errorHandler } from './middleware/errorHandler.js'
+import { requireProxySecret } from './middleware/requireProxySecret.js'
 
 const REQUIRED_ENV = ['JWT_SECRET', 'MERCHANT_PASSWORD_HASH', 'SESSION_COOKIE_NAME']
+
+// Only production sits behind the Vercel proxy, so local dev does not need this.
+if (process.env.NODE_ENV === 'production') {
+  REQUIRED_ENV.push('PROXY_SHARED_SECRET')
+}
 
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
@@ -44,6 +50,12 @@ app.set('etag', false)
 // it trusts every hop and lets any caller spoof req.ip and evade the rate limiters.
 // This must stay above helmet, the rate limiters and all routes.
 app.set('trust proxy', 4)
+
+// Production only: reject anything that did not come through the Vercel proxy (BUGS #056).
+// Runs before everything else, including helmet, so unproxied callers get nothing but a 403.
+if (process.env.NODE_ENV === 'production') {
+  app.use(requireProxySecret)
+}
 
 // Local Vite (5173) reads this API (3001). Production is same-origin through the Vercel /api proxy, so keep helmet's same-origin default there.
 app.use(helmet(
