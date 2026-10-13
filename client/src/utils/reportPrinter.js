@@ -111,10 +111,6 @@ const buildReportHtml = (reportData) => {
   const { from, to, generatedAt, summary, bookings } = reportData
   const printedAt = formatGeneratedAt(new Date().toISOString())
   const netProfitClass = summary.netProfit >= 0 ? 'profit-positive' : 'profit-negative'
-  const reportMetaJson = JSON.stringify({ from, to })
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
 
   const bookingCards = bookings.length > 0
     ? bookings.map(buildBookingCard).join('')
@@ -126,9 +122,6 @@ const buildReportHtml = (reportData) => {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EventFlow Report — ${escapeHtml(from)} to ${escapeHtml(to)}</title>
-  <script>const reportData = ${reportMetaJson};</script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -300,63 +293,12 @@ const buildReportHtml = (reportData) => {
       .summary-box { grid-template-columns: 1fr; }
     }
   </style>
-  <script>
-    async function downloadPDF() {
-      const btn = document.getElementById('download-btn')
-      btn.disabled = true
-      btn.textContent = 'Generating...'
-
-      try {
-        const { jsPDF } = window.jspdf
-        const reportEl = document.getElementById('report-body')
-
-        const canvas = await html2canvas(reportEl, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          logging: false
-        })
-
-        const imgData = canvas.toDataURL('image/png')
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4'
-        })
-
-        const pageWidth = pdf.internal.pageSize.getWidth()
-        const pageHeight = pdf.internal.pageSize.getHeight()
-        const imgWidth = pageWidth
-        const imgHeight = (canvas.height * imgWidth) / canvas.width
-
-        let heightLeft = imgHeight
-        let position = 0
-
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
-
-        while (heightLeft > 0) {
-          position -= pageHeight
-          pdf.addPage()
-          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-          heightLeft -= pageHeight
-        }
-
-        pdf.save('EventFlow-Report-' + reportData.from + '-to-' + reportData.to + '.pdf')
-      } catch (err) {
-        alert('PDF generation failed. Please use the Print button instead.')
-      } finally {
-        btn.disabled = false
-        btn.textContent = 'Download PDF'
-      }
-    }
-  </script>
 </head>
 <body>
   <div class="page">
     <div class="no-print">
-      <button type="button" id="download-btn" class="download-btn" onclick="downloadPDF()">Download PDF</button>
-      <button type="button" class="print-btn" onclick="window.print()">Print</button>
+      <button type="button" id="download-btn" class="download-btn">Download PDF</button>
+      <button type="button" id="print-btn" class="print-btn">Print</button>
     </div>
 
     <div id="report-body">
@@ -409,10 +351,71 @@ const buildReportHtml = (reportData) => {
 </html>`
 }
 
+const downloadReportPdf = async (reportWindow, reportData) => {
+  const doc = reportWindow.document
+  const btn = doc.getElementById('download-btn')
+  if (!btn) return
+  btn.disabled = true
+  btn.textContent = 'Generating...'
+
+  try {
+    const [{ jsPDF }, { default: html2canvas }] = await Promise.all([
+      import('jspdf'),
+      import('html2canvas'),
+    ])
+    const reportEl = doc.getElementById('report-body')
+    const canvas = await html2canvas(reportEl, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+    })
+
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const imgWidth = pageWidth
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+
+    let heightLeft = imgHeight
+    let position = 0
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+    heightLeft -= pageHeight
+
+    while (heightLeft > 0) {
+      position -= pageHeight
+      pdf.addPage()
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+      heightLeft -= pageHeight
+    }
+
+    pdf.save(`EventFlow-Report-${reportData.from}-to-${reportData.to}.pdf`)
+  } catch {
+    reportWindow.alert('PDF generation failed. Please use the Print button instead.')
+  } finally {
+    btn.disabled = false
+    btn.textContent = 'Download PDF'
+  }
+}
+
 export const openReportWindow = (reportData) => {
   const html = buildReportHtml(reportData)
-  const newWindow = window.open('', '_blank')
-  if (!newWindow) return
-  newWindow.document.write(html)
-  newWindow.document.close()
+  const reportWindow = window.open('', '_blank')
+  if (!reportWindow) return
+  reportWindow.document.write(html)
+  reportWindow.document.close()
+
+  reportWindow.document.getElementById('download-btn')?.addEventListener('click', () => {
+    downloadReportPdf(reportWindow, reportData)
+  })
+  reportWindow.document.getElementById('print-btn')?.addEventListener('click', () => {
+    reportWindow.print()
+  })
 }
