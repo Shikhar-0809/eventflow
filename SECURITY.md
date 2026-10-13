@@ -218,6 +218,7 @@ The Render API must only be reachable through our Vercel proxy (BUGS #056). With
   2. Confirm in Render's logs that real app traffic logs `check=pass` and that a direct request to the Render URL logs `check=fail`.
   3. Set `PROXY_LOCK_MODE=enforce` in Render (an env change and restart; no code deploy).
   4. Run the post-deploy checklist in BUGS #056.
+- **Status:** production has run in `enforce` mode since the rollout was verified on 2026-10-13 (BUGS #056): the direct Render URL returns 403 and all app traffic through Vercel passes. Keep `PROXY_LOCK_MODE=enforce` set on Render.
 - **Rollback:** switching mode is an env change on Render, so rolling back to `report` needs no code deploy.
 - **Rotating the secret:** change it in Render and Vercel, then redeploy both. Requests fail with 403 between the two changes.
 
