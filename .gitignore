@@ -9,4 +9,6 @@ server/scripts/.verify-session-cache.json
 *.db-wal
 dist/
 
+STATE_REPORT.md
+
 server/.verify-cookies.txt
