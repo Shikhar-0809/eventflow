@@ -77,7 +77,7 @@ router.post('/log-client-action', validate(clientActionSchema), async (req, res,
 router.get('/me', async (req, res, next) => {
   try {
     const weekOffset = Math.max(0, Number.parseInt(req.query.weekOffset, 10) || 0)
-    const { weekStart, weekEndExclusive, weekStartDate, weekEndDate, weekLabel } = getWeekWindow(weekOffset)
+    const { weekStart, weekEndExclusive, weekLabel } = getWeekWindow(weekOffset)
 
     const weekScoped = (eventType) => pool.query(
       `SELECT COUNT(*)::int AS count FROM event_log
@@ -98,12 +98,7 @@ router.get('/me', async (req, res, next) => {
       { rows: lastActiveRows },
     ] = await Promise.all([
       weekScoped('login'),
-      pool.query(
-        `SELECT COUNT(*)::int AS count FROM bookings
-         WHERE event_date >= $1 AND event_date <= $2
-         AND status != 'cancelled'`,
-        [weekStartDate, weekEndDate],
-      ),
+      weekScoped('booking_created'),
       weekScoped('booking_edited'),
       weekScoped('booking_viewed'),
       weekScoped('change_logged'),

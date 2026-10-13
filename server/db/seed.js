@@ -1,5 +1,6 @@
 import { pool } from './database.js'
 import { seedAnalyticsHistory } from './analyticsHistorySeed.js'
+import { seedDemoAnalytics } from './demoAnalyticsSeed.js'
 import {
   logDevBookings,
   purgeNonDemoEventLog,
@@ -164,6 +165,9 @@ export const seed = async () => {
   await seedSureshDemoBooking(pool)
   await purgeNonDemoEventLog(pool)
   await seedKapilTomarBooking(pool)
-  await seedDemoEventLog(pool)
+  const analyticsResult = await seedDemoAnalytics(pool)
+  if (!analyticsResult.inserted) {
+    await seedDemoEventLog(pool)
+  }
   await logDevBookings(pool)
 }
