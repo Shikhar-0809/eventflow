@@ -17,20 +17,25 @@ Scope is still deliberately small (single merchant, no customer portal, no payme
 | Layer | Technology | Reason |
 |---|---|---|
 | Frontend | React 18 + Vite | Fast dev server, hot reload, component model |
-| Styling | Tailwind CSS v3 | Utility-first, fast to iterate, no CSS files |
+| Styling | Tailwind CSS v3 | Utility-first, fast to iterate; FullCalendar overrides live in `index.css` |
 | Calendar UI | `@fullcalendar/react` | Production-grade calendar, event rendering built-in |
 | State management | Zustand | Lightweight, no boilerplate, easy to reason about |
 | Backend | Node.js + Express | Minimal setup, familiar |
-| Database | SQLite via `better-sqlite3` (demo) → Postgres on deploy | SQLite for local dev speed; see DEPLOYMENT.md for why this changes at deploy time. Postgres migration (Prompt 15) is deliberately deferred — current build runs on SQLite. |
+| Database | Postgres via `pg` | Persistent DB for deploy (ephemeral filesystems wipe SQLite). Local and prod both use Postgres via `DATABASE_URL`. |
 | API layer | REST (JSON) | Simple, no GraphQL overhead needed |
 | WhatsApp | `wa.me` deep links | No API key needed, opens WhatsApp with pre-filled text |
 | Auth | Single-merchant password + JWT session cookie | Not multi-tenant yet, but the app cannot be left open on the public internet with real client data and no login |
 | Validation | `zod` (shared schema, frontend + backend) | One source of truth for what a valid booking — and a valid inventory item — looks like |
 | Charts | `recharts` | Lightweight, composable, good fit for a handful of simple charts — no need for a heavier charting lib at this scale |
+| Records export | SheetJS (`xlsx`) | Client-side `.xlsx` export from the Records screen |
+| Printable reports / PDF | Printable HTML window + jsPDF + html2canvas loaded via CDN | Date-range report from Analytics; PDF download without bundling those libs |
 | Secrets | `.env` (local) / platform env vars (deploy) | Never committed, see SECURITY.md |
 
-### Why SQLite changes at deploy time
-Render/Railway/Vercel free tiers use **ephemeral filesystems** — anything written to disk (including a SQLite `.db` file) can be wiped on every redeploy or restart. This is the single most common way people lose "production" data on free hosting. See `DEPLOYMENT.md` for the Postgres migration path (Neon/Supabase free tier — both give a persistent Postgres DB at no cost).
+### Why Postgres (not SQLite on disk)
+Render/Railway/Vercel free tiers use **ephemeral filesystems** — anything written to disk (including a SQLite `.db` file) can be wiped on every redeploy or restart. EventFlow therefore uses **Postgres via `pg`** everywhere (`DATABASE_URL`). See `DEPLOYMENT.md` for Neon/Supabase + Render + Vercel topology.
+
+### Production `/api` proxy (Vercel → Render)
+In production the browser uses same-origin `/api` (`client/.env.production`: `VITE_API_URL=/api`). Vercel rewrites `/api/:path*` to the Render API host so the session cookie stays first-party. See SECURITY.md and DEPLOYMENT.md.
 
 ---
 
@@ -39,70 +44,92 @@ Render/Railway/Vercel free tiers use **ephemeral filesystems** — anything writ
 ```
 eventflow/
 ├── client/                        # React frontend (Vite)
-│   ├── public/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Sidebar.jsx            # Left nav, quick stats
-│   │   │   ├── CalendarView.jsx       # FullCalendar wrapper, main hero
-│   │   │   ├── BookingModal.jsx       # Booking form — handles BOTH create and edit mode, conflict + inventory checks
-│   │   │   ├── BookingDetail.jsx      # Right panel, booking info + actions + inventory used + Edit button
-│   │   │   ├── ConflictBanner.jsx     # Inline alert on date clash (non-blocking)
-│   │   │   ├── InventoryWarningBanner.jsx  # Inline alert on inventory shortfall (non-blocking, triggers confirm step on submit)
-│   │   │   ├── ConfirmDialog.jsx      # Generic reusable "are you sure?" confirm/cancel dialog — used for inventory override
-│   │   │   ├── LoginScreen.jsx        # Single-merchant password gate
-│   │   │   ├── AnalyticsView.jsx      # Business analytics screen (revenue, bookings, peak months)
-│   │   │   ├── UsageView.jsx          # "Your activity" screen — merchant-facing usage summary
-│   │   │   ├── InventoryView.jsx      # Inventory dashboard — available/in-use/damaged per item
-│   │   │   ├── InventoryItemCard.jsx  # Single item card (name, total, in-use-today, available)
-│   │   │   ├── AddInventoryItemModal.jsx   # Add a new item type / edit total quantity owned
-│   │   │   └── DamagedItemsPanel.jsx  # Damaged/repair-needed section — mark damaged, mark repaired
-│   │   ├── store/
-│   │   │   ├── bookingStore.js        # Zustand store, all booking state
-│   │   │   ├── authStore.js           # Auth/session state
-│   │   │   └── inventoryStore.js      # Zustand store, all inventory item state
-│   │   ├── schemas/
-│   │   │   ├── booking.schema.js      # Zod schema — shared shape with backend; includes optional inventory array
-│   │   │   └── inventory.schema.js    # Zod schema — shared shape with backend, for inventory items and damage adjustments
-│   │   ├── utils/
-│   │   │   ├── whatsapp.js            # wa.me link generators — signed as "Bala Ji Tent House"
-│   │   │   ├── conflictCheck.js       # Date overlap detection logic
-│   │   │   ├── api.js                 # Single fetch wrapper, attaches auth header
-│   │   │   ├── formatCurrency.js      # ₹ formatting helper, Indian numbering
-│   │   │   └── sanitize.js            # Strip/escape input before render or send
-│   │   ├── hooks/
-│   │   │   └── useBookings.js         # Fetch + cache bookings from API
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── index.css                  # Tailwind directives only
-│   ├── .env.example                   # VITE_API_URL=...
+│   ├── index.html                 # HTML shell; title "EventFlow — Bala Ji Tent House"
+│   ├── package.json
+│   ├── postcss.config.js
 │   ├── tailwind.config.js
-│   └── vite.config.js
+│   ├── vercel.json                # /api rewrite to Render + SPA fallback
+│   ├── vite.config.js
+│   ├── .env.example               # VITE_API_URL, VITE_MERCHANT_PHONE
+│   ├── .env.production            # VITE_API_URL=/api
+│   └── src/
+│       ├── App.jsx                # Auth gate, view switcher, mobile shell
+│       ├── main.jsx
+│       ├── index.css              # Tailwind directives + FullCalendar overrides + keyframes
+│       ├── components/
+│       │   ├── AddInventoryItemModal.jsx
+│       │   ├── AnalyticsView.jsx          # Charts, target, date-range report
+│       │   ├── BookingDetail.jsx          # Booking overlay: WhatsApp, expenses, status, delete
+│       │   ├── BookingPage.jsx            # Create/edit booking form
+│       │   ├── CalendarView.jsx           # FullCalendar + search + morning briefing
+│       │   ├── ConfirmDialog.jsx
+│       │   ├── ConflictBanner.jsx         # Inline alert on date clash (non-blocking)
+│       │   ├── DamagedItemsPanel.jsx
+│       │   ├── InventoryItemCard.jsx
+│       │   ├── InventoryView.jsx
+│       │   ├── InventoryWarningBanner.jsx # Inline alert on shortfall; confirm step on submit
+│       │   ├── LoginScreen.jsx
+│       │   ├── PendingBalancesView.jsx
+│       │   ├── RecordsView.jsx            # Filterable records + Excel export
+│       │   ├── Sidebar.jsx
+│       │   └── UsageView.jsx
+│       ├── schemas/
+│       │   ├── booking.schema.js
+│       │   └── inventory.schema.js
+│       ├── store/
+│       │   ├── authStore.js
+│       │   ├── bookingStore.js
+│       │   ├── inventoryStore.js
+│       │   └── settingsStore.js           # Monthly revenue target
+│       └── utils/
+│           ├── api.js
+│           ├── dateHelpers.js
+│           ├── discardConfirm.js
+│           ├── excelExporter.js           # SheetJS .xlsx export
+│           ├── formatCurrency.js
+│           ├── formatRelativeTime.js
+│           ├── reportPrinter.js           # Printable HTML report (+ PDF via CDN)
+│           ├── sanitize.js
+│           └── whatsapp.js                # wa.me links — signed as "Bala Ji Tent House"
 │
 ├── server/                        # Express backend
+│   ├── index.js                   # Express entry: CORS, mounts, initDb+seed, listen
+│   ├── package.json
+│   ├── .env.example               # JWT_SECRET, DATABASE_URL, MERCHANT_PASSWORD_HASH, ADMIN_ACCESS_KEY, …
 │   ├── db/
-│   │   ├── database.js                # DB connection (SQLite local / Postgres prod)
-│   │   ├── schema.sql                 # Source of truth table definitions — includes inventory_items, booking_inventory, inventory_damage_log
-│   │   └── seed.js                    # Seed realistic bookings + starter inventory — dev/demo only, gated by NODE_ENV
-│   ├── routes/
-│   │   ├── bookings.js                # Booking CRUD (create + edit) + conflict check
-│   │   ├── auth.js                    # Login route, issues JWT cookie
-│   │   ├── analytics.js               # GET endpoints for revenue/booking aggregates
-│   │   ├── usage.js                   # GET endpoint for usage summary (merchant-facing + internal)
-│   │   └── inventory.js               # Inventory CRUD, damage/repair adjustments, per-date availability check
+│   │   ├── database.js            # pg Pool, schema.sql apply, column/FK migrations
+│   │   ├── schema.sql             # Postgres DDL (source of truth at boot)
+│   │   ├── seed.js                # Dev seed orchestrator (production-gated)
+│   │   ├── demoSeed.js
+│   │   ├── demoAnalyticsSeed.js
+│   │   └── analyticsHistorySeed.js
 │   ├── middleware/
-│   │   ├── errorHandler.js            # Global error handler — never leaks stack traces in prod
-│   │   ├── requireAuth.js             # Verifies JWT cookie on protected routes
-│   │   ├── rateLimiter.js             # Throttles login + booking creation endpoints
-│   │   ├── validate.js                # Generic zod-validation middleware
-│   │   └── trackUsage.js              # Logs an event_log row on every meaningful action
+│   │   ├── errorHandler.js        # Never returns stack traces or err.message in production
+│   │   ├── rateLimiter.js
+│   │   ├── requireAuth.js
+│   │   ├── requireAdminKey.js
+│   │   ├── trackUsage.js
+│   │   └── validate.js
+│   ├── routes/
+│   │   ├── auth.js
+│   │   ├── bookings.js
+│   │   ├── inventory.js
+│   │   ├── analytics.js
+│   │   ├── usage.js
+│   │   ├── settings.js            # merchant_settings get/patch
+│   │   ├── reports.js             # Date-range report
+│   │   └── records.js             # Filtered booking records
 │   ├── schemas/
-│   │   ├── booking.schema.js          # Same shape as client schema — keep in sync manually, see CODING_STANDARDS.md
-│   │   └── inventory.schema.js        # Same shape as client schema, server source of truth
-│   ├── .env.example                   # JWT_SECRET, DATABASE_URL, MERCHANT_PASSWORD_HASH, NODE_ENV, CORS_ORIGIN
-│   └── index.js                       # Express app entry point
+│   │   ├── booking.schema.js
+│   │   ├── inventory.schema.js
+│   │   ├── records.schema.js
+│   │   └── settings.schema.js
+│   └── scripts/                   # Verify/cleanup/wipe helpers
+│       └── lib/                   # Shared verify helpers
 │
-├── .gitignore                     # node_modules, .env, *.db, dist/
+├── .gitignore
 ├── package.json                   # Root package with workspaces
+├── vercel.json                    # Root Vercel build + /api rewrite to Render
 ├── README.md
 ├── ARCHITECTURE.md
 ├── CODING_STANDARDS.md
@@ -120,49 +147,71 @@ eventflow/
 
 ## Data model
 
-### Bookings table (SQLite)
+Schema is applied on boot from `server/db/schema.sql` (Postgres), plus ad-hoc `ALTER TABLE … ADD COLUMN IF NOT EXISTS` / FK migrations in `database.js`. No separate migration framework. Connection: `pg.Pool` with `connectionString: process.env.DATABASE_URL`; SSL when `NODE_ENV === 'production'`.
+
+**No `merchant_id` / tenant column** — single merchant per deployment. Monthly revenue target lives in `merchant_settings`, not a separate `targets` table.
+
+### `bookings`
 
 ```sql
 CREATE TABLE bookings (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  client_name TEXT    NOT NULL,
-  phone       TEXT    NOT NULL,
-  event_type  TEXT    NOT NULL,   -- wedding | birthday | corporate | other
-  event_date  TEXT    NOT NULL,   -- ISO date string YYYY-MM-DD
-  guest_count INTEGER NOT NULL,
-  venue       TEXT,
-  advance     INTEGER DEFAULT 0,  -- amount in INR
-  total       INTEGER DEFAULT 0,
-  status      TEXT    DEFAULT 'confirmed', -- confirmed | pending | cancelled
-  notes       TEXT,
-  created_at  TEXT    DEFAULT (datetime('now')),
-  updated_at  TEXT    DEFAULT (datetime('now'))   -- set on every edit, see Prompt 18
-);
-
-CREATE TABLE change_log (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  booking_id  INTEGER REFERENCES bookings(id),
-  change_note TEXT    NOT NULL,
-  logged_at   TEXT    DEFAULT (datetime('now'))
-);
-
-CREATE TABLE event_log (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  event_type  TEXT    NOT NULL,   -- login | booking_created | booking_edited | booking_viewed | whatsapp_confirmation_sent | whatsapp_reminder_sent | change_logged
-  metadata    TEXT,               -- optional JSON string with extra context, e.g. booking_id
-  created_at  TEXT    DEFAULT (datetime('now'))
+  id                INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  client_name       TEXT    NOT NULL,
+  phone             TEXT    NOT NULL,
+  event_type        TEXT    NOT NULL,   -- wedding | birthday | corporate | other
+  event_type_custom TEXT,               -- label when event_type = 'other'
+  event_date        TEXT    NOT NULL,   -- ISO date string YYYY-MM-DD
+  guest_count       INTEGER NOT NULL,
+  venue             TEXT,
+  advance           INTEGER DEFAULT 0,  -- amount in INR
+  total             INTEGER DEFAULT 0,
+  subtotal          INTEGER NOT NULL DEFAULT 0,
+  discount          INTEGER NOT NULL DEFAULT 0,
+  grand_total       INTEGER NOT NULL DEFAULT 0,
+  status            TEXT    DEFAULT 'confirmed',
+                    -- CHECK IN ('confirmed','pending','cancelled','completed')
+  notes             TEXT,
+  created_at        TEXT    DEFAULT NOW(),
+  updated_at        TEXT    DEFAULT NOW()
 );
 ```
 
-### Inventory tables (new)
+### `change_log`
+
+```sql
+CREATE TABLE change_log (
+  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  booking_id  INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+  change_note TEXT    NOT NULL,
+  logged_at   TEXT    DEFAULT NOW()
+);
+```
+
+### `event_log`
+
+```sql
+CREATE TABLE event_log (
+  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_type  TEXT    NOT NULL,
+              -- login | booking_created | booking_edited | booking_viewed |
+              -- whatsapp_confirmation_sent | whatsapp_reminder_sent | change_logged | …
+  metadata    TEXT,   -- optional JSON string; booking_id only — never client_name or phone
+  created_at  TEXT    DEFAULT NOW()
+);
+```
+
+`event_log` is the single source of truth for both the merchant-facing "Your Activity" view and the internal adoption-proof reporting. One table, two consumers — see Usage tracking section below for the distinction. **Never store PII in `metadata`** — see DATA_PRIVACY.md.
+
+### Inventory tables
 
 ```sql
 CREATE TABLE inventory_items (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  name             TEXT    NOT NULL UNIQUE,   -- e.g. "Plastic Chairs", "Round Tables", "3-Seater Sofas", "Shamiana Tent (20x30)"
-  total_quantity   INTEGER NOT NULL DEFAULT 0,   -- total ever owned — does not change when items are marked damaged
-  damaged_quantity INTEGER NOT NULL DEFAULT 0,   -- currently out of service, see inventory_damage_log for history
-  created_at       TEXT    DEFAULT (datetime('now'))
+  id               INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name             TEXT    NOT NULL UNIQUE,
+  total_quantity   INTEGER NOT NULL DEFAULT 0,
+  damaged_quantity INTEGER NOT NULL DEFAULT 0,
+  unit_price       INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT    DEFAULT NOW()
 );
 
 -- "Available right now" is a computed value, not a column:
@@ -171,51 +220,90 @@ CREATE TABLE inventory_items (
 --   available = usable - in_use_today
 
 CREATE TABLE booking_inventory (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  booking_id  INTEGER NOT NULL REFERENCES bookings(id),
+  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
-  quantity    INTEGER NOT NULL CHECK (quantity > 0)
+  quantity    INTEGER NOT NULL CHECK (quantity > 0),
+  unit_price  INTEGER NOT NULL DEFAULT 0,
+  line_total  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE inventory_damage_log (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
-  change      INTEGER NOT NULL,   -- positive = marked damaged, negative = marked repaired/back in service
-  note        TEXT,               -- optional free text, e.g. "torn in transit"
-  logged_at   TEXT DEFAULT (datetime('now'))
+  change      INTEGER NOT NULL,   -- positive = marked damaged, negative = marked repaired
+  note        TEXT,
+  logged_at   TEXT DEFAULT NOW()
 );
 ```
 
-`event_log` is the single source of truth for both the merchant-facing "Your Activity" view and the internal adoption-proof reporting. One table, two consumers — see Usage tracking section below for the distinction.
+### `merchant_settings`
 
-`inventory_damage_log` mirrors `change_log`'s pattern (an append-only audit trail) rather than just mutating `damaged_quantity` silently — useful both for debugging ("why does this say 12 damaged?") and because it's the kind of thing a merchant might ask about later.
+```sql
+CREATE TABLE merchant_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+```
+
+Used for keys such as `monthly_revenue_target`.
+
+### `booking_expenses`
+
+```sql
+CREATE TABLE booking_expenses (
+  id          SERIAL PRIMARY KEY,
+  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  label       TEXT    NOT NULL,
+  amount      INTEGER NOT NULL CHECK (amount > 0),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+`inventory_damage_log` mirrors `change_log`'s pattern (an append-only audit trail) rather than just mutating `damaged_quantity` silently — useful both for debugging and because it's the kind of thing a merchant might ask about later.
 
 ---
 
 ## API routes
 
+Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorHandler` → `{ error }`.
+
 | Method | Route | Auth required | Description |
 |---|---|---|---|
+| GET | `/api/health` | **No** (intentional; returns `{ status: 'ok' }` only — no data) | Liveness check |
+| GET | `/api/debug/ip` | Yes — TEMPORARY | Returns `req.ip`, `req.ips`, and `X-Forwarded-For` for the trust-proxy hop count. Delete with that change |
 | POST | `/api/auth/login` | No | Merchant logs in with password, receives JWT in httpOnly cookie |
 | POST | `/api/auth/logout` | Yes | Clears session cookie |
 | GET | `/api/auth/me` | Yes | Returns current session validity (for frontend route guard) |
 | GET | `/api/bookings` | Yes | Return all bookings (for calendar population) |
-| POST | `/api/bookings` | Yes | Create new booking (conflict + inventory checks happen here too — alert only, never blocks) |
-| GET | `/api/bookings/:id` | Yes | Single booking detail + change log + inventory attached |
-| PATCH | `/api/bookings/:id` | Yes | **Edit an existing booking** (new) — same validation as create; conflict/inventory checks exclude the booking's own existing rows |
+| GET | `/api/bookings/check-conflict?date=YYYY-MM-DD&excludeId=` | Yes | Returns conflicting booking if any. `excludeId` optional when editing |
+| GET | `/api/bookings/pending-balances` | Yes | Outstanding balances (confirmed/pending, balance > 0, upcoming) |
+| GET | `/api/bookings/:id` | Yes | Single booking + change_log + inventory + expenses |
+| POST | `/api/bookings` | Yes | Create booking (conflict + inventory checks are alert-only, never block) |
+| PATCH | `/api/bookings/:id` | Yes | Edit booking — same validation as create; conflict/inventory checks exclude own rows |
 | PATCH | `/api/bookings/:id/log` | Yes | Append a change log entry |
-| GET | `/api/bookings/check-conflict?date=YYYY-MM-DD&excludeId=` | Yes | Returns conflicting booking if any. `excludeId` optional, used when editing so a booking doesn't flag itself |
+| POST | `/api/bookings/:id/expenses` | Yes | Add a per-booking expense |
+| DELETE | `/api/bookings/:id/expenses/:expenseId` | Yes | Delete an expense |
+| PATCH | `/api/bookings/:id/status` | Yes | Update status (`confirmed` \| `pending` \| `cancelled` \| `completed`) |
+| DELETE | `/api/bookings/:id` | Yes | Delete booking (CASCADE cleans children) |
+| GET | `/api/inventory` | Yes | All items with computed `usable`, `in_use_today`, `available`, `damaged_quantity` |
+| POST | `/api/inventory` | Yes | Add inventory item |
+| PATCH | `/api/inventory/:id` | Yes | Update `total_quantity` |
+| PATCH | `/api/inventory/:id/price` | Yes | Update item `unit_price` |
+| POST | `/api/inventory/:id/damage` | Yes | Mark damaged (+) or repaired (−). Clamped so `damaged_quantity` never goes below 0 or above `total_quantity`. Writes `inventory_damage_log` |
+| DELETE | `/api/inventory/:id` | Yes | Delete item (and related rows) |
+| POST | `/api/inventory/check-availability` | Yes | Per-date shortfall check; advisory only |
 | GET | `/api/analytics/summary` | Yes | Revenue this month, bookings this month, peak month, total clients |
-| GET | `/api/analytics/monthly` | Yes | Bookings + revenue grouped by month — feeds the chart |
-| GET | `/api/usage/me` | Yes | Merchant-facing usage summary — logins this week, bookings created, messages sent |
-| GET | `/api/usage/admin` | Yes (+ separate dev-only check, see SECURITY.md) | Full event_log feed — for you/the panel, not shown in the merchant UI |
-| GET | `/api/inventory` | Yes | All inventory items with computed `usable`, `in_use_today`, `available`, `damaged_quantity` |
-| POST | `/api/inventory` | Yes | Add a new inventory item type `{ name, total_quantity }` |
-| PATCH | `/api/inventory/:id` | Yes | Update an item's `total_quantity` (e.g. bought more chairs) |
-| POST | `/api/inventory/:id/damage` | Yes | `{ change: +N or -N, note }` — mark N units damaged (positive) or repaired (negative). Clamped so `damaged_quantity` never goes below 0 or above `total_quantity`. Writes a row to `inventory_damage_log` |
-| POST | `/api/inventory/check-availability` | Yes | `{ date, items: [{ item_id, quantity }], excludeBookingId? }` → `{ sufficient: boolean, shortfalls: [{ item_id, name, requested, available }] }`. `excludeBookingId` used when editing a booking so its own existing inventory rows for that date aren't double-counted against itself |
+| GET | `/api/analytics/monthly` | Yes | Bookings + revenue by month — feeds the chart |
+| POST | `/api/usage/log-client-action` | Yes | Log client-side actions (e.g. WhatsApp clicks) into `event_log` |
+| GET | `/api/usage/me` | Yes | Merchant-facing weekly usage summary |
+| GET | `/api/usage/admin` | Yes + `requireAdminKey` | Full event_log feed — not shown in merchant UI |
+| GET | `/api/settings` | Yes | Read `merchant_settings` (e.g. monthly revenue target) |
+| PATCH | `/api/settings` | Yes | Update settings (validated) |
+| GET | `/api/reports/range` | Yes | Date-range report summary + bookings |
+| GET | `/api/records` | Yes | Filtered booking records for the Records screen / Excel export |
 
-All routes except login are behind `requireAuth` middleware. See SECURITY.md for the auth model in full.
+All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/login` and `GET /api/health` (no data). See SECURITY.md for the full auth matrix.
 
 ---
 
@@ -226,18 +314,24 @@ All routes except login are behind `requireAuth` middleware. See SECURITY.md for
 ```
 NODE_ENV=development
 PORT=3001
-DATABASE_URL=             # empty in dev (uses local SQLite file), set in prod (Postgres connection string)
+DATABASE_URL=              # Postgres connection string (required — app uses pg Pool)
 JWT_SECRET=                # long random string, generate with: openssl rand -base64 32
 MERCHANT_PASSWORD_HASH=    # bcrypt hash, never the plaintext password
 CORS_ORIGIN=http://localhost:5173
 SESSION_COOKIE_NAME=eventflow_session
+ADMIN_ACCESS_KEY=          # for GET /api/usage/admin (x-admin-key header)
 ```
+
+Required at boot: `JWT_SECRET`, `MERCHANT_PASSWORD_HASH`, `SESSION_COOKIE_NAME`.
 
 **Client (`client/.env`)**:
 
 ```
 VITE_API_URL=http://localhost:3001/api
+VITE_MERCHANT_PHONE=       # merchant WhatsApp number for self-summary / reminder links
 ```
+
+In production (`client/.env.production`): `VITE_API_URL=/api` (same-origin; Vercel proxies to Render).
 
 Full setup instructions for generating these values are in SECURITY.md.
 
@@ -254,6 +348,7 @@ These were both requested by the panel but they answer different questions and h
 - Peak booking month (last 6 months)
 - Total unique clients
 - Simple bar/line chart: bookings per month
+- Monthly revenue target (`merchant_settings`) and date-range printable report
 
 This answers the merchant's own question — the one named in the very first brainstorm ("zero business visibility").
 
@@ -276,7 +371,7 @@ This is **alert-only, never blocking.** Two bookings on the same date may be ent
 
 - Frontend checks optimistically on date picker change (calls `/api/bookings/check-conflict?date=`)
 - Backend also validates on POST/PATCH, to surface the same alert even if the frontend missed a race condition
-- If conflict found: return `{ conflict: true, booking: { client_name, event_type } }`
+- If conflict found: return `{ conflict: true, booking: { client_name, event_type } }` (or the informational `conflict: { detected, booking }` shape on create/edit responses)
 - Frontend renders `<ConflictBanner>` with the clashing booking's name. The date field gets a red border as a visual flag. **The submit button stays enabled** — the merchant can confirm the booking immediately, no extra confirmation step needed for a date clash specifically (see Inventory availability logic below for why inventory shortfalls get a stricter pattern)
 - When editing a booking, the conflict check passes `excludeId` so a booking never flags a clash against its own pre-existing record
 
@@ -309,7 +404,7 @@ The Inventory dashboard itself (`InventoryView.jsx`) shows `in_use_today` using 
 
 ## WhatsApp link generation
 
-No API key. No webhook. Pure deep link. Messages are signed as **Bala Ji Tent House**, not EventFlow — the message is on the merchant's behalf.
+No API key. No webhook. Pure deep link. Messages are signed as **Bala Ji Tent House**, not EventFlow — the message is on the merchant's behalf. Merchant phone for self-summary links comes from `VITE_MERCHANT_PHONE` (env), not a hardcoded literal.
 
 ```js
 // utils/whatsapp.js
@@ -332,9 +427,9 @@ Clicking the button opens WhatsApp desktop or mobile with the message pre-filled
 
 10 bookings spread across the current month — mix of weddings, birthdays, corporate events. Statuses varied (confirmed, pending). At least 2 bookings on the same date to demonstrate conflict detection during the demo.
 
-A starter inventory set is seeded alongside bookings: Plastic Chairs, Round Tables, Shamiana Tents, Sofas, Generators, Decorative Lights — realistic quantities, with a couple of bookings pre-attached to inventory and at least one item with a small damaged count so the Damaged section isn't empty on first load.
+A starter inventory set is seeded alongside bookings: Plastic Chairs, Round Tables, Shamiana Tents, Sofas — realistic quantities, with a couple of bookings pre-attached to inventory and at least one item with a small damaged count so the Damaged section isn't empty on first load. Additional analytics history and Meerut-heavy demo rows come from `analyticsHistorySeed.js` / `demoAnalyticsSeed.js` when not in production.
 
-Seed runs automatically on server start if the table is empty.
+Seed runs automatically on server start if the table is empty — **gated by `NODE_ENV !== 'production'`**.
 
 ---
 
@@ -342,12 +437,14 @@ Seed runs automatically on server start if the table is empty.
 
 - **Dark sidebar (#0f172a), light main canvas (#f8fafc)** — high contrast, professional feel
 - **Sidebar business name: "Bala Ji Tent House"**, tent icon, white bold text
-- **Calendar event cards**: teal for confirmed, amber for advance pending, red for cancelled
-- **Modal slides in from right** — does not replace the calendar view, user always sees context
-- **`BookingModal` is shared between create and edit** — same form, different title/submit label/initial values, to avoid duplicating the validation and inventory-check logic in two places
-- **Booking detail panel** — opens as a right drawer on calendar event click; includes an "Edit" button that opens `BookingModal` in edit mode pre-filled with that booking's data
-- **Inventory dashboard** — reachable from the Sidebar (previously a greyed-out placeholder, now active), cards per item type, separate Damaged/Repair Needed section below the main grid
-- **No routing** — single page, everything is modals and panels. Faster to build, cleaner demo.
+- **Calendar event cards**: teal for confirmed, amber for pending, red for cancelled, indigo for completed
+- **`BookingPage` is shared between create and edit** — same form, different title/submit label/initial values
+- **Booking detail** — opens as a fixed overlay modal (not an in-main drawer) on calendar event click; WhatsApp, expenses/profit, status (including complete/cancel), change log, delete
+- **Sidebar views**: Calendar, Inventory, Pending Balances, Records, Analytics, My Activity
+- **Records** — filterable list + SheetJS Excel export (`excelExporter.js`)
+- **Analytics** — charts, monthly revenue target, date-range report via `reportPrinter.js` (print + PDF via jsPDF/html2canvas CDN)
+- **Inventory dashboard** — cards per item type, low-stock alerts, Damaged/Repair Needed section
+- **No client-side router** — single page; views switch via Zustand `activeView`, overlays/modals for forms and detail
 
 ---
 

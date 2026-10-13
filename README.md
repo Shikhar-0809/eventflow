@@ -10,8 +10,8 @@ This repo is a **single-merchant proof of concept**, not a multi-tenant SaaS pro
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, Vite, Tailwind CSS v3, Zustand, FullCalendar, Recharts |
-| Backend | Node.js, Express, better-sqlite3 (local dev) |
+| Frontend | React 18, Vite, Tailwind CSS v3, Zustand, FullCalendar, Recharts, SheetJS |
+| Backend | Node.js, Express, Postgres via `pg` |
 | Auth & validation | JWT session cookie, bcrypt, Zod |
 
 Full stack rationale, routes, and folder layout: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
@@ -42,11 +42,13 @@ cp server/.env.example server/.env
 **Client** (`client/.env`):
 
 - `VITE_API_URL` — already set to `http://localhost:3001/api` in `.env.example`
+- `VITE_MERCHANT_PHONE` — merchant WhatsApp number for self-summary / reminder links
 
 **Server** (`server/.env`):
 
 - `NODE_ENV=development`
 - `PORT=3001`
+- `DATABASE_URL` — Postgres connection string (required)
 - `CORS_ORIGIN=http://localhost:5173`
 - `SESSION_COOKIE_NAME=eventflow_session`
 - Generate the secrets below and paste into the matching keys

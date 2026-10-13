@@ -32,9 +32,9 @@ This file keeps Cursor-generated code consistent across all files in the project
 
 | Type | Convention | Example |
 |---|---|---|
-| React components | PascalCase `.jsx` | `BookingModal.jsx`, `InventoryItemCard.jsx` |
-| Utility functions | camelCase `.js` | `conflictCheck.js` |
-| Store files | camelCase `.js` | `bookingStore.js`, `inventoryStore.js` |
+| React components | PascalCase `.jsx` | `BookingPage.jsx`, `InventoryItemCard.jsx` |
+| Utility functions | camelCase `.js` | `excelExporter.js`, `reportPrinter.js` |
+| Store files | camelCase `.js` | `bookingStore.js`, `inventoryStore.js`, `settingsStore.js` |
 | Route files | camelCase `.js` | `bookings.js`, `inventory.js` |
 | DB files | camelCase `.js` | `database.js` |
 | Schema files | camelCase `.schema.js` | `booking.schema.js`, `inventory.schema.js` |
@@ -84,7 +84,7 @@ export const BookingModal = ({ isOpen, onClose }) => {
 ## Tailwind usage
 
 - Use Tailwind utility classes exclusively — no inline `style={{}}` unless absolutely necessary (e.g. dynamic pixel values from JS)
-- No custom CSS files except `index.css` which contains only Tailwind directives
+- No custom CSS files except `index.css`, which contains **Tailwind directives + FullCalendar overrides + keyframes only**
 - Color palette to use consistently:
 
 | Purpose | Tailwind class |
@@ -93,8 +93,12 @@ export const BookingModal = ({ isOpen, onClose }) => {
 | Main canvas background | `bg-slate-50` |
 | Confirmed booking | `bg-teal-500` / `text-teal-800` |
 | Pending advance booking | `bg-amber-400` / `text-amber-800` |
+| Completed booking | `bg-indigo-500` / `text-indigo-700` / calendar hex `#6366f1` |
 | Conflict / error | `bg-red-100` / `text-red-700` / `border-red-400` |
 | Primary action button | `bg-teal-600 hover:bg-teal-700 text-white` |
+| WhatsApp CTA | `bg-green-600 hover:bg-green-700 text-white` |
+| Profit / success / target met | `text-emerald-500` / `text-emerald-600` / `text-emerald-700` / `bg-emerald-500` / `bg-emerald-600` |
+| Modal / overlay backdrop | `bg-black/40` or `bg-black/50` |
 | Disabled button | `bg-slate-300 text-slate-500 cursor-not-allowed` |
 | Card background | `bg-white` |
 | Border default | `border border-slate-200` |
@@ -146,7 +150,7 @@ export const useBookingStore = create((set, get) => ({
   bookings: [],
   selectedBooking: null,
   isModalOpen: false,
-  modalMode: 'create',        // 'create' | 'edit' — drives BookingModal's title/submit label/API call
+  modalMode: 'create',        // 'create' | 'edit' — drives BookingPage's title/submit label/API call
   isDetailOpen: false,
 
   setBookings: (bookings) => set({ bookings }),
@@ -320,7 +324,7 @@ const handleSubmit = async () => {
   - Date clash on PATCH `/bookings/:id` → `200` with the same optional `conflict` shape
   - Inventory shortfall on POST `/inventory/check-availability` → `200` with `{ sufficient: true }` or `{ sufficient: false, shortfalls: [...] }` — never a 409 or other error status for either case
 - **Validation happens via the zod schema, before any DB call** — use a generic `validate(schema)` middleware so individual routes don't hand-roll checks
-- **Auth happens via `requireAuth` middleware** on every route except `/auth/login` — see SECURITY.md for the full model
+- **Auth happens via `requireAuth` middleware** on every business route — see SECURITY.md for the full model (only `/auth/login` and `/health` are intentionally unauthenticated)
 - No business logic in `index.js` — only middleware setup and route mounting
 - **Never send raw error messages or stack traces to the client in production.** `errorHandler.js` must check `NODE_ENV` and return a generic message in prod, full detail only in dev
 
@@ -336,21 +340,27 @@ export const validate = (schema) => (req, res, next) => {
 }
 
 // Route handler pattern — validation + auth already applied via middleware chain
+// Import pool from '../db/database.js'
 router.post('/', requireAuth, validate(bookingSchema), async (req, res, next) => {
   try {
     const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = req.body
 
-    const clash = db.prepare(
+    const clashResult = await pool.query(
       `SELECT id, client_name, event_type FROM bookings
-       WHERE event_date = ? AND status != 'cancelled'
+       WHERE event_date = $1 AND status != 'cancelled'
        LIMIT 1`,
-    ).get(event_date)
+      [event_date],
+    )
+    const clash = clashResult.rows[0]
 
-    const result = db.prepare(
-      'INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).run(client_name, phone, event_type, event_date, guest_count, venue, advance, total)
+    const insertResult = await pool.query(
+      `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [client_name, phone, event_type, event_date, guest_count, venue, advance, total],
+    )
+    const newBooking = insertResult.rows[0]
 
-    const newBooking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(result.lastInsertRowid)
     const body = clash
       ? {
           ...newBooking,
@@ -383,9 +393,25 @@ export const errorHandler = (err, req, res, next) => {
 }
 ```
 
-**SQL rule: always use parameterized queries (`?` placeholders) — never string-concatenate user input into SQL.** `better-sqlite3`'s `.prepare()` already does this correctly in every example above; never replace it with template-literal SQL.
+**SQL rule: always use parameterized queries (`$1`, `$2`, … placeholders) — never string-concatenate user input into SQL.** `pg`'s `pool.query(sql, params)` / `client.query(sql, params)` already does this correctly in every example above; never replace it with template-literal SQL.
 
-**Multi-table writes (booking + booking_inventory, or item + damage log) must run inside a transaction.** `better-sqlite3` supports `db.transaction(fn)` — use it whenever a single logical action touches more than one table, so a booking is never created with half its inventory rows missing if something fails partway through.
+**Multi-table writes (booking + booking_inventory, or item + damage log) must run inside a transaction.** Checkout a client from the pool and use `BEGIN` / `COMMIT` / `ROLLBACK`:
+
+```js
+const client = await pool.connect()
+try {
+  await client.query('BEGIN')
+  // … multiple client.query(..., [$1, $2]) writes …
+  await client.query('COMMIT')
+} catch (err) {
+  await client.query('ROLLBACK')
+  throw err
+} finally {
+  client.release()
+}
+```
+
+Use this whenever a single logical action touches more than one table, so a booking is never created with half its inventory rows missing if something fails partway through.
 
 ---
 
@@ -417,7 +443,7 @@ Always use `https://wa.me/91${phone}` format (Indian numbers). Always `encodeURI
 - Commit message format: `feat: add conflict detection UI` / `fix: date picker reset on modal close` / `security: add rate limiting to login`
 - `.env` is gitignored — use `.env.example` with placeholder values, **never real secrets**
 - `node_modules` is gitignored
-- SQLite `.db` file is gitignored — seed runs fresh on every local startup
+- Local DB artifacts (e.g. leftover `*.db` files) are gitignored — the app uses Postgres via `DATABASE_URL`; seed runs on server start when not production
 - **Before every commit, scan for accidentally hardcoded secrets**: search the diff for `password`, `secret`, `key`, `token` — if any of these have a real value next to them instead of `process.env.X`, stop and fix before committing
 - If a secret is ever accidentally committed: it must be **rotated** (changed to a new value), not just deleted from a later commit — git history retains it forever otherwise. See SECURITY.md.
 
@@ -435,5 +461,5 @@ Run through this before marking any PROMPTS.md milestone "done." Takes 5 minutes
 - [ ] Every new dependency added is actually used (no leftover installs bloating the bundle)
 - [ ] New component follows the 8-step structure order defined above
 - [ ] Tailwind classes match the palette table — no off-palette hex colors introduced ad hoc
-- [ ] Any multi-table write (booking + inventory rows, item + damage log) is wrapped in a `db.transaction(...)`
+- [ ] Any multi-table write (booking + inventory rows, item + damage log) uses `pool.connect()` + `BEGIN` / `COMMIT` / `ROLLBACK`
 - [ ] `BUGS.md` updated if anything was debugged during this milestone

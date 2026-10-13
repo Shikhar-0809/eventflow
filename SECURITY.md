@@ -30,7 +30,7 @@ EventFlow v1 is a **single-merchant tool**, not a multi-tenant SaaS product. The
 - Password is never stored in plaintext. A bcrypt hash lives in `MERCHANT_PASSWORD_HASH` (env var, server-side only).
 - On successful login, the server issues a JWT in an **httpOnly cookie** — not returned in the response body, not stored in `localStorage`, not accessible to client-side JS at all. This is the single biggest XSS mitigation in the whole app: even if malicious JS somehow ran in the merchant's browser, it cannot read the session token.
 - The JWT itself carries no sensitive payload — just an issued-at/expiry pair. There's nothing inside it worth protecting if decoded; the cookie's `httpOnly` flag is what actually matters, not the token contents.
-- Every route except `POST /api/auth/login` requires a valid session. No exceptions, no "just for testing" bypasses left in committed code. This now explicitly includes the inventory routes added after the original auth build — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
+- Every **business** route requires a valid session. No "just for testing" bypasses left in committed code. The only intentional unauthenticated routes are `POST /api/auth/login` and `GET /api/health` (liveness only — returns `{ status: 'ok' }`, no data). This includes inventory, settings, reports, records, and usage routes — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
 
 ---
 
@@ -206,34 +206,38 @@ Inventory and booking-edit routes are **not** separately rate limited — they'r
 
 ## Route auth matrix
 
-Cross-check against this table any time a new route is added — every row except login needs both columns checked.
+Cross-check against this table any time a new route is added — every business row needs `requireAuth` checked. Only login and health are intentionally unauthenticated.
 
 | Route | `requireAuth`? | Rate limited? |
 |---|---|---|
+| `GET /api/health` | No — intentional liveness; returns `{ status: 'ok' }` only, no data | No |
+| `GET /api/debug/ip` | Yes — TEMPORARY; delete when trust proxy hop count is set | No |
 | `POST /api/auth/login` | No | Yes — `loginRateLimiter` |
 | `POST /api/auth/logout` | Yes | No |
 | `GET /api/auth/me` | Yes | No |
 | `GET /api/bookings` | Yes | No |
-| `POST /api/bookings` | Yes | Yes — `bookingCreateRateLimiter` |
-| `PATCH /api/bookings/:id` | Yes | No |
-| `PATCH /api/bookings/:id/status` | Yes | No |
+| `GET /api/bookings/check-conflict` | Yes | No |
+| `GET /api/bookings/pending-balances` | Yes | No |
 | `GET /api/bookings/:id` | Yes | No |
+| `POST /api/bookings` | Yes | Yes — `bookingCreateRateLimiter` |
 | `PATCH /api/bookings/:id/log` | Yes | No |
 | `POST /api/bookings/:id/expenses` | Yes | No |
 | `DELETE /api/bookings/:id/expenses/:expenseId` | Yes | No |
+| `PATCH /api/bookings/:id/status` | Yes | No |
 | `DELETE /api/bookings/:id` | Yes | No |
-| `GET /api/bookings/check-conflict` | Yes | No |
-| `GET /api/bookings/pending-balances` | Yes | No |
-| `GET /api/analytics/summary` | Yes | No |
-| `GET /api/analytics/monthly` | Yes | No |
-| `GET /api/usage/me` | Yes | No |
-| `POST /api/usage/log-client-action` | Yes | No |
-| `GET /api/usage/admin` | Yes + `requireAdminKey` (below) | No |
+| `PATCH /api/bookings/:id` | Yes | No |
 | `GET /api/inventory` | Yes | No |
+| `POST /api/inventory/check-availability` | Yes | No |
 | `POST /api/inventory` | Yes | No |
+| `PATCH /api/inventory/:id/price` | Yes | No |
 | `PATCH /api/inventory/:id` | Yes | No |
 | `POST /api/inventory/:id/damage` | Yes | No |
-| `POST /api/inventory/check-availability` | Yes | No |
+| `DELETE /api/inventory/:id` | Yes | No |
+| `GET /api/analytics/summary` | Yes | No |
+| `GET /api/analytics/monthly` | Yes | No |
+| `POST /api/usage/log-client-action` | Yes | No |
+| `GET /api/usage/me` | Yes | No |
+| `GET /api/usage/admin` | Yes + `requireAdminKey` (below) | No |
 | `GET /api/settings` | Yes | No |
 | `PATCH /api/settings` | Yes | No |
 | `GET /api/reports/range` | Yes | No |
@@ -325,7 +329,7 @@ router.post('/', requireAuth, async (req, res, next) => { ... }, validate(bookin
 
 ## SQL injection prevention
 
-Every query uses `better-sqlite3`'s parameterized `.prepare()` with `?` placeholders. No exceptions, no string concatenation or template literals with variables in SQL — including aggregate queries for analytics and the per-date inventory availability calculation. See `CODING_STANDARDS.md` for the exact pattern; this file just states it's a hard security requirement, not a style preference.
+Every query uses `pg`'s parameterized `pool.query()` / `client.query()` with `$1`, `$2`, … placeholders. No exceptions, no string concatenation or template literals with variables in SQL — including aggregate queries for analytics, dynamic WHERE builders in records (values still bound; sort fragments constrained to fixed allowlists), and the per-date inventory availability calculation. Multi-table writes use a client from `pool.connect()` with `BEGIN` / `COMMIT` / `ROLLBACK`, not ad-hoc partial writes. See `CODING_STANDARDS.md` for the exact pattern; this file just states it's a hard security requirement, not a style preference.
 
 ---
 
@@ -366,10 +370,10 @@ In production the browser only hits the Vercel frontend origin; Vercel proxies `
 
 This is the checklist `PROMPTS.md`'s Prompt 12 refers to. Run through all of it, not just the items that feel relevant to whatever you just built.
 
-- [ ] Every route except `POST /api/auth/login` has `requireAuth` in its middleware chain — including newer routes (analytics, usage, **inventory**, and the booking-edit `PATCH` route) that are easy to forget once the original auth prompt is a few milestones back
+- [ ] Every business route has `requireAuth` in its middleware chain — including analytics, usage, inventory, settings, reports, records, expenses, and booking-edit/`status`/`delete` routes. Only `POST /api/auth/login` and `GET /api/health` are exempt (health must return no data)
 - [ ] `errorHandler.js` never returns `err.message` or a stack trace when `NODE_ENV === 'production'` — verified by deliberately throwing an error and checking the response
 - [ ] No `console.log` anywhere includes `req.body`, a password, a token, or a full booking object (phone numbers count as sensitive here too)
-- [ ] Every SQL query uses parameterized `.prepare()` — no string concatenation, anywhere, including the inventory availability aggregate queries
+- [ ] Every SQL query uses parameterized `$n` placeholders via `pg` — no string concatenation, anywhere, including the inventory availability aggregate queries
 - [ ] `.env` is confirmed not tracked by git (`git status` should not list it); `.env.example` contains only placeholders
 - [ ] `npm audit` run in both `/client` and `/server`; any High/Critical findings fixed, not just noted
 - [ ] `loginRateLimiter` is actually applied to the login route, not just defined and imported nowhere

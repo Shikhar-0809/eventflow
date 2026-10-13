@@ -10,7 +10,7 @@ After every milestone marked **[MILESTONE]**, run the relevant checklist from `T
 
 Estimated time per prompt is noted. This build is now product-grade, not just demo — budget more time than the original 8-hour pass, especially for Prompts 2 (auth) and 6 (security hardening), which are new.
 
-**Note on Prompts 16–21:** these were added after the original build (Prompts 0–14) was complete, demo-verified, and Prompt 15 (Postgres migration) was deliberately deferred. Run 16–21 against the local SQLite build, **before** ever attempting Prompt 15 / deployment — they extend v1's feature scope (rebrand, non-blocking conflict alerts, booking edit, inventory tracking) per the Scope decisions log in `ROADMAP.md`. They're numbered after Prompt 15 only to avoid renumbering a prompt that `DEPLOYMENT.md` and other docs already reference by number — sequence-wise, treat 16–21 as continuing directly from 14.
+**Note on Prompts 16–21:** these were added after the original build (Prompts 0–14) was complete and demo-verified. Sequence-wise they continued from 14 while Prompt 15 (Postgres) was temporarily deferred, then Prompt 15 was completed — **current code uses Postgres via `pg`**. Prompts 16–21 extend v1's feature scope (rebrand, non-blocking conflict alerts, booking edit, inventory tracking) per the Scope decisions log in `ROADMAP.md`. They're numbered after Prompt 15 only to avoid renumbering a prompt that `DEPLOYMENT.md` and other docs already reference by number.
 
 ---
 
@@ -444,10 +444,11 @@ If any seed data is missing or malformed, fix seed.js and clear + re-run the see
 ---
 
 ## Prompt 15 — Postgres migration for deploy
-**Time: 40 min — run only when ready to deploy, see DEPLOYMENT.md first — DEFERRED, do not run yet**
+**Time: 40 min — see DEPLOYMENT.md — COMPLETED (migration already in code; runtime is Postgres via `pg`)**
 
 ```
 Migrate EventFlow's database layer from better-sqlite3 to Postgres, following DEPLOYMENT.md exactly.
+
 
 1. Install pg, remove better-sqlite3 from server dependencies (or keep both temporarily behind an env check if you want local dev to still use SQLite — but for simplicity, prefer just switching fully to Postgres using a local Postgres or a free Neon dev branch for local dev too, to keep dev/prod parity).
 
