@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./server/.env)",
+      "Read(./client/.env)",
+      "Read(./**/.env.local)"
+    ]
+  }
+}
