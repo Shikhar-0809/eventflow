@@ -212,6 +212,13 @@ The Render API must only be reachable through our Vercel proxy (BUGS #056). With
 - **Vercel side:** `client/vercel.json` has a `routes` entry for `/api/(.*)` with `continue: true` and a `request.headers` transform that sets `x-proxy-secret` from `$PROXY_SHARED_SECRET` (read through the transform's `env` allowlist, so no literal value is in the file). The existing `/api` rewrite to Render, SPA fallback and security headers are unchanged. If the Vercel variable is missing, the header becomes the literal text `$PROXY_SHARED_SECRET` and the API answers 403 (fails closed).
 - **Server side:** `server/middleware/requireProxySecret.js`, mounted in `server/index.js` right after `trust proxy` and before helmet and everything else, **production only**. It compares `x-proxy-secret` with `crypto.timingSafeEqual` (a length mismatch returns false without throwing). Missing or wrong header: `403 { "error": "Not found." }`, no other detail, the header value is never logged.
 - **Exempt:** `GET /api/health` only (Render's health check).
+- **`PROXY_LOCK_MODE`** (Render, production only): `report` or `enforce`. Unset or any other value (including `REPORT`) means `enforce` (fail closed). In `report` mode the same `timingSafeEqual` check runs but every request continues, and exactly one line is logged per request: `proxy_lock check=pass|fail path=<req.path>`. The header value, its length and other headers are never logged. The health exemption is the same in both modes.
+- **Staged rollout:**
+  1. Set `PROXY_SHARED_SECRET` in Render and Vercel and `PROXY_LOCK_MODE=report` in Render, then deploy.
+  2. Confirm in Render's logs that real app traffic logs `check=pass` and that a direct request to the Render URL logs `check=fail`.
+  3. Set `PROXY_LOCK_MODE=enforce` in Render (an env change and restart; no code deploy).
+  4. Run the post-deploy checklist in BUGS #056.
+- **Rollback:** switching mode is an env change on Render, so rolling back to `report` needs no code deploy.
 - **Rotating the secret:** change it in Render and Vercel, then redeploy both. Requests fail with 403 between the two changes.
 
 ## Route auth matrix
