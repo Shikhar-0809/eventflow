@@ -35,10 +35,12 @@ const PORT = process.env.PORT || 3001
 // JSON API only — Express default ETag can respond 304 with an empty body on repeat GETs.
 app.set('etag', false)
 
-// cross-origin: local Vite (5173) reads this API (3001). Same-origin CORP would block that.
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}))
+// Local Vite (5173) reads this API (3001). Production is same-origin through the Vercel /api proxy, so keep helmet's same-origin default there.
+app.use(helmet(
+  process.env.NODE_ENV === 'production'
+    ? {}
+    : { crossOriginResourcePolicy: { policy: 'cross-origin' } },
+))
 
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
