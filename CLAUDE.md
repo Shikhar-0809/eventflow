@@ -40,3 +40,7 @@ If code and these docs disagree, say so — don't silently pick one.
 - Done: docs refresh (Prompt 22), security quick fixes (Prompt 23), enforced CSP, helmet, db.prepare shim removed.
 - In progress: trust proxy = 4 (BUGS #040), then Vercel-only origin lock with `PROXY_SHARED_SECRET`.
 - Next: `PROMPTS_22-26.md` Prompt 24 (multi-merchant schema), 25 (merchant-scoped API + isolation test), 26 (Firebase auth + onboarding).
+
+## Compact instructions
+
+When compacting, keep: the current prompt number, files changed, open BUGS.md items, and failing checks. Drop full file contents and command output.

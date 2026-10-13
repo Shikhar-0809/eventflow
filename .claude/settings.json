@@ -5,5 +5,15 @@
       "Read(./client/.env)",
       "Read(./**/.env.local)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "node .claude/hooks/block-env-read.mjs" }
+        ]
+      }
+    ]
   }
 }
