@@ -211,7 +211,6 @@ Cross-check against this table any time a new route is added — every business 
 | Route | `requireAuth`? | Rate limited? |
 |---|---|---|
 | `GET /api/health` | No — intentional liveness; returns `{ status: 'ok' }` only, no data | No |
-| `GET /api/debug/ip` | Yes — TEMPORARY; delete when trust proxy hop count is set | No |
 | `POST /api/auth/login` | No | Yes — `loginRateLimiter` |
 | `POST /api/auth/logout` | Yes | No |
 | `GET /api/auth/me` | Yes | No |

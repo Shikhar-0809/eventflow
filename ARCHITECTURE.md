@@ -271,7 +271,6 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | Method | Route | Auth required | Description |
 |---|---|---|---|
 | GET | `/api/health` | **No** (intentional; returns `{ status: 'ok' }` only — no data) | Liveness check |
-| GET | `/api/debug/ip` | Yes — TEMPORARY | Returns `req.ip`, `req.ips`, and `X-Forwarded-For` for the trust-proxy hop count. Delete with that change |
 | POST | `/api/auth/login` | No | Merchant logs in with password, receives JWT in httpOnly cookie |
 | POST | `/api/auth/logout` | Yes | Clears session cookie |
 | GET | `/api/auth/me` | Yes | Returns current session validity (for frontend route guard) |

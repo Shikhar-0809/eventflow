@@ -14,7 +14,6 @@ import settingsRouter from './routes/settings.js'
 import reportsRouter from './routes/reports.js'
 import recordsRouter from './routes/records.js'
 import { errorHandler } from './middleware/errorHandler.js'
-import { requireAuth } from './middleware/requireAuth.js'
 
 const REQUIRED_ENV = ['JWT_SECRET', 'MERCHANT_PASSWORD_HASH', 'SESSION_COOKIE_NAME']
 
@@ -34,6 +33,17 @@ const PORT = process.env.PORT || 3001
 
 // JSON API only — Express default ETag can respond 304 with an empty body on repeat GETs.
 app.set('etag', false)
+
+// Trust exactly 4 proxy hops so req.ip is the real client, not a proxy or a forged header value.
+// Measured in production on two networks (BUGS #040). Hop chain, client to Express:
+//   client -> Vercel rewrite proxy (AWS) -> Cloudflare -> Render internal LB (10.x) -> local proxy (socket ::1)
+// X-Forwarded-For therefore holds client, Vercel, Cloudflare, LB; the socket adds ::1 (5 addresses).
+// Express trusts the first 4 from the right, so the 5th (the client) becomes req.ip and anything
+// a caller forges sits to its left and is ignored.
+// Re-measure this value if hosting changes (new CDN, proxy or platform). Never use `true`:
+// it trusts every hop and lets any caller spoof req.ip and evade the rate limiters.
+// This must stay above helmet, the rate limiters and all routes.
+app.set('trust proxy', 4)
 
 // Local Vite (5173) reads this API (3001). Production is same-origin through the Vercel /api proxy, so keep helmet's same-origin default there.
 app.use(helmet(
@@ -56,15 +66,6 @@ app.use('/api', (req, res, next) => {
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok' })
-})
-
-// Temporary: measure proxy hops before setting trust proxy. Remove with that change.
-app.get('/api/debug/ip', requireAuth, (req, res) => {
-  res.status(200).json({
-    ip: req.ip,
-    ips: req.ips,
-    xff: req.headers['x-forwarded-for'] ?? null,
-  })
 })
 
 app.use('/api/auth', authRouter)
