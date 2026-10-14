@@ -108,6 +108,8 @@ Take a **fresh restore-point branch of the production database in Neon first** (
    The new code never relies on `DEFAULT 1`; the old instance still can. Render applies migrations `001` (adopted), `002`, `003` at boot. Verify live: login works (everyone re-logs in once), then calendar, bookings, inventory, records, analytics and settings; in the Render logs `migrate:` shows `baseline adopted`, `known drift ... bookings_status_check`, `applied 002...`, `applied 003...`.
 2. **Push (b): `004` alone**, once (a) is verified live: `git push origin main`. Afterwards create a booking to confirm writes still work.
 
+**If something goes wrong:** RUNBOOK.md, "Release rollback" (rollback SHA, code rollback on Render and Vercel, `004_down`, restore from the Neon restore-point branch).
+
 ## Step 4 — Verify the live deployment
 
 Run through `SECURITY.md`'s "Pre-deploy additions" checklist and `TESTING.md`'s "Pre-deploy test pass" in full, against the **live URLs**, not localhost:
