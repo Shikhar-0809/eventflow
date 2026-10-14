@@ -40,6 +40,7 @@ const validBooking = (overrides = {}) => ({
   client_name: 'Verify Test Client',
   phone: '9876543299',
   event_type: 'other',
+  event_type_custom: 'Verify probe',
   event_date: '2026-12-15',
   guest_count: 50,
   advance: 5000,
@@ -125,8 +126,8 @@ const run = async () => {
     body: validBooking({ event_date: conflictDate }),
   })
   const countAfterConflict = await countOnDate(conflictDate)
-  record(5, `POST on conflict date ${conflictDate} → 409, no extra row`,
-    r5.status === 409 && r5.json?.conflict === true && r5.json?.booking && countAfterConflict === countBeforeConflict,
+  record(5, `POST on conflict date ${conflictDate} → 201 with conflict notice (alert-only), row created`,
+    r5.status === 201 && r5.json?.conflict?.detected === true && r5.json?.conflict?.booking && countAfterConflict === countBeforeConflict + 1,
     `status=${r5.status}, body=${JSON.stringify(r5.json)}, rows=${countBeforeConflict}→${countAfterConflict}`)
 
   // 6-10. no auth
@@ -159,21 +160,22 @@ const run = async () => {
   const d1 = await request('POST', '/api/bookings', { cookie: token, body: payload })
   const d2 = await request('POST', '/api/bookings', { cookie: token, body: payload })
   const doubleCount = await countOnDate(doubleDate)
-  const doubleHandled = d1.status === 201 && d2.status === 409 && doubleCount === 1
-  record(11, 'Double-submit same payload → not two rows',
+  // Conflicts alert, they never block: the second identical submit is created too, and carries the conflict notice.
+  const doubleHandled = d1.status === 201 && d2.status === 201 && d2.json?.conflict?.detected === true && doubleCount === 2
+  record(11, 'Double-submit same payload → both created, second carries the conflict notice (alert-only)',
     doubleHandled,
-    `first=${d1.status}, second=${d2.status}, rowsOnDate=${doubleCount} — ${doubleHandled ? 'handled via conflict check (not idempotency keys)' : 'FINDING: duplicate or unexpected behavior'}`)
+    `first=${d1.status}, second=${d2.status}, rowsOnDate=${doubleCount}`)
 
-  // 16. 409 response shape
+  // 16. conflict notice shape
   const r16 = await request('POST', '/api/bookings', {
     cookie: token,
     body: validBooking({ event_date: conflictDate }),
   })
-  const bookingKeys = r16.json?.booking ? Object.keys(r16.json.booking) : []
+  const bookingKeys = r16.json?.conflict?.booking ? Object.keys(r16.json.conflict.booking) : []
   const archShape = ['client_name', 'event_type']
   const leaksPhone = bookingKeys.includes('phone')
-  record(16, '409 conflict body shape vs ARCHITECTURE.md',
-    r16.status === 409 && r16.json?.conflict === true && !leaksPhone,
+  record(16, 'conflict notice shape vs ARCHITECTURE.md (no phone in the clashing booking)',
+    r16.status === 201 && r16.json?.conflict?.detected === true && !leaksPhone,
     `keys=${bookingKeys.join(',')}; ARCHITECTURE expects {client_name,event_type} only; phone leaked=${leaksPhone}`)
 
   // 17. rate limiter — 21 requests with unique dates
