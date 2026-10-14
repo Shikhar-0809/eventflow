@@ -9,10 +9,16 @@ import {
   inventoryPriceUpdateSchema,
   inventoryQuantityUpdateSchema,
 } from '../schemas/inventory.schema.js'
+import { parseId } from '../utils/ids.js'
 
 const router = Router()
 
 router.use(requireAuth)
+
+// Every query below is scoped to the logged-in merchant (merchantId = req.merchantId, set by requireAuth).
+// An item or booking of another merchant must look exactly like one that does not exist.
+// Responses use an explicit column list so merchant_id never leaves the server.
+const ITEM_COLUMNS = 'id, name, total_quantity, damaged_quantity, unit_price, created_at'
 
 const REORDER_THRESHOLD = 0.2
 
@@ -31,48 +37,49 @@ const currentMonthPrefix = () => {
   return `${y}-${m}`
 }
 
-const bookedThisMonthForItem = async (itemId, monthPrefix = currentMonthPrefix()) => {
+const bookedThisMonthForItem = async (merchantId, itemId, monthPrefix = currentMonthPrefix()) => {
   const { rows } = await pool.query(
     `SELECT COALESCE(SUM(bi.quantity), 0) AS booked_this_month
      FROM booking_inventory bi
-     INNER JOIN bookings b ON b.id = bi.booking_id
-     WHERE bi.item_id = $1 AND b.status != 'cancelled' AND b.event_date LIKE $2`,
-    [itemId, `${monthPrefix}%`],
+     INNER JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
+     WHERE bi.merchant_id = $1 AND bi.item_id = $2 AND b.status != 'cancelled' AND b.event_date LIKE $3`,
+    [merchantId, itemId, `${monthPrefix}%`],
   )
   return Number(rows[0].booked_this_month)
 }
 
-const bookedThisMonthByItem = async (monthPrefix = currentMonthPrefix()) => {
+const bookedThisMonthByItem = async (merchantId, monthPrefix = currentMonthPrefix()) => {
   const { rows } = await pool.query(
     `SELECT bi.item_id, COALESCE(SUM(bi.quantity), 0) AS booked_this_month
      FROM booking_inventory bi
-     INNER JOIN bookings b ON b.id = bi.booking_id
-     WHERE b.status != 'cancelled' AND b.event_date LIKE $1
+     INNER JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
+     WHERE bi.merchant_id = $1 AND b.status != 'cancelled' AND b.event_date LIKE $2
      GROUP BY bi.item_id`,
-    [`${monthPrefix}%`],
+    [merchantId, `${monthPrefix}%`],
   )
   return new Map(rows.map((row) => [Number(row.item_id), Number(row.booked_this_month)]))
 }
 
-const inUseOnDate = async (itemId, date) => {
+const inUseOnDate = async (merchantId, itemId, date) => {
   const { rows } = await pool.query(
     `SELECT COALESCE(SUM(bi.quantity), 0) AS in_use
      FROM booking_inventory bi
-     INNER JOIN bookings b ON b.id = bi.booking_id
-     WHERE bi.item_id = $1 AND b.event_date = $2 AND b.status != 'cancelled'`,
-    [itemId, date],
+     INNER JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
+     WHERE bi.merchant_id = $1 AND bi.item_id = $2 AND b.event_date = $3 AND b.status != 'cancelled'`,
+    [merchantId, itemId, date],
   )
   return Number(rows[0].in_use)
 }
 
-const committedOnDate = async (itemId, date, excludeBookingId = null) => {
+const committedOnDate = async (merchantId, itemId, date, excludeBookingId = null) => {
   if (excludeBookingId != null) {
     const { rows } = await pool.query(
       `SELECT COALESCE(SUM(bi.quantity), 0) AS committed
        FROM booking_inventory bi
-       INNER JOIN bookings b ON b.id = bi.booking_id
-       WHERE bi.item_id = $1 AND b.event_date = $2 AND b.status != 'cancelled' AND b.id != $3`,
-      [itemId, date, excludeBookingId],
+       INNER JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
+       WHERE bi.merchant_id = $1 AND bi.item_id = $2 AND b.event_date = $3
+         AND b.status != 'cancelled' AND b.id != $4`,
+      [merchantId, itemId, date, excludeBookingId],
     )
     return Number(rows[0].committed)
   }
@@ -80,17 +87,17 @@ const committedOnDate = async (itemId, date, excludeBookingId = null) => {
   const { rows } = await pool.query(
     `SELECT COALESCE(SUM(bi.quantity), 0) AS committed
      FROM booking_inventory bi
-     INNER JOIN bookings b ON b.id = bi.booking_id
-     WHERE bi.item_id = $1 AND b.event_date = $2 AND b.status != 'cancelled'`,
-    [itemId, date],
+     INNER JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
+     WHERE bi.merchant_id = $1 AND bi.item_id = $2 AND b.event_date = $3 AND b.status != 'cancelled'`,
+    [merchantId, itemId, date],
   )
   return Number(rows[0].committed)
 }
 
-const withComputedFields = async (item, dateForInUse = todayDate(), bookedThisMonth = null) => {
+const withComputedFields = async (merchantId, item, dateForInUse = todayDate(), bookedThisMonth = null) => {
   const usable = item.total_quantity - item.damaged_quantity
-  const in_use_today = await inUseOnDate(item.id, dateForInUse)
-  const booked_this_month = bookedThisMonth ?? await bookedThisMonthForItem(item.id)
+  const in_use_today = await inUseOnDate(merchantId, item.id, dateForInUse)
+  const booked_this_month = bookedThisMonth ?? await bookedThisMonthForItem(merchantId, item.id)
   const availability_ratio = usable > 0 ? (usable - booked_this_month) / usable : 0
 
   return {
@@ -103,19 +110,29 @@ const withComputedFields = async (item, dateForInUse = todayDate(), bookedThisMo
   }
 }
 
-const getItemRow = async (id) => {
-  const { rows } = await pool.query('SELECT * FROM inventory_items WHERE id = $1', [id])
+// Returns undefined for a missing item, an unparsable id, and an item of another merchant alike.
+const getItemRow = async (merchantId, id) => {
+  const itemId = parseId(id)
+  if (itemId === null) return undefined
+  const { rows } = await pool.query(
+    `SELECT ${ITEM_COLUMNS} FROM inventory_items WHERE id = $1 AND merchant_id = $2`,
+    [itemId, merchantId],
+  )
   return rows[0]
 }
 
 router.get('/', async (req, res, next) => {
   try {
+    const merchantId = req.merchantId
     const today = todayDate()
     const monthPrefix = currentMonthPrefix()
-    const { rows } = await pool.query('SELECT * FROM inventory_items ORDER BY name ASC')
-    const bookedByItem = await bookedThisMonthByItem(monthPrefix)
+    const { rows } = await pool.query(
+      `SELECT ${ITEM_COLUMNS} FROM inventory_items WHERE merchant_id = $1 ORDER BY name ASC`,
+      [merchantId],
+    )
+    const bookedByItem = await bookedThisMonthByItem(merchantId, monthPrefix)
     const items = await Promise.all(
-      rows.map((row) => withComputedFields(row, today, bookedByItem.get(Number(row.id)) ?? 0)),
+      rows.map((row) => withComputedFields(merchantId, row, today, bookedByItem.get(Number(row.id)) ?? 0)),
     )
     res.status(200).json(items)
   } catch (err) {
@@ -125,18 +142,20 @@ router.get('/', async (req, res, next) => {
 
 router.post('/check-availability', validate(availabilityCheckSchema), async (req, res, next) => {
   try {
+    const merchantId = req.merchantId
     const { date, items, excludeBookingId } = req.body
     const shortfalls = []
     const availability = []
 
     for (const line of items) {
-      const item = await getItemRow(line.item_id)
+      const item = await getItemRow(merchantId, line.item_id)
       if (!item) {
+        // Same answer for a missing item and for another merchant's item.
         return res.status(400).json({ error: `Inventory item ${line.item_id} not found.` })
       }
 
       const usable = item.total_quantity - item.damaged_quantity
-      const committed = await committedOnDate(line.item_id, date, excludeBookingId ?? null)
+      const committed = await committedOnDate(merchantId, line.item_id, date, parseId(excludeBookingId))
       const available = usable - committed
 
       availability.push({
@@ -167,15 +186,17 @@ router.post('/check-availability', validate(availabilityCheckSchema), async (req
 
 router.post('/', validate(inventoryItemSchema), async (req, res, next) => {
   try {
+    const merchantId = req.merchantId
     const { name, total_quantity, unit_price: unitPrice = 0 } = req.body
 
     const { rows } = await pool.query(
-      'INSERT INTO inventory_items (name, total_quantity, damaged_quantity, unit_price) VALUES ($1, $2, 0, $3) RETURNING id',
-      [name, total_quantity, unitPrice],
+      `INSERT INTO inventory_items (merchant_id, name, total_quantity, damaged_quantity, unit_price)
+       VALUES ($1, $2, $3, 0, $4) RETURNING id`,
+      [merchantId, name, total_quantity, unitPrice],
     )
 
-    const item = await getItemRow(rows[0].id)
-    res.status(201).json(await withComputedFields(item))
+    const item = await getItemRow(merchantId, rows[0].id)
+    res.status(201).json(await withComputedFields(merchantId, item))
   } catch (err) {
     if (err.code === '23505') {
       return res.status(400).json({ error: 'An inventory item with this name already exists.' })
@@ -186,8 +207,8 @@ router.post('/', validate(inventoryItemSchema), async (req, res, next) => {
 
 router.patch('/:id/price', validate(inventoryPriceUpdateSchema), async (req, res, next) => {
   try {
-    const id = Number(req.params.id)
-    const item = await getItemRow(id)
+    const merchantId = req.merchantId
+    const item = await getItemRow(merchantId, req.params.id)
 
     if (!item) {
       return res.status(404).json({ error: 'Inventory item not found.' })
@@ -196,12 +217,12 @@ router.patch('/:id/price', validate(inventoryPriceUpdateSchema), async (req, res
     const { unit_price: unitPrice } = req.body
 
     await pool.query(
-      'UPDATE inventory_items SET unit_price = $1 WHERE id = $2',
-      [unitPrice, id],
+      'UPDATE inventory_items SET unit_price = $1 WHERE id = $2 AND merchant_id = $3',
+      [unitPrice, item.id, merchantId],
     )
 
-    const updated = await getItemRow(id)
-    res.status(200).json(await withComputedFields(updated))
+    const updated = await getItemRow(merchantId, item.id)
+    res.status(200).json(await withComputedFields(merchantId, updated))
   } catch (err) {
     next(err)
   }
@@ -209,8 +230,8 @@ router.patch('/:id/price', validate(inventoryPriceUpdateSchema), async (req, res
 
 router.patch('/:id', validate(inventoryQuantityUpdateSchema), async (req, res, next) => {
   try {
-    const id = Number(req.params.id)
-    const item = await getItemRow(id)
+    const merchantId = req.merchantId
+    const item = await getItemRow(merchantId, req.params.id)
 
     if (!item) {
       return res.status(404).json({ error: 'Inventory item not found.' })
@@ -220,12 +241,12 @@ router.patch('/:id', validate(inventoryQuantityUpdateSchema), async (req, res, n
     const damaged_quantity = Math.min(item.damaged_quantity, total_quantity)
 
     await pool.query(
-      'UPDATE inventory_items SET total_quantity = $1, damaged_quantity = $2 WHERE id = $3',
-      [total_quantity, damaged_quantity, id],
+      'UPDATE inventory_items SET total_quantity = $1, damaged_quantity = $2 WHERE id = $3 AND merchant_id = $4',
+      [total_quantity, damaged_quantity, item.id, merchantId],
     )
 
-    const updated = await getItemRow(id)
-    res.status(200).json(await withComputedFields(updated))
+    const updated = await getItemRow(merchantId, item.id)
+    res.status(200).json(await withComputedFields(merchantId, updated))
   } catch (err) {
     next(err)
   }
@@ -233,8 +254,8 @@ router.patch('/:id', validate(inventoryQuantityUpdateSchema), async (req, res, n
 
 router.post('/:id/damage', validate(inventoryDamageAdjustSchema), async (req, res, next) => {
   try {
-    const id = Number(req.params.id)
-    const item = await getItemRow(id)
+    const merchantId = req.merchantId
+    const item = await getItemRow(merchantId, req.params.id)
 
     if (!item) {
       return res.status(404).json({ error: 'Inventory item not found.' })
@@ -252,10 +273,13 @@ router.post('/:id/damage', validate(inventoryDamageAdjustSchema), async (req, re
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      await client.query('UPDATE inventory_items SET damaged_quantity = $1 WHERE id = $2', [clampedDamaged, id])
       await client.query(
-        'INSERT INTO inventory_damage_log (item_id, change, note) VALUES ($1, $2, $3)',
-        [id, appliedChange, note ?? null],
+        'UPDATE inventory_items SET damaged_quantity = $1 WHERE id = $2 AND merchant_id = $3',
+        [clampedDamaged, item.id, merchantId],
+      )
+      await client.query(
+        'INSERT INTO inventory_damage_log (merchant_id, item_id, change, note) VALUES ($1, $2, $3, $4)',
+        [merchantId, item.id, appliedChange, note ?? null],
       )
       await client.query('COMMIT')
     } catch (err) {
@@ -265,8 +289,8 @@ router.post('/:id/damage', validate(inventoryDamageAdjustSchema), async (req, re
       client.release()
     }
 
-    const updated = await getItemRow(id)
-    const response = await withComputedFields(updated)
+    const updated = await getItemRow(merchantId, item.id)
+    const response = await withComputedFields(merchantId, updated)
 
     if (appliedChange !== change) {
       response.damage_adjustment = {
@@ -285,8 +309,8 @@ router.post('/:id/damage', validate(inventoryDamageAdjustSchema), async (req, re
 
 router.delete('/:id', async (req, res, next) => {
   try {
-    const id = Number(req.params.id)
-    const item = await getItemRow(id)
+    const merchantId = req.merchantId
+    const item = await getItemRow(merchantId, req.params.id)
 
     if (!item) {
       return res.status(404).json({ error: 'Item not found.' })
@@ -295,18 +319,18 @@ router.delete('/:id', async (req, res, next) => {
     const { rows: activeRefRows } = await pool.query(
       `SELECT COUNT(DISTINCT b.id)::int AS n
        FROM booking_inventory bi
-       INNER JOIN bookings b ON b.id = bi.booking_id
-       WHERE bi.item_id = $1 AND b.status != 'cancelled'`,
-      [id],
+       INNER JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
+       WHERE bi.merchant_id = $1 AND bi.item_id = $2 AND b.status != 'cancelled'`,
+      [merchantId, item.id],
     )
     const activeBookingCount = activeRefRows[0].n
 
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
-      await client.query('DELETE FROM booking_inventory WHERE item_id = $1', [id])
-      await client.query('DELETE FROM inventory_damage_log WHERE item_id = $1', [id])
-      await client.query('DELETE FROM inventory_items WHERE id = $1', [id])
+      await client.query('DELETE FROM booking_inventory WHERE item_id = $1 AND merchant_id = $2', [item.id, merchantId])
+      await client.query('DELETE FROM inventory_damage_log WHERE item_id = $1 AND merchant_id = $2', [item.id, merchantId])
+      await client.query('DELETE FROM inventory_items WHERE id = $1 AND merchant_id = $2', [item.id, merchantId])
       await client.query('COMMIT')
     } catch (err) {
       await client.query('ROLLBACK')
