@@ -1,4 +1,6 @@
 import { pool } from './database.js'
+import { PRIMARY_MERCHANT_ID } from './seedMerchants.js'
+import { seedDevMerchant } from './devMerchantSeed.js'
 import { seedAnalyticsHistory } from './analyticsHistorySeed.js'
 import { seedDemoAnalytics } from './demoAnalyticsSeed.js'
 import {
@@ -50,8 +52,11 @@ const STARTER_INVENTORY = [
   { name: 'Sofas', total_quantity: 10, damaged_quantity: 0 },
 ]
 
-const seedInventory = async () => {
-  const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS count FROM inventory_items')
+const seedInventory = async (merchantId) => {
+  const { rows: countRows } = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM inventory_items WHERE merchant_id = $1',
+    [merchantId],
+  )
   if (countRows[0].count > 0) return
 
   const client = await pool.connect()
@@ -61,46 +66,48 @@ const seedInventory = async () => {
     const itemIds = {}
     for (const item of STARTER_INVENTORY) {
       const { rows } = await client.query(
-        'INSERT INTO inventory_items (name, total_quantity, damaged_quantity) VALUES ($1, $2, $3) RETURNING id',
-        [item.name, item.total_quantity, item.damaged_quantity],
+        'INSERT INTO inventory_items (merchant_id, name, total_quantity, damaged_quantity) VALUES ($1, $2, $3, $4) RETURNING id',
+        [merchantId, item.name, item.total_quantity, item.damaged_quantity],
       )
       itemIds[item.name] = rows[0].id
     }
 
     await client.query(
-      'INSERT INTO inventory_damage_log (item_id, change, note) VALUES ($1, $2, $3)',
-      [itemIds['Plastic Chairs'], 15, 'damaged in transit'],
+      'INSERT INTO inventory_damage_log (merchant_id, item_id, change, note) VALUES ($1, $2, $3, $4)',
+      [merchantId, itemIds['Plastic Chairs'], 15, 'damaged in transit'],
     )
 
     const { rows: rameshRows } = await client.query(
       `SELECT id FROM bookings
-       WHERE client_name = 'Ramesh Sharma' AND status != 'cancelled'
+       WHERE merchant_id = $1 AND client_name = 'Ramesh Sharma' AND status != 'cancelled'
        LIMIT 1`,
+      [merchantId],
     )
     if (rameshRows[0]) {
       await client.query(
-        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
-        [rameshRows[0].id, itemIds['Plastic Chairs'], 150],
+        'INSERT INTO booking_inventory (merchant_id, booking_id, item_id, quantity) VALUES ($1, $2, $3, $4)',
+        [merchantId, rameshRows[0].id, itemIds['Plastic Chairs'], 150],
       )
       await client.query(
-        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
-        [rameshRows[0].id, itemIds['Round Tables'], 15],
+        'INSERT INTO booking_inventory (merchant_id, booking_id, item_id, quantity) VALUES ($1, $2, $3, $4)',
+        [merchantId, rameshRows[0].id, itemIds['Round Tables'], 15],
       )
     }
 
     const { rows: vikramRows } = await client.query(
       `SELECT id FROM bookings
-       WHERE client_name = 'Vikram Singh' AND status != 'cancelled'
+       WHERE merchant_id = $1 AND client_name = 'Vikram Singh' AND status != 'cancelled'
        LIMIT 1`,
+      [merchantId],
     )
     if (vikramRows[0]) {
       await client.query(
-        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
-        [vikramRows[0].id, itemIds['Shamiana Tents'], 2],
+        'INSERT INTO booking_inventory (merchant_id, booking_id, item_id, quantity) VALUES ($1, $2, $3, $4)',
+        [merchantId, vikramRows[0].id, itemIds['Shamiana Tents'], 2],
       )
       await client.query(
-        'INSERT INTO booking_inventory (booking_id, item_id, quantity) VALUES ($1, $2, $3)',
-        [vikramRows[0].id, itemIds['Sofas'], 4],
+        'INSERT INTO booking_inventory (merchant_id, booking_id, item_id, quantity) VALUES ($1, $2, $3, $4)',
+        [merchantId, vikramRows[0].id, itemIds['Sofas'], 4],
       )
     }
 
@@ -124,7 +131,11 @@ export const seed = async () => {
     return
   }
 
-  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM bookings')
+  const merchantId = PRIMARY_MERCHANT_ID
+
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS count FROM bookings WHERE merchant_id = $1', [
+    merchantId,
+  ])
   if (rows[0].count === 0) {
     const bookings = buildSeedBookings()
     const client = await pool.connect()
@@ -132,9 +143,10 @@ export const seed = async () => {
       await client.query('BEGIN')
       for (const row of bookings) {
         await client.query(
-          `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          `INSERT INTO bookings (merchant_id, client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [
+            merchantId,
             row.client_name,
             row.phone,
             row.event_type,
@@ -158,16 +170,19 @@ export const seed = async () => {
     console.log(`Seeded ${bookings.length} demo bookings`)
   }
 
-  await seedInventory()
-  await seedAnalyticsHistory(pool)
-  await removeManualTestBookings(pool)
-  await removeVerificationBookings(pool)
-  await seedSureshDemoBooking(pool)
-  await purgeNonDemoEventLog(pool)
-  await seedKapilTomarBooking(pool)
-  const analyticsResult = await seedDemoAnalytics(pool)
+  await seedInventory(merchantId)
+  await seedAnalyticsHistory(pool, merchantId)
+  await removeManualTestBookings(pool, merchantId)
+  await removeVerificationBookings(pool, merchantId)
+  await seedSureshDemoBooking(pool, merchantId)
+  await purgeNonDemoEventLog(pool, merchantId)
+  await seedKapilTomarBooking(pool, merchantId)
+  const analyticsResult = await seedDemoAnalytics(pool, merchantId)
   if (!analyticsResult.inserted) {
-    await seedDemoEventLog(pool)
+    await seedDemoEventLog(pool, merchantId)
   }
-  await logDevBookings(pool)
+  await logDevBookings(pool, merchantId)
+
+  // A second dev-only merchant so cross-merchant leaks show up locally.
+  await seedDevMerchant(pool)
 }

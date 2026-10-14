@@ -65,7 +65,7 @@ export const buildHistoricalSeedBookings = () => {
   ]
 }
 
-export const seedAnalyticsHistory = async (pool) => {
+export const seedAnalyticsHistory = async (pool, merchantId) => {
   if (process.env.NODE_ENV === 'production') {
     return { inserted: 0, skipped: true }
   }
@@ -79,8 +79,8 @@ export const seedAnalyticsHistory = async (pool) => {
     const start = monthStart(year, monthIndex)
     const end = nextMonthStart(year, monthIndex)
     const { rows } = await pool.query(
-      'SELECT COUNT(*) AS count FROM bookings WHERE event_date >= $1 AND event_date < $2',
-      [start, end],
+      'SELECT COUNT(*) AS count FROM bookings WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3',
+      [merchantId, start, end],
     )
     return parseInt(rows[0].count, 10)
   }
@@ -107,9 +107,10 @@ export const seedAnalyticsHistory = async (pool) => {
     await client.query('BEGIN')
     for (const row of toInsert) {
       await client.query(
-        `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        `INSERT INTO bookings (merchant_id, client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
+          merchantId,
           row.client_name,
           row.phone,
           row.event_type,

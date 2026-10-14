@@ -160,7 +160,7 @@ const summarizeByType = (events) => {
   return counts
 }
 
-export const seedDemoAnalytics = async (pool) => {
+export const seedDemoAnalytics = async (pool, merchantId) => {
   if (process.env.NODE_ENV === 'production') {
     return { skipped: true, reason: 'production' }
   }
@@ -169,14 +169,17 @@ export const seedDemoAnalytics = async (pool) => {
   // empties it on every boot (these events carry no demo_seed marker), which used to make this
   // seed insert another 10 bookings each time.
   const { rows: existingRows } = await pool.query(
-    'SELECT COUNT(*)::int AS count FROM bookings WHERE phone = ANY($1::text[])',
-    [DEMO_BOOKINGS.map((row) => row.phone)],
+    'SELECT COUNT(*)::int AS count FROM bookings WHERE merchant_id = $1 AND phone = ANY($2::text[])',
+    [merchantId, DEMO_BOOKINGS.map((row) => row.phone)],
   )
   if (existingRows[0].count > 0) {
     return { skipped: true, reason: 'demo analytics bookings already present', existing: existingRows[0].count }
   }
 
-  const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS count FROM event_log')
+  const { rows: countRows } = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM event_log WHERE merchant_id = $1',
+    [merchantId],
+  )
   if (countRows[0].count >= 5) {
     return { skipped: true, reason: 'event_log already populated', existing: countRows[0].count }
   }
@@ -191,11 +194,12 @@ export const seedDemoAnalytics = async (pool) => {
     for (const row of DEMO_BOOKINGS) {
       const { rows } = await client.query(
         `INSERT INTO bookings (
-           client_name, phone, event_type, event_date, guest_count, venue,
+           merchant_id, client_name, phone, event_type, event_date, guest_count, venue,
            advance, total, status, notes, created_at
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING id`,
         [
+          merchantId,
           row.client_name,
           row.phone,
           row.event_type,
@@ -216,8 +220,8 @@ export const seedDemoAnalytics = async (pool) => {
 
     for (const row of events) {
       await client.query(
-        'INSERT INTO event_log (event_type, metadata, created_at) VALUES ($1, $2, $3)',
-        [row.event_type, row.metadata, row.created_at],
+        'INSERT INTO event_log (merchant_id, event_type, metadata, created_at) VALUES ($1, $2, $3, $4)',
+        [merchantId, row.event_type, row.metadata, row.created_at],
       )
     }
 

@@ -25,11 +25,11 @@ const DEMO_SURESH_PHONE = '9876543220'
 const VERIFICATION_CLIENT = 'Verify Demo Client'
 const MANUAL_TEST_BOOKING_IDS = [65, 66, 67, 68]
 
-export const removeManualTestBookings = async (pool) => {
-  const placeholders = MANUAL_TEST_BOOKING_IDS.map((_, i) => `$${i + 1}`).join(', ')
+export const removeManualTestBookings = async (pool, merchantId) => {
+  const placeholders = MANUAL_TEST_BOOKING_IDS.map((_, i) => `$${i + 2}`).join(', ')
   const { rows } = await pool.query(
-    `SELECT id, client_name, event_date FROM bookings WHERE id IN (${placeholders})`,
-    MANUAL_TEST_BOOKING_IDS,
+    `SELECT id, client_name, event_date FROM bookings WHERE merchant_id = $1 AND id IN (${placeholders})`,
+    [merchantId, ...MANUAL_TEST_BOOKING_IDS],
   )
 
   if (rows.length === 0) {
@@ -54,18 +54,20 @@ export const removeManualTestBookings = async (pool) => {
   return { removed: rows.length, rows }
 }
 
-export const purgeNonDemoEventLog = async (pool) => {
+export const purgeNonDemoEventLog = async (pool, merchantId) => {
   const result = await pool.query(
     `DELETE FROM event_log
-     WHERE metadata NOT LIKE '%"demo_seed":true%' OR metadata IS NULL`,
+     WHERE merchant_id = $1
+       AND (metadata NOT LIKE '%"demo_seed":true%' OR metadata IS NULL)`,
+    [merchantId],
   )
   return { removed: result.rowCount }
 }
 
-export const removeVerificationBookings = async (pool) => {
+export const removeVerificationBookings = async (pool, merchantId) => {
   const { rows } = await pool.query(
-    'SELECT id, client_name, event_date FROM bookings WHERE client_name = $1',
-    [VERIFICATION_CLIENT],
+    'SELECT id, client_name, event_date FROM bookings WHERE merchant_id = $1 AND client_name = $2',
+    [merchantId, VERIFICATION_CLIENT],
   )
 
   if (rows.length === 0) {
@@ -90,10 +92,10 @@ export const removeVerificationBookings = async (pool) => {
   return { removed: rows.length, rows }
 }
 
-export const seedSureshDemoBooking = async (pool) => {
+export const seedSureshDemoBooking = async (pool, merchantId) => {
   const { rows: existingRows } = await pool.query(
-    'SELECT id FROM bookings WHERE phone = $1',
-    [DEMO_SURESH_PHONE],
+    'SELECT id FROM bookings WHERE merchant_id = $1 AND phone = $2',
+    [merchantId, DEMO_SURESH_PHONE],
   )
   if (existingRows[0]) {
     return { inserted: false, id: existingRows[0].id }
@@ -103,8 +105,8 @@ export const seedSureshDemoBooking = async (pool) => {
   const conflictDay = addDays(now, 6)
   const conflictDateStr = formatDate(conflictDay)
   const { rows: countRows } = await pool.query(
-    'SELECT COUNT(*) AS count FROM bookings WHERE event_date = $1',
-    [conflictDateStr],
+    'SELECT COUNT(*) AS count FROM bookings WHERE merchant_id = $1 AND event_date = $2',
+    [merchantId, conflictDateStr],
   )
   const conflictCount = parseInt(countRows[0].count, 10)
 
@@ -112,10 +114,11 @@ export const seedSureshDemoBooking = async (pool) => {
   const eventDate = formatDate(targetDay)
 
   const { rows } = await pool.query(
-    `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO bookings (merchant_id, client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
     [
+      merchantId,
       'Suresh Kumar',
       DEMO_SURESH_PHONE,
       'wedding',
@@ -132,9 +135,10 @@ export const seedSureshDemoBooking = async (pool) => {
   return { inserted: true, id: rows[0].id, eventDate, conflictDateStr }
 }
 
-export const seedDemoEventLog = async (pool) => {
+export const seedDemoEventLog = async (pool, merchantId) => {
   const { rows: markerRows } = await pool.query(
-    "SELECT COUNT(*) AS count FROM event_log WHERE metadata LIKE '%\"demo_seed\":true%'",
+    "SELECT COUNT(*) AS count FROM event_log WHERE merchant_id = $1 AND metadata LIKE '%\"demo_seed\":true%'",
+    [merchantId],
   )
   const markerCount = parseInt(markerRows[0].count, 10)
 
@@ -143,11 +147,12 @@ export const seedDemoEventLog = async (pool) => {
   }
 
   if (markerCount > 0) {
-    await pool.query('DELETE FROM event_log')
+    await pool.query('DELETE FROM event_log WHERE merchant_id = $1', [merchantId])
   }
 
   const { rows: bookingIdRows } = await pool.query(
-    'SELECT id FROM bookings ORDER BY id ASC LIMIT 10',
+    'SELECT id FROM bookings WHERE merchant_id = $1 ORDER BY id ASC LIMIT 10',
+    [merchantId],
   )
   const bookingIds = bookingIdRows.map((row) => row.id)
 
@@ -196,8 +201,8 @@ export const seedDemoEventLog = async (pool) => {
     await client.query('BEGIN')
     for (const row of events) {
       await client.query(
-        'INSERT INTO event_log (event_type, metadata, created_at) VALUES ($1, $2, $3)',
-        [row.event_type, row.metadata, row.created_at],
+        'INSERT INTO event_log (merchant_id, event_type, metadata, created_at) VALUES ($1, $2, $3, $4)',
+        [merchantId, row.event_type, row.metadata, row.created_at],
       )
     }
     await client.query('COMMIT')
@@ -211,15 +216,15 @@ export const seedDemoEventLog = async (pool) => {
   return { inserted: events.length, skipped: false }
 }
 
-export const seedKapilTomarBooking = async (pool) => {
+export const seedKapilTomarBooking = async (pool, merchantId) => {
   const KAPIL_NAME = 'Kapil Tomar'
   const KAPIL_PHONE = '9837541200'
   const BOOKING_CREATED_AT = '2026-06-30 11:30:00'
   const EVENT_CREATED_AT = '2026-06-30 11:32:00'
 
   const { rows: existingRows } = await pool.query(
-    'SELECT id FROM bookings WHERE client_name = $1 AND phone = $2',
-    [KAPIL_NAME, KAPIL_PHONE],
+    'SELECT id FROM bookings WHERE merchant_id = $1 AND client_name = $2 AND phone = $3',
+    [merchantId, KAPIL_NAME, KAPIL_PHONE],
   )
 
   let bookingId = existingRows[0]?.id
@@ -227,10 +232,11 @@ export const seedKapilTomarBooking = async (pool) => {
   if (!bookingId) {
     const { rows } = await pool.query(
       `INSERT INTO bookings (
-         client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes, created_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         merchant_id, client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes, created_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id`,
       [
+        merchantId,
         KAPIL_NAME,
         KAPIL_PHONE,
         'wedding',
@@ -250,27 +256,28 @@ export const seedKapilTomarBooking = async (pool) => {
   const metadata = JSON.stringify({ booking_id: bookingId })
   const { rows: logRows } = await pool.query(
     `SELECT id FROM event_log
-     WHERE event_type = 'booking_created' AND metadata = $1 AND created_at = $2`,
-    [metadata, EVENT_CREATED_AT],
+     WHERE merchant_id = $1 AND event_type = 'booking_created' AND metadata = $2 AND created_at = $3`,
+    [merchantId, metadata, EVENT_CREATED_AT],
   )
 
   if (!logRows[0]) {
     await pool.query(
-      `INSERT INTO event_log (event_type, metadata, created_at)
-       VALUES ('booking_created', $1, $2)`,
-      [metadata, EVENT_CREATED_AT],
+      `INSERT INTO event_log (merchant_id, event_type, metadata, created_at)
+       VALUES ($1, 'booking_created', $2, $3)`,
+      [merchantId, metadata, EVENT_CREATED_AT],
     )
   }
 
   return { inserted: !existingRows[0], id: bookingId }
 }
 
-export const logDevBookings = async (pool) => {
+export const logDevBookings = async (pool, merchantId) => {
   const { rows } = await pool.query(
-    'SELECT id, event_date, status FROM bookings ORDER BY event_date, id',
+    'SELECT id, event_date, status FROM bookings WHERE merchant_id = $1 ORDER BY event_date, id',
+    [merchantId],
   )
 
-  console.log(`Demo bookings (dev boot): count=${rows.length}`)
+  console.log(`Demo bookings (dev boot, merchant ${merchantId}): count=${rows.length}`)
   for (const row of rows) {
     console.log(`  id=${row.id}  date=${row.event_date}  status=${row.status}`)
   }
