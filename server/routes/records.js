@@ -24,9 +24,10 @@ router.get('/', async (req, res, next) => {
       sort_order: sortOrder = 'asc',
     } = parsed.data
 
-    const conditions = []
-    const params = []
-    let paramIndex = 1
+    // The merchant predicate always comes first, so every later filter is ANDed onto it.
+    const conditions = ['merchant_id = $1']
+    const params = [req.merchantId]
+    let paramIndex = 2
 
     if (from) {
       conditions.push(`event_date >= $${paramIndex}`)
@@ -81,8 +82,8 @@ router.get('/', async (req, res, next) => {
       const { rows: expenseRows } = await pool.query(
         `SELECT booking_id, amount
          FROM booking_expenses
-         WHERE booking_id = ANY($1::int[])`,
-        [bookingIds],
+         WHERE merchant_id = $1 AND booking_id = ANY($2::int[])`,
+        [req.merchantId, bookingIds],
       )
 
       for (const row of expenseRows) {

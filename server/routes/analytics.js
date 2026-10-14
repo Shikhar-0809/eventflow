@@ -29,6 +29,7 @@ router.use(requireAuth)
 
 router.get('/summary', async (req, res, next) => {
   try {
+    const merchantId = req.merchantId
     const now = new Date()
     const year = now.getFullYear()
     const monthIndex = now.getMonth()
@@ -40,30 +41,33 @@ router.get('/summary', async (req, res, next) => {
     const windowEnd = currentEnd
 
     const { rows: revenueRows } = await pool.query(
-      'SELECT COALESCE(SUM(total), 0) AS revenue FROM bookings WHERE event_date >= $1 AND event_date < $2',
-      [currentStart, currentEnd],
+      `SELECT COALESCE(SUM(total), 0) AS revenue FROM bookings
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3`,
+      [merchantId, currentStart, currentEnd],
     )
     const revenueThisMonth = Number(revenueRows[0].revenue)
 
     const { rows: bookingsRows } = await pool.query(
-      'SELECT COUNT(*) AS count FROM bookings WHERE event_date >= $1 AND event_date < $2',
-      [currentStart, currentEnd],
+      `SELECT COUNT(*) AS count FROM bookings
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3`,
+      [merchantId, currentStart, currentEnd],
     )
     const bookingsThisMonth = Number(bookingsRows[0].count)
 
     const { rows: peakRows } = await pool.query(
       `SELECT TO_CHAR(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS count
        FROM bookings
-       WHERE event_date >= $1 AND event_date < $2
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3
        GROUP BY month
        ORDER BY count DESC, month DESC
        LIMIT 1`,
-      [sixMonthStart, windowEnd],
+      [merchantId, sixMonthStart, windowEnd],
     )
     const peakRow = peakRows[0]
 
     const { rows: clientRows } = await pool.query(
-      'SELECT COUNT(DISTINCT phone) AS total FROM bookings',
+      'SELECT COUNT(DISTINCT phone) AS total FROM bookings WHERE merchant_id = $1',
+      [merchantId],
     )
     const totalClients = Number(clientRows[0].total)
 
@@ -92,10 +96,10 @@ router.get('/monthly', async (req, res, next) => {
               COUNT(*) AS bookings,
               COALESCE(SUM(total), 0) AS revenue
        FROM bookings
-       WHERE event_date >= $1 AND event_date < $2
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3
        GROUP BY month
        ORDER BY month ASC`,
-      [sixMonthStart, windowEnd],
+      [req.merchantId, sixMonthStart, windowEnd],
     )
 
     const byMonth = Object.fromEntries(rows.map((r) => [r.month, r]))

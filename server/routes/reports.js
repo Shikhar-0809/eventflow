@@ -47,9 +47,9 @@ router.get('/range', async (req, res, next) => {
       `SELECT id, client_name, phone, event_type, event_type_custom, event_date, venue,
               guest_count, status, advance, total
        FROM bookings
-       WHERE event_date >= $1 AND event_date <= $2
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date <= $3
        ORDER BY event_date ASC`,
-      [from, to],
+      [req.merchantId, from, to],
     )
 
     const bookingIds = bookingRows.map((row) => Number(row.id))
@@ -59,9 +59,9 @@ router.get('/range', async (req, res, next) => {
       const { rows } = await pool.query(
         `SELECT id, booking_id, label, amount
          FROM booking_expenses
-         WHERE booking_id = ANY($1::int[])
+         WHERE merchant_id = $1 AND booking_id = ANY($2::int[])
          ORDER BY id ASC`,
-        [bookingIds],
+        [req.merchantId, bookingIds],
       )
       expenseRows = rows
     }
