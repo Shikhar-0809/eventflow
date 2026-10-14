@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
-import { deleteInventoryItemById } from './lib/verifyDbCleanup.mjs'
+import { deleteInventoryItemById, getVerifyMerchantId } from './lib/verifyDbCleanup.mjs'
 import { authFetch, loginVerifySession, readJson } from './lib/verifyScriptAuth.mjs'
 
 const ITEM_NAME = 'ZZZ_TEST_Verification Item'
@@ -23,8 +23,8 @@ const run = async () => {
 
   try {
     const existing = await pool.query(
-      'SELECT id FROM inventory_items WHERE name = $1',
-      [ITEM_NAME],
+      'SELECT id FROM inventory_items WHERE merchant_id = $1 AND name = $2',
+      [await getVerifyMerchantId(), ITEM_NAME],
     )
     for (const row of existing.rows) {
       await deleteInventoryItemById(row.id)

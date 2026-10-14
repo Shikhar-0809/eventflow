@@ -40,8 +40,8 @@ export const removeManualTestBookings = async (pool, merchantId) => {
   try {
     await client.query('BEGIN')
     for (const row of rows) {
-      await client.query('DELETE FROM change_log WHERE booking_id = $1', [row.id])
-      await client.query('DELETE FROM bookings WHERE id = $1', [row.id])
+      await client.query('DELETE FROM change_log WHERE booking_id = $1 AND merchant_id = $2', [row.id, merchantId])
+      await client.query('DELETE FROM bookings WHERE id = $1 AND merchant_id = $2', [row.id, merchantId])
     }
     await client.query('COMMIT')
   } catch (err) {
@@ -78,8 +78,8 @@ export const removeVerificationBookings = async (pool, merchantId) => {
   try {
     await client.query('BEGIN')
     for (const row of rows) {
-      await client.query('DELETE FROM change_log WHERE booking_id = $1', [row.id])
-      await client.query('DELETE FROM bookings WHERE id = $1', [row.id])
+      await client.query('DELETE FROM change_log WHERE booking_id = $1 AND merchant_id = $2', [row.id, merchantId])
+      await client.query('DELETE FROM bookings WHERE id = $1 AND merchant_id = $2', [row.id, merchantId])
     }
     await client.query('COMMIT')
   } catch (err) {

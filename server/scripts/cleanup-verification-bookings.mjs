@@ -65,8 +65,9 @@ const remaining = remainingRows[0].n
 console.log(
   JSON.stringify(
     {
-      outsideJuneListed: outsideJune,
-      nonSeedDeleted: nonSeed,
+      // Ids and dates only: client names and phone numbers must never be printed.
+      outsideJuneListed: outsideJune.map(({ id, event_date }) => ({ id, event_date })),
+      nonSeedDeleted: nonSeed.map(({ id, event_date }) => ({ id, event_date })),
       deletedCount: deleteIds.length,
       remainingBookings: remaining,
     },

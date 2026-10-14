@@ -1,12 +1,25 @@
 import 'dotenv/config'
 import { pool } from '../../db/database.js'
 
+// The verify scripts log in with the dev password, i.e. as the dev merchant, so their cleanup is scoped to it
+// (found by name, never a hardcoded id). Deleting by id alone could otherwise touch another merchant's row.
+let verifyMerchantId = null
+export const getVerifyMerchantId = async () => {
+  if (verifyMerchantId === null) {
+    const { rows } = await pool.query("SELECT id FROM merchants WHERE business_name = 'Bala Ji Tent House'")
+    if (!rows[0]) throw new Error('Dev merchant not found; run the dev server once to seed it.')
+    verifyMerchantId = rows[0].id
+  }
+  return verifyMerchantId
+}
+
 export const deleteBookingById = async (bookingId) => {
   if (bookingId == null) return
   try {
-    await pool.query('DELETE FROM booking_inventory WHERE booking_id = $1', [bookingId])
-    await pool.query('DELETE FROM change_log WHERE booking_id = $1', [bookingId])
-    await pool.query('DELETE FROM bookings WHERE id = $1', [bookingId])
+    const merchantId = await getVerifyMerchantId()
+    await pool.query('DELETE FROM booking_inventory WHERE booking_id = $1 AND merchant_id = $2', [bookingId, merchantId])
+    await pool.query('DELETE FROM change_log WHERE booking_id = $1 AND merchant_id = $2', [bookingId, merchantId])
+    await pool.query('DELETE FROM bookings WHERE id = $1 AND merchant_id = $2', [bookingId, merchantId])
   } catch (err) {
     console.error(err.message)
     throw err
@@ -16,9 +29,10 @@ export const deleteBookingById = async (bookingId) => {
 export const deleteInventoryItemById = async (itemId) => {
   if (itemId == null) return
   try {
-    await pool.query('DELETE FROM booking_inventory WHERE item_id = $1', [itemId])
-    await pool.query('DELETE FROM inventory_damage_log WHERE item_id = $1', [itemId])
-    await pool.query('DELETE FROM inventory_items WHERE id = $1', [itemId])
+    const merchantId = await getVerifyMerchantId()
+    await pool.query('DELETE FROM booking_inventory WHERE item_id = $1 AND merchant_id = $2', [itemId, merchantId])
+    await pool.query('DELETE FROM inventory_damage_log WHERE item_id = $1 AND merchant_id = $2', [itemId, merchantId])
+    await pool.query('DELETE FROM inventory_items WHERE id = $1 AND merchant_id = $2', [itemId, merchantId])
   } catch (err) {
     console.error(err.message)
     throw err
