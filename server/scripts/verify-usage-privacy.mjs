@@ -4,6 +4,16 @@ import express from 'express'
 import { pool } from '../db/database.js'
 import { trackUsage } from '../middleware/trackUsage.js'
 
+// trackUsage needs req.merchantId (normally set by requireAuth). These probe apps skip requireAuth, so they
+// act as the dev merchant, looked up by name, never by a hardcoded id.
+const { rows: [{ id: TEST_MERCHANT_ID }] } = await pool.query(
+  "SELECT id FROM merchants WHERE business_name = 'Bala Ji Tent House'",
+)
+const actAsTestMerchant = (req, _res, next) => {
+  req.merchantId = TEST_MERCHANT_ID
+  next()
+}
+
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
 
@@ -72,6 +82,7 @@ const runFireAndForgetTimingTest = async () => {
   }
 
   const app = express()
+  app.use(actAsTestMerchant)
   app.post('/timing-test', trackUsage('timing_probe'), (_req, res) => {
     res.status(201).json({ ok: true })
   })
@@ -103,6 +114,7 @@ const runBrokenInsertTest = async () => {
   }
 
   const app = express()
+  app.use(actAsTestMerchant)
   app.post('/broken-test', trackUsage('broken_probe'), (_req, res) => {
     res.status(201).json({ created: true })
   })
@@ -309,7 +321,7 @@ results.check10_routes = {
   pass: noAuth.status === 401,
 }
 
-results.check11_query = "pool.query('INSERT INTO event_log (event_type, metadata) VALUES ($1, $2)', [eventType, metadata ? JSON.stringify(metadata) : null])"
+results.check11_query = "pool.query('INSERT INTO event_log (merchant_id, event_type, metadata) VALUES ($1, $2, $3)', [merchantId, eventType, metadata ? JSON.stringify(metadata) : null])"
 
 console.log(JSON.stringify(results, null, 2))
 

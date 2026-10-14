@@ -32,7 +32,9 @@ const login = await request('/auth/login', { method: 'POST', body: { password: P
 if (login.status === 200) {
   cookie = cookieHeader(login.setCookie)
 } else {
-  const token = jwt.sign({}, process.env.JWT_SECRET, { expiresIn: '1h' })
+  // Fallback when login fails: a session for the dev merchant (looked up by name), signed like the server does.
+  const { rows: [{ id: merchantId }] } = await pool.query("SELECT id FROM merchants WHERE business_name = 'Bala Ji Tent House'")
+  const token = jwt.sign({ merchant_id: merchantId }, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' })
   cookie = `${process.env.SESSION_COOKIE_NAME}=${token}`
 }
 

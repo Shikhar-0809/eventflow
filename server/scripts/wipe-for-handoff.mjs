@@ -12,6 +12,7 @@ const DELETE_ORDER = [
   'booking_inventory',
   'inventory_damage_log',
   'change_log',
+  'booking_expenses',
   'event_log',
   'bookings',
 ]
@@ -53,8 +54,8 @@ function validateDatabaseUrl(connectionString) {
   return host
 }
 
-async function countRows(pool, table) {
-  const result = await pool.query(`SELECT COUNT(*)::int AS n FROM ${table}`)
+async function countRows(pool, table, merchantId) {
+  const result = await pool.query(`SELECT COUNT(*)::int AS n FROM ${table} WHERE merchant_id = $1`, [merchantId])
   return result.rows[0].n
 }
 
@@ -69,33 +70,37 @@ async function run() {
   console.log('')
 
   const { pool } = await import('../db/database.js')
+  const { requireMerchantId } = await import('./lib/merchantArg.mjs')
+  // Acts on ONE merchant only (--merchant-id=<n>), in addition to the --confirm-host guard above.
+  const merchantId = await requireMerchantId(pool)
 
   if (!confirmed) {
     console.log('Would delete all rows from (in this order):')
     for (const table of DELETE_ORDER) {
-      const count = await countRows(pool, table)
+      const count = await countRows(pool, table, merchantId)
       console.log(`  ${table}: ${count} row(s) would be deleted`)
     }
 
-    const inventoryCount = await countRows(pool, 'inventory_items')
+    const inventoryCount = await countRows(pool, 'inventory_items', merchantId)
     console.log(
       `  inventory_items: ${inventoryCount} row(s) would be preserved; total_quantity and damaged_quantity reset to 0`,
     )
     console.log('')
     console.log('No data was modified.')
     console.log('To execute the wipe, run:')
-    console.log(`  node server/scripts/wipe-for-handoff.mjs --confirm-host=${host} --confirm`)
+    console.log(`  node server/scripts/wipe-for-handoff.mjs --confirm-host=${host} --merchant-id=${merchantId} --confirm`)
     await pool.end()
     return
   }
 
   for (const table of DELETE_ORDER) {
-    const result = await pool.query(`DELETE FROM ${table}`)
+    const result = await pool.query(`DELETE FROM ${table} WHERE merchant_id = $1`, [merchantId])
     console.log(`${table}: ${result.rowCount} row(s) deleted`)
   }
 
   const inventoryUpdate = await pool.query(
-    'UPDATE inventory_items SET damaged_quantity = 0, total_quantity = 0',
+    'UPDATE inventory_items SET damaged_quantity = 0, total_quantity = 0 WHERE merchant_id = $1',
+    [merchantId],
   )
   console.log(
     `inventory_items: ${inventoryUpdate.rowCount} row(s) updated (quantities reset to 0)`,

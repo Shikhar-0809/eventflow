@@ -1,13 +1,17 @@
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
+import { requireMerchantId } from './lib/merchantArg.mjs'
+
+// Writes for ONE merchant only (--merchant-id=<n>).
+const merchantId = await requireMerchantId(pool)
 
 const VERIFY_NAME = 'VERIFY Prompt10 May Client'
 
 try {
   const existing = await pool.query(
-    'SELECT id FROM bookings WHERE client_name = $1',
-    [VERIFY_NAME],
+    'SELECT id FROM bookings WHERE merchant_id = $1 AND client_name = $2',
+    [merchantId, VERIFY_NAME],
   )
 
   if (existing.rows[0]) {
@@ -17,10 +21,11 @@ try {
   }
 
   const inserted = await pool.query(
-    `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO bookings (merchant_id, client_name, phone, event_type, event_date, guest_count, venue, advance, total, status, notes)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
     [
+      merchantId,
       VERIFY_NAME,
       '9000000010',
       'birthday',
@@ -37,10 +42,11 @@ try {
   const months = await pool.query(
     `SELECT to_char(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS bookings
      FROM bookings
-     WHERE event_date >= '2026-01-01' AND event_date < '2026-07-01'
+     WHERE merchant_id = $1 AND event_date >= '2026-01-01' AND event_date < '2026-07-01'
      GROUP BY month
      HAVING COUNT(*) > 0
      ORDER BY month`,
+    [merchantId],
   )
 
   console.log(JSON.stringify({

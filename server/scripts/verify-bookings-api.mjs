@@ -151,7 +151,10 @@ const run = async () => {
 
   // 11. double-submit same payload
   const doubleDate = '2026-12-25'
-  await pool.query('DELETE FROM bookings WHERE event_date = $1', [doubleDate])
+  await pool.query(
+    "DELETE FROM bookings WHERE event_date = $1 AND merchant_id = (SELECT id FROM merchants WHERE business_name = 'Bala Ji Tent House')",
+    [doubleDate],
+  )
   const payload = validBooking({ event_date: doubleDate, phone: '9876543298' })
   const d1 = await request('POST', '/api/bookings', { cookie: token, body: payload })
   const d2 = await request('POST', '/api/bookings', { cookie: token, body: payload })

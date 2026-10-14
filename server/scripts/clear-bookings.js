@@ -3,8 +3,13 @@ import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 assertConfirmedDatabaseHost()
 
 const { pool } = await import('../db/database.js')
+const { requireMerchantId } = await import('./lib/merchantArg.mjs')
 
-const TABLES = ['booking_inventory', 'change_log', 'event_log', 'bookings']
+// Clears the booking data of ONE merchant (--merchant-id=<n>). Sequences are shared by every merchant, so they are
+// never reset here (restarting them would hand out ids that other merchants' rows already use).
+const merchantId = await requireMerchantId(pool)
+
+const TABLES = ['booking_inventory', 'change_log', 'booking_expenses', 'event_log', 'bookings']
 
 async function run() {
   const client = await pool.connect()
@@ -13,20 +18,18 @@ async function run() {
     await client.query('BEGIN')
 
     for (const table of TABLES) {
-      const { rows } = await client.query(`SELECT COUNT(*)::int AS count FROM ${table}`)
+      const { rows } = await client.query(`SELECT COUNT(*)::int AS count FROM ${table} WHERE merchant_id = $1`, [merchantId])
       console.log(`Found ${rows[0].count} rows in ${table}`)
     }
 
-    await client.query('DELETE FROM booking_inventory')
-    await client.query('DELETE FROM change_log')
-    await client.query('DELETE FROM event_log')
-    await client.query('DELETE FROM bookings')
-    await client.query('ALTER SEQUENCE bookings_id_seq RESTART WITH 1')
-    await client.query('ALTER SEQUENCE booking_inventory_id_seq RESTART WITH 1')
-    await client.query('ALTER SEQUENCE change_log_id_seq RESTART WITH 1')
+    await client.query('DELETE FROM booking_inventory WHERE merchant_id = $1', [merchantId])
+    await client.query('DELETE FROM change_log WHERE merchant_id = $1', [merchantId])
+    await client.query('DELETE FROM booking_expenses WHERE merchant_id = $1', [merchantId])
+    await client.query('DELETE FROM event_log WHERE merchant_id = $1', [merchantId])
+    await client.query('DELETE FROM bookings WHERE merchant_id = $1', [merchantId])
 
     await client.query('COMMIT')
-    console.log('Done. All booking data cleared.')
+    console.log(`Done. All booking data cleared for merchant ${merchantId}.`)
     process.exit(0)
   } catch (err) {
     try {

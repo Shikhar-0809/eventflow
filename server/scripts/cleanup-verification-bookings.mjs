@@ -3,6 +3,10 @@ import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 assertConfirmedDatabaseHost()
 
 const { pool } = await import('../db/database.js')
+const { requireMerchantId } = await import('./lib/merchantArg.mjs')
+
+// Acts on ONE merchant only (--merchant-id=<n>), in addition to the --confirm-host guard.
+const merchantId = await requireMerchantId(pool)
 
 const SEED_NAMES = [
   'Ramesh Sharma',
@@ -20,17 +24,18 @@ const SEED_NAMES = [
 const { rows: outsideJune } = await pool.query(
   `SELECT id, client_name, event_date, phone, created_at
    FROM bookings
-   WHERE event_date < '2026-06-01' OR event_date >= '2026-07-01'
+   WHERE merchant_id = $1 AND (event_date < '2026-06-01' OR event_date >= '2026-07-01')
    ORDER BY event_date, id`,
+  [merchantId],
 )
 
-const seedPlaceholders = SEED_NAMES.map((_, i) => `$${i + 1}`).join(', ')
+const seedPlaceholders = SEED_NAMES.map((_, i) => `$${i + 2}`).join(', ')
 const { rows: nonSeed } = await pool.query(
   `SELECT id, client_name, event_date, phone, created_at
    FROM bookings
-   WHERE client_name NOT IN (${seedPlaceholders})
+   WHERE merchant_id = $1 AND client_name NOT IN (${seedPlaceholders})
    ORDER BY event_date, id`,
-  SEED_NAMES,
+  [merchantId, ...SEED_NAMES],
 )
 
 const deleteIds = nonSeed.map((r) => r.id)
@@ -40,8 +45,8 @@ if (deleteIds.length > 0) {
   try {
     await client.query('BEGIN')
     for (const id of deleteIds) {
-      await client.query('DELETE FROM change_log WHERE booking_id = $1', [id])
-      await client.query('DELETE FROM bookings WHERE id = $1', [id])
+      await client.query('DELETE FROM change_log WHERE booking_id = $1 AND merchant_id = $2', [id, merchantId])
+      await client.query('DELETE FROM bookings WHERE id = $1 AND merchant_id = $2', [id, merchantId])
     }
     await client.query('COMMIT')
   } catch (err) {
@@ -52,7 +57,9 @@ if (deleteIds.length > 0) {
   }
 }
 
-const { rows: remainingRows } = await pool.query('SELECT COUNT(*)::int AS n FROM bookings')
+const { rows: remainingRows } = await pool.query('SELECT COUNT(*)::int AS n FROM bookings WHERE merchant_id = $1', [
+  merchantId,
+])
 const remaining = remainingRows[0].n
 
 console.log(

@@ -25,13 +25,14 @@ export const deleteInventoryItemById = async (itemId) => {
   }
 }
 
-export const deleteBookingsByClientNames = async (names) => {
+// Bulk deletes by name are scoped to one merchant: names are only unique per merchant.
+export const deleteBookingsByClientNames = async (merchantId, names) => {
   if (!names.length) return 0
   try {
-    const placeholders = names.map((_, index) => `$${index + 1}`).join(', ')
+    const placeholders = names.map((_, index) => `$${index + 2}`).join(', ')
     const { rows } = await pool.query(
-      `SELECT id FROM bookings WHERE client_name IN (${placeholders})`,
-      names,
+      `SELECT id FROM bookings WHERE merchant_id = $1 AND client_name IN (${placeholders})`,
+      [merchantId, ...names],
     )
     for (const { id } of rows) await deleteBookingById(id)
     return rows.length
@@ -41,13 +42,13 @@ export const deleteBookingsByClientNames = async (names) => {
   }
 }
 
-export const deleteInventoryItemsByNamePatterns = async (patterns) => {
+export const deleteInventoryItemsByNamePatterns = async (merchantId, patterns) => {
   let removed = 0
   try {
     for (const pattern of patterns) {
       const { rows } = await pool.query(
-        'SELECT id FROM inventory_items WHERE name LIKE $1',
-        [pattern],
+        'SELECT id FROM inventory_items WHERE merchant_id = $1 AND name LIKE $2',
+        [merchantId, pattern],
       )
       for (const { id } of rows) {
         await deleteInventoryItemById(id)
