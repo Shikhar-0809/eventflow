@@ -92,9 +92,16 @@ app.use('/api/records', recordsRouter)
 app.use(errorHandler)
 
 ;(async () => {
-  await initDb()
-  await seed()
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`)
-  })
+  try {
+    await initDb()
+    await seed()
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`)
+    })
+  } catch (err) {
+    // A failed migration must stop the server rather than run on a half-migrated database.
+    // Message only: Postgres error detail can contain row values.
+    console.error(`Startup failed: ${err.message}`)
+    process.exit(1)
+  }
 })()
