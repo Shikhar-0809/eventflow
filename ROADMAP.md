@@ -16,6 +16,7 @@ Changes to the locked v1 scope get recorded here so the "why" doesn't get lost l
 - **[Rebrand]** Merchant persona renamed from "Sharma Tent House" to "Bala Ji Tent House" — Sidebar branding, WhatsApp message sign-off, and document title all updated. (The tool itself is still called EventFlow; only the merchant-facing business name changed.) WhatsApp messages now sign off as "Bala Ji Tent House" instead of "EventFlow" — the message is sent on the merchant's behalf, not the software's.
 - **[UI decision]** Inventory quantity selection in BookingModal uses a visual "unit grid" picker (BookMyShow-style: a grid of unit indicators showing filled/available, click to set quantity) instead of a plain number input. This is presentation only — the underlying model remains quantity-based (available = usable - committed per event date), not individually-identified units. True per-unit identity tracking (which specific chair goes where) was considered and explicitly rejected as out of scope — items are interchangeable for this business.
 - **[Resolved]** Bugs #005 (cold reload connection error), #012 (calendar event context switch), and a tab-title nit on the connection error screen — all fixed and verified before Prompt 15. No open bugs entering the Postgres migration.
+- **[Pulled forward from v5+]** Multi-merchant accounts — any tent/catering business can sign up and use EventFlow with fully isolated data. Pulled forward to make EventFlow a product rather than a single merchant's tool. Billing/subscriptions remain out of scope.
 
 ---
 
