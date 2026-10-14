@@ -4,7 +4,9 @@
 
 The moment a real client's name and phone number is entered into this system, it stops being "just a project" and becomes a system that processes another person's personal data — someone who never saw a privacy policy, never clicked "I agree," and doesn't know this app exists. This file is a plain-language guide to handling that responsibly, including the relevant Indian law.
 
-This is not a substitute for legal advice. If EventFlow grows beyond a single merchant's personal use, get an actual lawyer to review this before wider rollout.
+This is not a substitute for legal advice. EventFlow now hosts more than one merchant (Prompts 24–25), so get an actual lawyer to review this before onboarding any merchant beyond the original one.
+
+**Multi-merchant status:** all merchants share **one database** (the same tables). They are kept apart **by the application**, not by separate databases: every query is scoped to the logged-in merchant's `merchant_id`, and the database additionally refuses links between one merchant's rows and another's (SECURITY.md, "Tenant isolation"). A bug in that scoping is the way one merchant's data could reach another, which is why `npm run verify:isolation` runs before every deploy. **The developer can access every merchant's data.**
 
 ---
 
@@ -15,9 +17,9 @@ India's **Digital Personal Data Protection Act (DPDP Act), 2023** governs how pe
 - **Purpose limitation**: data should only be used for the reason it was collected. A client's phone number was given to coordinate their wedding booking — it shouldn't be reused for unrelated marketing without separate consent.
 - **Data minimization**: collect only what's needed. EventFlow's schema is already minimal (name, phone, event details) — resist the urge to add fields "just in case."
 - **Reasonable security safeguards**: the law expects "reasonable security practices" to protect personal data — this is the legal hook behind everything in SECURITY.md. An unauthenticated public URL holding client phone numbers would not meet this bar.
-- **Breach notification**: if personal data is compromised, there are notification obligations. For a single-merchant POC this is unlikely to be triggered in practice, but it's the reason rotating a leaked secret immediately (SECURITY.md) isn't optional.
+- **Breach notification**: if personal data is compromised, there are notification obligations. For a pilot with a few merchants this is unlikely to be triggered in practice (a cross-merchant data leak would itself count as a breach), but it's the reason rotating a leaked secret immediately (SECURITY.md) isn't optional.
 
-This app is being built **for** the merchant (a data fiduciary under the Act) — the merchant is collecting their own clients' data to run their business. EventFlow as a tool should make it easier for the merchant to handle that data responsibly, not harder.
+This app is being built **for** the merchant (a data fiduciary under the Act; with several merchants, each merchant is the fiduciary for their own clients' data and EventFlow's operator holds it on their behalf) — the merchant is collecting their own clients' data to run their business. EventFlow as a tool should make it easier for the merchant to handle that data responsibly, not harder.
 
 ---
 
@@ -40,18 +42,27 @@ This app is being built **for** the merchant (a data fiduciary under the Act) �
 - Any biometric or government ID data — completely out of scope, no reason this would ever be needed
 
 ### Who can see this data
-- Only the merchant (single login, per SECURITY.md)
-- You, as the developer, will have access during build and via the Render/Neon dashboards — be deliberate about this. Don't export or copy real client data into chat logs, screenshots, or anywhere outside the app and database itself.
+- Each merchant sees **only their own** data (SECURITY.md, "Tenant isolation"). Merchants share one database; the separation is enforced by the application's `merchant_id` scoping and by composite foreign keys, not by separate databases. Until real per-merchant accounts exist (Prompt 26), the one shared login is merchant 1.
+- **You, as the developer, can access every merchant's data** (all of it, not one merchant's), during build and via the Render/Neon dashboards, the database and the logs; there is no per-merchant access control for you — be deliberate about this. Don't export or copy real client data into chat logs, screenshots, or anywhere outside the app and database itself.
 
 ### Telling the merchant what you're doing with their data
 Even informally, the merchant should know:
 - Where their data lives (which cloud providers — Render, Vercel, Neon/Supabase)
 - That it's password-protected but they are responsible for keeping that password private
 - That you (the developer) can technically access the database directly — be upfront about this rather than implying otherwise
+- **That other merchants use the same system, and that everyone's data sits in the same database,** kept apart by the app — and that you can technically see all merchants' data, not just theirs
 - **That the app logs their own usage (logins, bookings created/edited, messages sent) — and why**: this is being used to demonstrate the tool's value to the hackathon/program panel. This is a reasonable and honest thing to track, but it should be said out loud, not left implicit. Most merchants will have no objection once it's explained — but the explanation should happen.
 - What happens if they want to stop using the app (see Data Retention below)
 
-A short, honest conversation covers this — it doesn't need to be a formal legal document for a single-merchant POC, but it does need to happen.
+A short, honest conversation covers this — it doesn't need to be a formal legal document for a small pilot, but it does need to happen **for every merchant, before their account is created** (checklist below).
+
+### Pre-onboarding checklist (before ANY new merchant gets an account)
+
+- [ ] Tell the merchant, in plain language, that **their data is stored in a shared database together with other merchants' data, and the app keeps each merchant's data separate.** Suggested wording: *"Your bookings and stock are stored on the same online database as other tent and catering businesses. The app is built so that you only ever see your own, and other businesses only ever see theirs. I, as the person running EventFlow, can technically see everyone's data, and I will only look at yours when you ask me to help."*
+- [ ] Tell them where the data lives (which cloud providers), that they are responsible for keeping their login private, and that the app logs their own usage (logins, bookings created/edited, messages sent) and why.
+- [ ] Tell them what happens when they stop: how to get their data out (export) and have it deleted on request.
+- [ ] Run `npm run verify:isolation` on the dev database and the live isolation check in TESTING.md, and confirm both pass, before creating the account.
+- [ ] Before the first merchant beyond the original one: have a lawyer review this file and decide on a formal privacy policy and consent flow (DPDP Act), and revisit data retention below.
 
 ---
 
@@ -59,7 +70,7 @@ A short, honest conversation covers this — it doesn't need to be a formal lega
 
 - Define what happens to a booking after the event has passed — for v1, keep it (it becomes useful historical/repeat-client data per the original brainstorm), but this is a deliberate choice, not a default to leave unexamined
 - If the merchant ever wants to stop using EventFlow, they should be able to get their data out (see Export below) and have it deleted from the hosted database on request
-- There is no automatic data deletion in v1 — this is a known gap, acceptable for a single trusted merchant relationship, but should be revisited before onboarding additional merchants
+- There is no automatic data deletion in v1 — this is a known gap, acceptable for the original trusted merchant relationship, but **must be revisited before the second real merchant is onboarded** (still open)
 
 ---
 

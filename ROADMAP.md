@@ -17,6 +17,7 @@ Changes to the locked v1 scope get recorded here so the "why" doesn't get lost l
 - **[UI decision]** Inventory quantity selection in BookingModal uses a visual "unit grid" picker (BookMyShow-style: a grid of unit indicators showing filled/available, click to set quantity) instead of a plain number input. This is presentation only — the underlying model remains quantity-based (available = usable - committed per event date), not individually-identified units. True per-unit identity tracking (which specific chair goes where) was considered and explicitly rejected as out of scope — items are interchangeable for this business.
 - **[Resolved]** Bugs #005 (cold reload connection error), #012 (calendar event context switch), and a tab-title nit on the connection error screen — all fixed and verified before Prompt 15. No open bugs entering the Postgres migration.
 - **[Pulled forward from v5+]** Multi-merchant accounts — any tent/catering business can sign up and use EventFlow with fully isolated data. Pulled forward to make EventFlow a product rather than a single merchant's tool. Billing/subscriptions remain out of scope.
+- **[Delivered — Prompts 24–25]** Multi-merchant data isolation, the first half of what was pulled forward above. Prompt 24 added a migration runner, the `merchants` table, `merchant_id` on every business table and composite foreign keys; Prompt 25 made the session carry the merchant and scoped every API route, script and seed to it (a merchant can only ever see their own bookings, inventory, expenses, change log, settings and usage; another merchant's id looks exactly like a nonexistent one), proven by `npm run verify:isolation`. **Why now:** to make EventFlow a product rather than one merchant's tool, and because isolation has to exist before a second real merchant, not after: a data leak between merchants is a Critical bug (BUGS.md). It was enforced in the database as well as in the routes so that a single route bug cannot cross merchants. **Not delivered yet:** real per-merchant accounts and the onboarding flow (Prompt 26, Firebase auth); until then the single env-password login is merchant 1. Billing/subscriptions remain out of scope. DATA_PRIVACY.md was updated for the shared database, but the formal privacy policy and consent flows are still open (see the v5+ section).
 
 ---
 
@@ -95,11 +96,11 @@ Possible shape, once that discovery happens:
 
 Only relevant if EventFlow moves from "one merchant's tool" to "a product for many merchants." This is a different system, not an incremental feature:
 
-- Multi-tenancy (currently the entire auth model assumes one merchant)
-- Per-merchant data isolation
-- Onboarding flow for new merchants
-- Billing/subscription model
-- This would also reopen `DATA_PRIVACY.md` for a full rewrite — single-merchant informal trust does not scale to multi-tenant SaaS, and DPDP Act obligations get materially heavier (formal privacy policy, consent flows, possibly a Data Protection Officer depending on scale)
+- Multi-tenancy (currently the entire auth model assumes one merchant) — **partly done (Prompts 24–25):** merchants table, merchant-scoped session and routes; real per-merchant accounts still to do (Prompt 26)
+- Per-merchant data isolation — **done (Prompts 24–25):** enforced in the routes and by composite foreign keys, verified by `npm run verify:isolation`
+- Onboarding flow for new merchants — **next: Prompt 26** (Firebase auth + onboarding)
+- Billing/subscription model — **still out of scope**
+- *(Partly done: `DATA_PRIVACY.md` now describes the shared database and the pre-onboarding checklist; the full rewrite below is still open.)* This would also reopen `DATA_PRIVACY.md` for a full rewrite — single-merchant informal trust does not scale to multi-tenant SaaS, and DPDP Act obligations get materially heavier (formal privacy policy, consent flows, possibly a Data Protection Officer depending on scale)
 
 ---
 
