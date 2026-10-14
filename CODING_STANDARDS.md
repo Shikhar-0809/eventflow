@@ -310,6 +310,8 @@ const handleSubmit = async () => {
 
 ## Backend (Express) rules
 
+**Multi-merchant (every route).** Every SELECT/UPDATE/DELETE on a business table binds `merchant_id = $n` to `req.merchantId` (set by `requireAuth` from the signed token, never from the body, query or params); every INSERT sets `merchant_id` explicitly. A lookup by id that does not belong to the merchant returns the same 404 as a missing one. Return explicit column lists, never `SELECT *`, so `merchant_id` does not leak. Any new script that deletes or rewrites tenant data needs `--merchant-id=<n>` (see `scripts/lib/merchantArg.mjs`) as well as `--confirm-host`.
+
 - All routes return JSON — no exceptions
 - All route handlers are `async` — wrap in try/catch, or use an async error-catching wrapper so errors reach `errorHandler.js` automatically
 - HTTP status codes must be correct:

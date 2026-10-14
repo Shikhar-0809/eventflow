@@ -19,6 +19,7 @@ EventFlow v1 is a **single-merchant tool**, not a multi-tenant SaaS product. The
 - A malformed or malicious request reaching the database unvalidated
 - A server error leaking internal details (stack traces, file paths, query text) to the client in production
 - SQL injection via booking form fields or inventory fields
+- **One merchant reaching another merchant's data** (reading, changing or deleting their bookings, inventory, expenses, change log, settings or usage), whether by guessing ids, by sending a `merchant_id`, or through a list or aggregate endpoint. This is a Critical bug (BUGS.md severity table). See "Tenant isolation" below.
 
 **Explicitly out of scope for v1** — see the "Not in v1's threat model" section at the bottom for the full list and why.
 
@@ -352,13 +353,19 @@ Every query uses `pg`'s parameterized `pool.query()` / `client.query()` with `$1
 
 ---
 
-## Tenant isolation at the database level
+## Tenant isolation
 
 Multi-merchant data is isolated in two layers; the database layer exists so a route bug cannot silently cross tenants.
 
 - **Database (migration 002):** every business table has `merchant_id NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant by composite foreign keys (`(booking_id, merchant_id)` and `(item_id, merchant_id)`), so inserting a row that points at another merchant's booking or item fails with `23503`. Names are unique per merchant, settings are keyed by `(merchant_id, key)`.
-- **Routes (next prompt):** every query must be scoped to `req.merchantId` and a cross-merchant id must return 404.
-- **Known gap until then (BUGS #060):** `merchant_id` still has a temporary `DEFAULT 1` and the routes are unscoped, so an unscoped insert lands in merchant 1 and list endpoints return every merchant's rows. Only merchant 1 exists in production, so nothing is exposed today, but no second real merchant may be created until Prompt 25 has shipped.
+- **Session:** the login JWT is `{ merchant_id }` (HS256). `requireAuth` verifies it with `algorithms: ['HS256']`, requires an integer `merchant_id` that exists in `merchants` (a token without one, or for a merchant that no longer exists, gets 401 "Your session has expired. Please log in again.", which also forces everyone to re-login once after this change) and sets `req.merchantId`. **A merchant id is never read from the body, query or params**; zod strips unknown keys, so a `merchant_id` in a request body is ignored.
+- **Routes:** every SELECT/UPDATE/DELETE on a business table binds `merchant_id = req.merchantId`, every INSERT sets it explicitly (including `trackUsage`, which takes it from `req.merchantId` or, on login, `res.locals.merchantId`). Aggregates are scoped too (`COUNT(DISTINCT phone)`, availability sums, usage/me incl. last-active, analytics, reports, records, settings).
+- **The 404 rule:** an id that belongs to another merchant returns exactly what a nonexistent id returns (same status, same message: `Booking not found.`, `Inventory item not found.` / `Item not found.`, `Expense not found.`; `check-availability` keeps its 400 "Inventory item N not found."). Never 403, never a different message, so ids cannot be probed. Unparsable or out-of-range ids take the same path.
+- **Booking inventory lines** must reference the merchant's own items, otherwise 400 "One or more inventory items are invalid."; a composite-FK violation (pg `23503`) is mapped to the same 400, never a 500.
+- **Responses never include `merchant_id`:** routes use explicit column lists (no `SELECT *`), except the admin feed below.
+- **`GET /api/usage/admin`** is the one cross-merchant read: it needs a session AND `ADMIN_ACCESS_KEY`, includes `merchant_id` per row and accepts an optional `?merchant_id=` filter.
+- **Proof:** `npm run verify:isolation -- --confirm-host=<dev host>` (dev databases only, production refused) attacks every route with the other merchant's ids in both directions, compares every list and aggregate with a per-merchant SQL oracle and checks row counts and checksums did not change. Run it before every deploy (TESTING.md).
+- **Temporary defaults:** `merchant_id` had a temporary `DEFAULT 1` while the routes were unscoped. Migration `004_drop_merchant_defaults` removes it, so any query that forgets `merchant_id` fails with a NOT NULL error instead of silently writing to merchant 1. Production ships in two pushes (see DEPLOYMENT.md).
 
 ## Production database guard
 
