@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
 
 const count = async (type, bookingId) => {

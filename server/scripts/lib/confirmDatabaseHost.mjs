@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { touchesProductionDb } from '../../config/productionHosts.js'
 
 const libDir = dirname(fileURLToPath(import.meta.url))
 
@@ -26,6 +27,18 @@ export const assertConfirmedDatabaseHost = () => {
   }
 
   console.log(`Target database host: ${host}`)
+
+  // The production host is refused outright unless the caller names it explicitly.
+  // (db/database.js additionally refuses it whenever NODE_ENV is not production.)
+  if (touchesProductionDb()) {
+    if (!process.argv.includes('--i-really-mean-production')) {
+      console.error(
+        'Refusing to run: this is the PRODUCTION database. Pass --i-really-mean-production as well, and run with NODE_ENV=production.',
+      )
+      process.exit(1)
+    }
+    console.warn('WARNING: --i-really-mean-production passed. This run targets the PRODUCTION database.')
+  }
 
   const prefix = '--confirm-host='
   const match = process.argv.find((arg) => arg.startsWith(prefix))

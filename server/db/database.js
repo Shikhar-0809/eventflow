@@ -2,8 +2,15 @@ import pg from 'pg'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { touchesProductionDb, PRODUCTION_DB_REFUSAL } from '../config/productionHosts.js'
 
 const { Pool } = pg
+
+// Every server start and every script creates the pool here, so this one check covers them all.
+if (process.env.NODE_ENV !== 'production' && touchesProductionDb()) {
+  console.error(PRODUCTION_DB_REFUSAL)
+  process.exit(1)
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)

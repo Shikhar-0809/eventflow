@@ -352,6 +352,16 @@ Every query uses `pg`'s parameterized `pool.query()` / `client.query()` with `$1
 
 ---
 
+## Production database guard
+
+Local dev, seeds and verify scripts must never touch the production database (BUGS #058). The production Neon host is kept in exactly one place, `server/config/productionHosts.js` (`PRODUCTION_DB_HOSTS`; a hostname, not a secret). Matching ignores case and the `-pooler` suffix, and also checks a `?host=` override in `DATABASE_URL` and `PGHOST`.
+
+- **`server/db/database.js`** (the only place the pg pool is created, so the server and every script go through it): if `NODE_ENV !== 'production'` and the database host is the production host, it prints "Local dev is pointed at the PRODUCTION database. Point DATABASE_URL at a dev branch." and exits 1. It never prints the URL.
+- **`server/scripts/lib/confirmDatabaseHost.mjs`** (destructive scripts, with `--confirm-host=<host>`): refuses the production host outright unless `--i-really-mean-production` is also passed. A production run therefore needs three deliberate things: `NODE_ENV=production`, `--confirm-host=<host>` and `--i-really-mean-production`. The only script meant to run against production is `wipe-for-handoff.mjs`.
+- **`server/scripts/lib/refuseProductionDatabase.mjs`** (every verify and seed script, imported right after `dotenv/config`): refuses the production host with no override at all, in any `NODE_ENV`. New verify or seed scripts must import it.
+- **Dev database:** the local `DATABASE_URL` points at the Neon "dev" branch (schema only; startup seeds fictional data when `inventory_items` is empty). Do not point it at a branch copied from production: a copy has a different host, so this guard would not catch it, but it holds real client data.
+- **Changing the production host** (new Neon project or endpoint): update `PRODUCTION_DB_HOSTS` in the same change.
+
 ## Secrets management & git hygiene
 
 - `.env` is gitignored in both `client/` and `server/`. `.env.example` ships with placeholder values only — never a real secret, ever, even temporarily.

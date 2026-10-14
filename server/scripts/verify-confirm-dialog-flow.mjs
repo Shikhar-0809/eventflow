@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
 import { deleteBookingById } from './lib/verifyDbCleanup.mjs'
 import { authFetch, loginVerifySession, readJson } from './lib/verifyScriptAuth.mjs'

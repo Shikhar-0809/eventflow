@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './lib/refuseProductionDatabase.mjs'
 import express from 'express'
 import { pool } from '../db/database.js'
 import { trackUsage } from '../middleware/trackUsage.js'

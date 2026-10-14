@@ -22,6 +22,7 @@ If code and these docs disagree, say so — don't silently pick one.
 - Never read, print, or echo `.env` files, secrets, connection strings, password hashes, or keys. Env var NAMES only. `.env.example` is fine to read and edit (placeholders only).
 - Never run anything against the production database. Never print real client names or phone numbers. Use the seeded fictional data for all debugging.
 - Every destructive script needs `--confirm-host=<host>` (see `server/scripts/lib/`). Don't bypass it.
+- The production database host lives only in `server/config/productionHosts.js`. `db/database.js` refuses it when `NODE_ENV !== 'production'`; verify and seed scripts import `scripts/lib/refuseProductionDatabase.mjs`; destructive scripts also need `--i-really-mean-production` for it. Never pass that flag, set `NODE_ENV=production` for a script, or edit the host list without asking me. Details in `SECURITY.md`.
 - Never `git push` without asking me first. Never rewrite git history.
 - Every SQL query uses `$1`-style parameters. Multi-table writes run in a transaction (BEGIN/COMMIT/ROLLBACK, `client.release()` in `finally`).
 - Every route except `GET /api/health` and `POST /api/auth/login` has `requireAuth`. Validation (zod) runs server-side before any DB call.

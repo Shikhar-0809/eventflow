@@ -3,6 +3,7 @@
  * UI checks are driven via Cursor MCP browser.
  */
 import 'dotenv/config'
+import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
 
 const BASE = 'http://localhost:3001/api'

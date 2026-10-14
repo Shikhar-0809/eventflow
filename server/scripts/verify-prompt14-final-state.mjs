@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
 import { getVerifyCookieHeader, VERIFY_API_BASE } from './lib/verifySession.mjs'
 
