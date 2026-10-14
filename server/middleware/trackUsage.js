@@ -19,10 +19,18 @@ export const trackUsage = (eventType, getMetadata) => (req, res, next) => {
     if (res.statusCode < 200 || res.statusCode >= 300) return
 
     try {
+      // Login runs before requireAuth, so the login handler puts the merchant in res.locals.
+      const merchantId = res.locals.merchantId ?? req.merchantId
+      if (!Number.isInteger(merchantId)) {
+        // Never guess a merchant. Log the event type only, no request data.
+        console.error(`trackUsage: no merchant for event ${eventType}; event not recorded`)
+        return
+      }
+
       const metadata = resolveMetadata(req, res, getMetadata)
       pool.query(
-        'INSERT INTO event_log (event_type, metadata) VALUES ($1, $2)',
-        [eventType, metadata ? JSON.stringify(metadata) : null],
+        'INSERT INTO event_log (merchant_id, event_type, metadata) VALUES ($1, $2, $3)',
+        [merchantId, eventType, metadata ? JSON.stringify(metadata) : null],
       ).catch(() => {})
     } catch {
       // Logging must never break or delay the merchant-facing response.

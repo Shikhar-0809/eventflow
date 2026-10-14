@@ -12,6 +12,9 @@ const sessionCookieOptions = (isProd) => ({
   path: '/',
 })
 
+// Until real accounts exist (Firebase login, next prompt), the single env-password login is merchant 1.
+const LEGACY_LOGIN_MERCHANT_ID = 1
+
 const router = Router()
 
 router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, next) => {
@@ -28,10 +31,13 @@ router.post('/login', loginRateLimiter, trackUsage('login'), async (req, res, ne
       return res.status(401).json({ error: 'Incorrect password.' })
     }
 
-    const token = jwt.sign({}, process.env.JWT_SECRET, {
+    const token = jwt.sign({ merchant_id: LEGACY_LOGIN_MERCHANT_ID }, process.env.JWT_SECRET, {
       algorithm: 'HS256',
       expiresIn: '7d',
     })
+
+    // requireAuth has not run on this route; trackUsage reads the merchant from here.
+    res.locals.merchantId = LEGACY_LOGIN_MERCHANT_ID
 
     const isProd = process.env.NODE_ENV === 'production'
 
