@@ -46,6 +46,7 @@ const create = await request('/bookings', {
     client_name: 'Usage Log Test Client',
     phone: '9876501234',
     event_type: 'other',
+    event_type_custom: 'Verify probe',
     event_date: '2026-12-15',
     guest_count: 40,
     venue: 'Test Hall',
