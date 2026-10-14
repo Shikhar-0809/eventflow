@@ -36,12 +36,13 @@ If code and these docs disagree, say so — don't silently pick one.
 - Verify changes by actually running them (dev server, verify scripts, browser checks) — not just by reading the code. Report what you verified and how.
 - Keep `ARCHITECTURE.md` and `SECURITY.md`'s route matrix updated when routes, tables or env vars change.
 - Ask before any decision that's hard to undo (schema changes on existing data, deleting files I didn't ask about, new dependencies).
+- Schema changes only as a new numbered file in `server/db/migrations/` (never edit an applied one). Rules: `CODING_STANDARDS.md`.
 
 ## Current status (update as work progresses)
 
-- Done: docs refresh (Prompt 22), security quick fixes (Prompt 23), enforced CSP, helmet, db.prepare shim removed.
-- In progress: trust proxy = 4 (BUGS #040), then Vercel-only origin lock with `PROXY_SHARED_SECRET`.
-- Next: `PROMPTS_22-26.md` Prompt 24 (multi-merchant schema), 25 (merchant-scoped API + isolation test), 26 (Firebase auth + onboarding).
+- Done: docs refresh (Prompt 22), security quick fixes (Prompt 23), enforced CSP, helmet, trust proxy = 4, Vercel-only origin lock, production-database guard.
+- In progress (Prompt 24, committed locally, not pushed): migration runner + `002_multi_merchant` (merchants table, `merchant_id` everywhere, composite FKs, temporary `DEFAULT 1`). Remaining: fresh-database test on a scratch Neon database. Do not deploy it alone: deploy with Prompt 25, after a fresh production restore-point branch.
+- Next: `PROMPTS_22-26.md` Prompt 25 (merchant-scoped API, remove the `DEFAULT 1`s, isolation test), 26 (Firebase auth + onboarding).
 
 ## Compact instructions
 

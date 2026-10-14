@@ -98,9 +98,12 @@ eventflow/
 │   ├── package.json
 │   ├── .env.example               # JWT_SECRET, DATABASE_URL, MERCHANT_PASSWORD_HASH, ADMIN_ACCESS_KEY, PROXY_SHARED_SECRET, …
 │   ├── db/
-│   │   ├── database.js            # pg Pool, schema.sql apply, column/FK migrations
-│   │   ├── schema.sql             # Postgres DDL (source of truth at boot)
-│   │   ├── seed.js                # Dev seed orchestrator (production-gated)
+│   │   ├── database.js            # pg Pool + production-database guard; initDb() runs the migrations
+│   │   ├── migrate.js             # Migration runner: advisory lock, one transaction per file, ids-only output
+│   │   ├── migrations/            # SCHEMA SOURCE OF TRUTH: 001_baseline.sql, 002_multi_merchant.sql, ...
+│   │   ├── seed.js                # Dev seed orchestrator (production-gated, per merchant)
+│   │   ├── seedMerchants.js       # Merchant ids used by the dev seeds
+│   │   ├── devMerchantSeed.js     # Dev-only second merchant "Test Tent Co"
 │   │   ├── demoSeed.js
 │   │   ├── demoAnalyticsSeed.js
 │   │   └── analyticsHistorySeed.js
@@ -148,9 +151,9 @@ eventflow/
 
 ## Data model
 
-Schema is applied on boot from `server/db/schema.sql` (Postgres), plus ad-hoc `ALTER TABLE … ADD COLUMN IF NOT EXISTS` / FK migrations in `database.js`. No separate migration framework. Connection: `pg.Pool` with `connectionString: process.env.DATABASE_URL`; SSL when `NODE_ENV === 'production'`.
+**The schema lives in `server/db/migrations/`** (numbered SQL files, each applied once, in order). `initDb()` calls `runMigrations()` (`server/db/migrate.js`) on every boot; applied ids are recorded in `schema_migrations (id, applied_at)`. The runner takes a transaction-scoped advisory lock (safe through Neon's pooled endpoint), runs each file in its own transaction, and throws on failure so the server refuses to start on a half-migrated database. A database that already has the `bookings` table but no `schema_migrations` adopts `001_baseline` without running it (after checking it really is at the baseline). Run it by hand with `npm run migrate -- --confirm-host=<host>` from `server/` (no seeds; prints migration ids only; production also needs `NODE_ENV=production` and `--i-really-mean-production`). Rules for writing migrations are in `CODING_STANDARDS.md`. Connection: `pg.Pool` with `connectionString: process.env.DATABASE_URL`; SSL when `NODE_ENV === 'production'`.
 
-**No `merchant_id` / tenant column** — single merchant per deployment. Monthly revenue target lives in `merchant_settings`, not a separate `targets` table.
+**Multi-merchant.** `merchants` (`id`, `business_name`, `owner_name`, `whatsapp_phone`, `city`, `created_at`) is the tenant table; merchant 1 is Bala Ji Tent House (all pre-existing data). Every business table (`bookings`, `change_log`, `booking_inventory`, `inventory_items`, `inventory_damage_log`, `booking_expenses`, `event_log`, `merchant_settings`) has `merchant_id INTEGER NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant at the database level by composite foreign keys, so a cross-merchant link is impossible: `(booking_id, merchant_id) → bookings (id, merchant_id)` on `change_log`, `booking_expenses` and `booking_inventory` (`ON DELETE CASCADE`), and `(item_id, merchant_id) → inventory_items (id, merchant_id)` on `booking_inventory` and `inventory_damage_log`. `inventory_items` is unique on `(merchant_id, name)`; `merchant_settings` has `PRIMARY KEY (merchant_id, key)`. **Temporary:** each `merchant_id` still has `DEFAULT 1` so the not-yet-scoped routes keep working; the next prompt scopes every query to `req.merchantId` and removes the defaults (BUGS #060). The column listings below predate `merchant_id`; read them as having one more column.
 
 ### `bookings`
 

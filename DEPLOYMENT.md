@@ -51,11 +51,8 @@ Do not proceed past this section until every item is true:
    ```
 3. Copy this — it becomes `DATABASE_URL` in the backend's production environment (Step 3)
 4. Neon's free tier includes a built-in dev/prod branching feature — optionally create a second branch (e.g. `dev`) if you want a separate Postgres instance for local development that mirrors prod schema without touching real data. Not required, but recommended once past single-developer POC stage.
-5. Run the schema against this database once, before the app's first production boot:
-   ```bash
-   psql "postgresql://<connection-string>" -f server/db/schema.sql
-   ```
-   (Requires the `psql` CLI locally, or use Neon's web-based SQL editor and paste `schema.sql`'s contents directly.)
+5. Nothing to run by hand: the backend applies the schema itself on boot from `server/db/migrations/` (numbered SQL files, recorded in `schema_migrations`). A new database gets `001_baseline` and everything after it; the existing production database adopts `001_baseline` without re-running it. To apply or check migrations manually from `server/`: `npm run migrate -- --confirm-host=<host>` (production additionally needs `NODE_ENV=production` and `--i-really-mean-production`).
+   **Before deploying a release that contains a migration, create a fresh restore-point branch of the production database in Neon** (migrations have no down step; a failed one rolls back, a successful one does not).
 
 ---
 

@@ -352,6 +352,14 @@ Every query uses `pg`'s parameterized `pool.query()` / `client.query()` with `$1
 
 ---
 
+## Tenant isolation at the database level
+
+Multi-merchant data is isolated in two layers; the database layer exists so a route bug cannot silently cross tenants.
+
+- **Database (migration 002):** every business table has `merchant_id NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant by composite foreign keys (`(booking_id, merchant_id)` and `(item_id, merchant_id)`), so inserting a row that points at another merchant's booking or item fails with `23503`. Names are unique per merchant, settings are keyed by `(merchant_id, key)`.
+- **Routes (next prompt):** every query must be scoped to `req.merchantId` and a cross-merchant id must return 404.
+- **Known gap until then (BUGS #060):** `merchant_id` still has a temporary `DEFAULT 1` and the routes are unscoped, so an unscoped insert lands in merchant 1 and list endpoints return every merchant's rows. Only merchant 1 exists in production, so nothing is exposed today, but no second real merchant may be created until Prompt 25 has shipped.
+
 ## Production database guard
 
 Local dev, seeds and verify scripts must never touch the production database (BUGS #058). The production Neon host is kept in exactly one place, `server/config/productionHosts.js` (`PRODUCTION_DB_HOSTS`; a hostname, not a secret). Matching ignores case and the `-pooler` suffix, and also checks a `?host=` override in `DATABASE_URL` and `PGHOST`.

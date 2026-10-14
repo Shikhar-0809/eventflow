@@ -415,6 +415,18 @@ Use this whenever a single logical action touches more than one table, so a book
 
 ---
 
+## Database migrations
+
+The schema's source of truth is `server/db/migrations/`. Never run ad-hoc `ALTER`s (`schema.sql` no longer exists).
+
+- One numbered file per change: `NNN_short_name.sql` (three digits, lowercase; no two files share a number). Files run in order, once each.
+- **Never edit a migration that has been applied anywhere.** Fix forward with a new file. There are no down migrations; take a restore-point branch before deploying one.
+- Do not write `BEGIN` / `COMMIT` / `ROLLBACK` in a file: the runner wraps each file in its own transaction and holds an advisory lock. (`BEGIN` inside a `DO $$ ... $$` block is fine.) No `CREATE INDEX CONCURRENTLY`.
+- Find constraints by what they link (catalog lookup in a `DO` block) when their auto-generated names might differ between databases; give new constraints explicit names.
+- A new tenant-owned table needs `merchant_id` and composite foreign keys to its parents (see ARCHITECTURE.md, Data model).
+- Migrations and the runner print migration ids only, never row data; error output uses the message, not the Postgres `detail` (it can contain values).
+- Run them with `npm run migrate -- --confirm-host=<host>`; the server also runs them on boot, so a deploy migrates production.
+
 ## Seed data rules
 
 - Minimum 10 bookings in the seed
