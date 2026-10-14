@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
-const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations')
+const DEFAULT_MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations')
 const FILE_PATTERN = /^(\d{3})_[a-z0-9_]+\.sql$/
 // Migration files must not manage their own transaction: the runner wraps each one.
 // (A plpgsql "BEGIN" inside DO $$ ... $$ has no semicolon straight after it, so it is not matched.)
@@ -23,8 +23,8 @@ const BASELINE_COLUMNS = [
 ]
 const CASCADE_CHILDREN = ['change_log', 'booking_inventory', 'booking_expenses']
 
-const loadMigrations = () => {
-  const files = readdirSync(MIGRATIONS_DIR).filter((name) => FILE_PATTERN.test(name)).sort()
+const loadMigrations = (dir) => {
+  const files = readdirSync(dir).filter((name) => FILE_PATTERN.test(name)).sort()
   const seenPrefixes = new Set()
   return files.map((name) => {
     const prefix = name.slice(0, 3)
@@ -32,7 +32,7 @@ const loadMigrations = () => {
       throw new Error(`Two migrations share the number ${prefix}`)
     }
     seenPrefixes.add(prefix)
-    const sql = readFileSync(join(MIGRATIONS_DIR, name), 'utf8')
+    const sql = readFileSync(join(dir, name), 'utf8')
     if (OWN_TRANSACTION.test(sql)) {
       throw new Error(`Migration ${name} must not contain BEGIN/COMMIT/ROLLBACK`)
     }
@@ -85,8 +85,9 @@ const assertBaselineCurrent = async (client) => {
   }
 }
 
-export const runMigrations = async (pool) => {
-  const migrations = loadMigrations()
+// `dir` exists so tests can point the runner at a temporary folder; the app always uses db/migrations/.
+export const runMigrations = async (pool, { dir = DEFAULT_MIGRATIONS_DIR } = {}) => {
+  const migrations = loadMigrations(dir)
   const client = await pool.connect()
   const applied = []
   let adopted = false
