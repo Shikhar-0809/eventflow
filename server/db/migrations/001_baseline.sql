@@ -1,4 +1,7 @@
-CREATE TABLE IF NOT EXISTS bookings (
+-- 001_baseline: the complete schema as it existed before the migration runner.
+-- Databases that already have these tables adopt it without running it (see db/migrate.js).
+
+CREATE TABLE bookings (
   id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   client_name   TEXT    NOT NULL,
   phone         TEXT    NOT NULL,
@@ -18,21 +21,21 @@ CREATE TABLE IF NOT EXISTS bookings (
   updated_at    TEXT    DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS change_log (
+CREATE TABLE change_log (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   booking_id  INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
   change_note TEXT    NOT NULL,
   logged_at   TEXT    DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS event_log (
+CREATE TABLE event_log (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   event_type  TEXT    NOT NULL,
   metadata    TEXT,
   created_at  TEXT    DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS inventory_items (
+CREATE TABLE inventory_items (
   id               INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name             TEXT    NOT NULL UNIQUE,
   total_quantity   INTEGER NOT NULL DEFAULT 0,
@@ -41,7 +44,7 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   created_at       TEXT    DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS booking_inventory (
+CREATE TABLE booking_inventory (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
@@ -50,7 +53,7 @@ CREATE TABLE IF NOT EXISTS booking_inventory (
   line_total  INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS inventory_damage_log (
+CREATE TABLE inventory_damage_log (
   id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
   change      INTEGER NOT NULL,
@@ -58,12 +61,12 @@ CREATE TABLE IF NOT EXISTS inventory_damage_log (
   logged_at   TEXT    DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS merchant_settings (
+CREATE TABLE merchant_settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS booking_expenses (
+CREATE TABLE booking_expenses (
   id          SERIAL PRIMARY KEY,
   booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   label       TEXT NOT NULL,
