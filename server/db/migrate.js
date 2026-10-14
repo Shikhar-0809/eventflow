@@ -22,6 +22,15 @@ const BASELINE_COLUMNS = [
   ['booking_expenses', 'booking_id'], ['merchant_settings', 'key'], ['event_log', 'metadata'],
 ]
 const CASCADE_CHILDREN = ['change_log', 'booking_inventory', 'booking_expenses']
+// CHECK constraints the baseline declares. An existing database must have them to adopt the baseline,
+// except where a later migration is named as the repair for a known, harmless drift: adoption is then
+// allowed (and the drift is reported) as long as that repair is among the migrations being run.
+const BASELINE_CHECKS = [
+  { table: 'booking_inventory', name: 'booking_inventory_quantity_check' },
+  { table: 'booking_expenses', name: 'booking_expenses_amount_check' },
+  // Older databases (including production) were created before this CHECK was in schema.sql.
+  { table: 'bookings', name: 'bookings_status_check', repairedBy: '003_bookings_status_check' },
+]
 
 const loadMigrations = (dir) => {
   const files = readdirSync(dir).filter((name) => FILE_PATTERN.test(name)).sort()
@@ -56,8 +65,10 @@ const withLock = async (client, work) => {
   }
 }
 
-const assertBaselineCurrent = async (client) => {
+// Returns the known drift (missing CHECKs that a later migration repairs) after refusing anything else.
+const assertBaselineCurrent = async (client, migrationIds) => {
   const missing = []
+  const drift = []
 
   const { rows: columns } = await client.query(
     `SELECT table_name, column_name FROM information_schema.columns
@@ -78,11 +89,27 @@ const assertBaselineCurrent = async (client) => {
     if (!cascades) missing.push(`${child} -> bookings ON DELETE CASCADE`)
   }
 
+  const { rows: checks } = await client.query(
+    `SELECT c.conrelid::regclass::text AS tbl, c.conname
+     FROM pg_constraint c
+     JOIN pg_namespace n ON n.oid = c.connamespace
+     WHERE c.contype = 'c' AND n.nspname = current_schema()`,
+  )
+  for (const check of BASELINE_CHECKS) {
+    if (checks.some((row) => row.tbl === check.table && row.conname === check.name)) continue
+    if (check.repairedBy && migrationIds.includes(check.repairedBy)) {
+      drift.push(`${check.name} (repaired by ${check.repairedBy})`)
+    } else {
+      missing.push(`${check.table} CHECK ${check.name}`)
+    }
+  }
+
   if (missing.length > 0) {
     throw new Error(
       `Existing database is not at the baseline schema (missing: ${missing.join(', ')}). Refusing to adopt it.`,
     )
   }
+  return drift
 }
 
 // `dir` exists so tests can point the runner at a temporary folder; the app always uses db/migrations/.
@@ -91,6 +118,7 @@ export const runMigrations = async (pool, { dir = DEFAULT_MIGRATIONS_DIR } = {})
   const client = await pool.connect()
   const applied = []
   let adopted = false
+  let drift = []
 
   try {
     try {
@@ -102,7 +130,7 @@ export const runMigrations = async (pool, { dir = DEFAULT_MIGRATIONS_DIR } = {})
         if (tracker) return
 
         const adopting = Boolean(bookings)
-        if (adopting) await assertBaselineCurrent(client)
+        if (adopting) drift = await assertBaselineCurrent(client, migrations.map((migration) => migration.id))
 
         await client.query(
           `CREATE TABLE schema_migrations (
@@ -120,6 +148,7 @@ export const runMigrations = async (pool, { dir = DEFAULT_MIGRATIONS_DIR } = {})
       throw new Error(`Migration setup failed: ${err.message}`)
     }
     if (adopted) console.log(`migrate: baseline adopted ${BASELINE_ID}`)
+    for (const item of drift) console.log(`migrate: known drift in adopted database: ${item}`)
 
     for (const migration of migrations) {
       try {
