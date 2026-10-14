@@ -24,7 +24,7 @@ router.patch('/', validate(settingsPatchSchema), async (req, res, next) => {
     const { monthly_revenue_target } = req.body
     await pool.query(
       `INSERT INTO merchant_settings (key, value) VALUES ($1, $2)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+       ON CONFLICT (merchant_id, key) DO UPDATE SET value = EXCLUDED.value`,
       [MONTHLY_REVENUE_TARGET_KEY, String(monthly_revenue_target)],
     )
     res.status(200).json({ [MONTHLY_REVENUE_TARGET_KEY]: String(monthly_revenue_target) })
