@@ -75,31 +75,37 @@ const currentStartDt = `${currentStart} 00:00:00`
 const currentEndDt = `${currentEnd} 00:00:00`
 const weekStart = weekStartSql()
 
+// The API answers for the logged-in merchant only, so the SQL oracle is scoped to that merchant too
+// (the dev merchant, looked up by name like the other verify scripts).
+const { rows: [{ id: merchantId }] } = await pool.query(
+  "SELECT id FROM merchants WHERE business_name = 'Bala Ji Tent House'",
+)
+
 const dbRevenue = Number((await pool.query(
-  'SELECT COALESCE(SUM(total), 0) AS v FROM bookings WHERE event_date >= $1 AND event_date < $2',
-  [currentStart, currentEnd],
+  'SELECT COALESCE(SUM(total), 0) AS v FROM bookings WHERE event_date >= $1 AND event_date < $2 AND merchant_id = $3',
+  [currentStart, currentEnd, merchantId],
 )).rows[0].v)
 const dbBookingsMonth = Number((await pool.query(
-  'SELECT COUNT(*) AS v FROM bookings WHERE event_date >= $1 AND event_date < $2',
-  [currentStart, currentEnd],
+  'SELECT COUNT(*) AS v FROM bookings WHERE event_date >= $1 AND event_date < $2 AND merchant_id = $3',
+  [currentStart, currentEnd, merchantId],
 )).rows[0].v)
-const dbTotalClients = Number((await pool.query('SELECT COUNT(DISTINCT phone) AS v FROM bookings')).rows[0].v)
+const dbTotalClients = Number((await pool.query('SELECT COUNT(DISTINCT phone) AS v FROM bookings WHERE merchant_id = $1', [merchantId])).rows[0].v)
 const dbPeakRow = (await pool.query(
   `SELECT to_char(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS count
-   FROM bookings WHERE event_date >= $1 GROUP BY 1 ORDER BY count DESC, month DESC LIMIT 1`,
-  [sixMonthStart],
+   FROM bookings WHERE event_date >= $1 AND merchant_id = $2 GROUP BY 1 ORDER BY count DESC, month DESC LIMIT 1`,
+  [sixMonthStart, merchantId],
 )).rows[0]
 const dbPeak = dbPeakRow ? { month: dbPeakRow.month, count: Number(dbPeakRow.count) } : undefined
 
 const dbLoginsWeek = Number((await pool.query(
-  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'login' AND created_at >= $1",
-  [weekStart],
+  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'login' AND created_at >= $1 AND merchant_id = $2",
+  [weekStart, merchantId],
 )).rows[0].v)
 const dbBookingsCreatedMonth = Number((await pool.query(
-  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2",
-  [currentStartDt, currentEndDt],
+  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2 AND merchant_id = $3",
+  [currentStartDt, currentEndDt, merchantId],
 )).rows[0].v)
-const dbLastActive = (await pool.query('SELECT MAX(created_at) AS v FROM event_log')).rows[0].v
+const dbLastActive = (await pool.query('SELECT MAX(created_at) AS v FROM event_log WHERE merchant_id = $1', [merchantId])).rows[0].v
 
 const envExample = await import('fs').then((fs) =>
   fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8'),
