@@ -99,17 +99,19 @@ const VIEW_SCHEDULE = [
   [ts('2026-07-19', '11:20:00'), ts('2026-07-19', '16:10:00')],
 ]
 
+// Every event carries the demo_seed marker so purgeNonDemoEventLog (which runs first on every dev boot)
+// keeps them; unmarked, they were deleted at the second boot of a fresh database.
 const buildEventRows = (bookingIds) => {
   const events = []
 
   for (const created_at of LOGIN_TIMES) {
-    events.push({ event_type: 'login', metadata: '{}', created_at })
+    events.push({ event_type: 'login', metadata: JSON.stringify({ demo_seed: true }), created_at })
   }
 
   bookingIds.forEach((bookingId, index) => {
     events.push({
       event_type: 'booking_created',
-      metadata: JSON.stringify({ booking_id: bookingId }),
+      metadata: JSON.stringify({ booking_id: bookingId, demo_seed: true }),
       created_at: DEMO_BOOKINGS[index].created_at,
     })
   })
@@ -117,7 +119,7 @@ const buildEventRows = (bookingIds) => {
   for (const { bookingIndex, created_at } of EDIT_SCHEDULE) {
     events.push({
       event_type: 'booking_edited',
-      metadata: JSON.stringify({ booking_id: bookingIds[bookingIndex] }),
+      metadata: JSON.stringify({ booking_id: bookingIds[bookingIndex], demo_seed: true }),
       created_at,
     })
   }
@@ -126,7 +128,7 @@ const buildEventRows = (bookingIds) => {
     for (const created_at of VIEW_SCHEDULE[index]) {
       events.push({
         event_type: 'booking_viewed',
-        metadata: JSON.stringify({ booking_id: bookingId }),
+        metadata: JSON.stringify({ booking_id: bookingId, demo_seed: true }),
         created_at,
       })
     }
@@ -135,7 +137,7 @@ const buildEventRows = (bookingIds) => {
   for (const { bookingIndex, created_at } of WHATSAPP_CONFIRM_OFFSETS) {
     events.push({
       event_type: 'whatsapp_confirmation_sent',
-      metadata: JSON.stringify({ booking_id: bookingIds[bookingIndex] }),
+      metadata: JSON.stringify({ booking_id: bookingIds[bookingIndex], demo_seed: true }),
       created_at,
     })
   }
@@ -143,7 +145,7 @@ const buildEventRows = (bookingIds) => {
   for (const { bookingIndex, created_at } of WHATSAPP_REMINDERS) {
     events.push({
       event_type: 'whatsapp_reminder_sent',
-      metadata: JSON.stringify({ booking_id: bookingIds[bookingIndex] }),
+      metadata: JSON.stringify({ booking_id: bookingIds[bookingIndex], demo_seed: true }),
       created_at,
     })
   }
