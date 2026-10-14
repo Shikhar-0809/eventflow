@@ -42,7 +42,8 @@ const run = async () => {
     if (entry) pass('log note text', entry.change_note)
     else fail('log note text', `note not found in ${JSON.stringify(logRes.body.map((r) => r.change_note))}`)
 
-    const parsed = entry?.logged_at ? Date.parse(String(entry.logged_at).replace(' ', 'T')) : NaN
+    // Postgres prints offsets as +00 or +05:30; Date.parse needs +00:00, so a bare hour offset is padded.
+    const parsed = entry?.logged_at ? Date.parse(String(entry.logged_at).replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00')) : NaN
     if (entry && Number.isFinite(parsed)) {
       pass('log timestamp', entry.logged_at)
     } else {
