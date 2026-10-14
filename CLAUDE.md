@@ -41,7 +41,7 @@ If code and these docs disagree, say so — don't silently pick one.
 ## Current status (update as work progresses)
 
 - Done: docs refresh (Prompt 22), security quick fixes (Prompt 23), enforced CSP, helmet, trust proxy = 4, Vercel-only origin lock, production-database guard.
-- In progress (Prompt 24, committed locally, not pushed): migration runner + `002_multi_merchant` (merchants table, `merchant_id` everywhere, composite FKs, temporary `DEFAULT 1`). Remaining: fresh-database test on a scratch Neon database. Do not deploy it alone: deploy with Prompt 25, after a fresh production restore-point branch.
+- Done locally, NOT pushed (Prompt 24): migration runner, migrations `001_baseline` / `002_multi_merchant` / `003_bookings_status_check`, merchant-scoped dev seeds. Verified on the dev branch and a scratch Neon database (fresh path, adoption with data, concurrency, failure paths). Do not deploy it alone: deploy with Prompt 25, after a fresh production restore-point branch, and confirm production has the CHECKs listed in BUGS #061 first.
 - Next: `PROMPTS_22-26.md` Prompt 25 (merchant-scoped API, remove the `DEFAULT 1`s, isolation test), 26 (Firebase auth + onboarding).
 
 ## Compact instructions
