@@ -26,7 +26,8 @@ const weekStartSql = () => {
   const now = new Date()
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
-  start.setDate(start.getDate() - start.getDay())
+  // ISO week, Monday first, like GET /usage/me (getWeekWindow in routes/usage.js).
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
   return `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())} 00:00:00`
 }
 
@@ -101,11 +102,13 @@ const dbLoginsWeek = Number((await pool.query(
   "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'login' AND created_at >= $1 AND merchant_id = $2",
   [weekStart, merchantId],
 )).rows[0].v)
-const dbBookingsCreatedMonth = Number((await pool.query(
-  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'booking_created' AND created_at >= $1 AND created_at < $2 AND merchant_id = $3",
-  [currentStartDt, currentEndDt, merchantId],
+const dbBookingsCreatedWeek = Number((await pool.query(
+  "SELECT COUNT(*) AS v FROM event_log WHERE event_type = 'booking_created' AND created_at::timestamptz >= $1::timestamptz AND created_at::timestamptz < ($1::timestamptz + interval '7 days') AND merchant_id = $2",
+  [weekStart, merchantId],
 )).rows[0].v)
-const dbLastActive = (await pool.query('SELECT MAX(created_at) AS v FROM event_log WHERE merchant_id = $1', [merchantId])).rows[0].v
+// created_at is text; cast it like the API does, so both sides are instants (ISO strings, millisecond precision).
+const dbLastActiveRaw = (await pool.query('SELECT MAX(created_at::timestamptz) AS v FROM event_log WHERE merchant_id = $1', [merchantId])).rows[0].v
+const dbLastActive = dbLastActiveRaw ? new Date(dbLastActiveRaw).toISOString() : null
 
 const envExample = await import('fs').then((fs) =>
   fs.readFileSync(new URL('../.env.example', import.meta.url), 'utf8'),
@@ -189,13 +192,13 @@ results.check14_usageMe = {
   api: usageMe.json,
   db: {
     loginsThisWeek: dbLoginsWeek,
-    bookingsCreatedThisMonth: dbBookingsCreatedMonth,
+    bookingsThisWeek: dbBookingsCreatedWeek,
     lastActiveAt: dbLastActive,
   },
   pass:
     usageMe.status === 200 &&
     usageMe.json.loginsThisWeek === dbLoginsWeek &&
-    usageMe.json.bookingsCreatedThisMonth === dbBookingsCreatedMonth &&
+    usageMe.json.bookingsThisWeek === dbBookingsCreatedWeek &&
     usageMe.json.lastActiveAt === dbLastActive,
 }
 
