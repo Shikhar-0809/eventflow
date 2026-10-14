@@ -9,9 +9,12 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
-          { "type": "command", "command": "node .claude/hooks/block-env-read.mjs" }
+          {
+            "type": "command",
+            "command": "node -e \"const c=require('child_process'),p=require('path');const deny=m=>{process.stdout.write(JSON.stringify({hookSpecificOutput:{hookEventName:'PreToolUse',permissionDecision:'deny',permissionDecisionReason:m}}));process.exit(0)};try{const r=c.spawnSync(process.execPath,[p.join(process.env.CLAUDE_PROJECT_DIR,'.claude','hooks','block-env-read.mjs')],{stdio:['inherit','pipe','pipe'],encoding:'utf8'});if(r.status!==0)deny('blocked: env guard failed to run (fail closed)');process.stdout.write(r.stdout)}catch(e){deny('blocked: env guard failed to run (fail closed)')}\""
+          }
         ]
       }
     ]
