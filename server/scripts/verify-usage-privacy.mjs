@@ -161,8 +161,23 @@ if (login.status !== 200) {
 }
 const cookie = cookieHeader(login.setCookie)
 
-// 409 conflict — should not log booking_created
+// Date conflict is alert-only: the booking is created (201, with a conflict notice) and booking_created is logged once.
+// (First a booking is created for the date, so the second one really clashes.)
 const conflictDate = '2026-06-03'
+const clashSeed = await request('/bookings', {
+  method: 'POST',
+  cookie,
+  body: {
+    client_name: 'Conflict Seed',
+    phone: '9876500002',
+    event_type: 'other',
+    event_type_custom: 'Verify probe',
+    event_date: conflictDate,
+    guest_count: 10,
+    advance: 1000,
+    total: 5000,
+  },
+})
 const createdBeforeConflict = await countByType('booking_created')
 const conflict = await request('/bookings', {
   method: 'POST',
@@ -171,6 +186,7 @@ const conflict = await request('/bookings', {
     client_name: 'Conflict Probe',
     phone: '9876500001',
     event_type: 'other',
+    event_type_custom: 'Verify probe',
     event_date: conflictDate,
     guest_count: 10,
     advance: 1000,
@@ -179,10 +195,19 @@ const conflict = await request('/bookings', {
 })
 const createdAfterConflict = await countByType('booking_created')
 
-results.check5_conflict409 = {
+results.check5_conflictAlertOnly = {
+  seedStatus: clashSeed.status,
   status: conflict.status,
+  conflictDetected: conflict.json?.conflict?.detected === true,
   rowsAdded: createdAfterConflict - createdBeforeConflict,
-  pass: conflict.status === 409 && createdAfterConflict === createdBeforeConflict,
+  pass:
+    clashSeed.status === 201 &&
+    conflict.status === 201 &&
+    conflict.json?.conflict?.detected === true &&
+    createdAfterConflict - createdBeforeConflict === 1,
+}
+for (const probe of [clashSeed, conflict]) {
+  if (probe.json?.id) await request(`/bookings/${probe.json.id}`, { method: 'DELETE', cookie })
 }
 
 // 400 validation — should not log booking_created
@@ -209,6 +234,7 @@ const create = await request('/bookings', {
     client_name: 'Privacy Verify Client',
     phone: '9876509999',
     event_type: 'other',
+    event_type_custom: 'Verify probe',
     event_date: uniqueDate,
     guest_count: 25,
     venue: 'Secret Venue Name',
@@ -240,7 +266,7 @@ results.check2_changeLogged = {
   pass:
     change.status === 200 &&
     changeLoggedAfter > changeLoggedBefore &&
-    changeRow?.metadata === `{"booking_id":${bookingId}` &&
+    changeRow?.metadata === `{"booking_id":${bookingId}}` &&
     !metadataHasPii(changeRow?.metadata),
 }
 
@@ -331,7 +357,7 @@ const allPass = [
   results.check3_timing.pass,
   results.check4_brokenInsert.pass,
   results.check5_badLogin.pass,
-  results.check5_conflict409.pass,
+  results.check5_conflictAlertOnly.pass,
   results.check5_validation400.pass,
   results.check6_allowlist.pass,
   results.check7_bookingId.sqlInjection.pass,
