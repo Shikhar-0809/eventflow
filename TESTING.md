@@ -65,7 +65,7 @@ Given the timeline, this is **not** asking you to write a full automated test su
 - [ ] Confirm data persists after a backend restart (see DEPLOYMENT.md verification checklist — this is the SQLite-vs-Postgres proof point)
 - [ ] Confirm a logged-out session can't see any booking or inventory data, even by guessing API URLs
 - [ ] Confirm HTTPS is active, no browser security warnings
-- [ ] **Tenant isolation:** `cd server && npm run verify:isolation -- --confirm-host=<dev host>` passes on the dev database (all PASS, exit 0). It boots its own server, creates labelled `ISOLATION-FIXTURE` rows and removes them again; if a run is killed, the next run removes the leftovers first. It never runs against production: use it on dev before every deploy, and confirm on the live site that a logged-in merchant sees only their own bookings
+- [ ] **Tenant isolation:** `cd server && npm run verify:isolation -- --confirm-host=<dev host>` passes on the dev database (all PASS, exit 0). It boots its own server (port 3007; override with the `ISOLATION_PORT` env var), creates labelled `ISOLATION-FIXTURE` rows and removes them again; if a run is killed, the next run removes the leftovers first. It never runs against production: use it on dev before every deploy, and confirm on the live site that a logged-in merchant sees only their own bookings
 - [ ] Test the full flow on the merchant's actual phone if possible, before calling it "deployed"
 
 ---

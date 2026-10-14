@@ -10,7 +10,7 @@ This file was written after the fact — `PROMPTS.md`, `ARCHITECTURE.md`, `CODIN
 
 ## Threat model for v1 — be explicit about what this defends against
 
-EventFlow v1 is a **single-merchant tool**, not a multi-tenant SaaS product. The auth model reflects that scope deliberately. This section exists so nobody mistakes "appropriately scoped for a single trusted user" for "insecure."
+EventFlow is a **multi-merchant product** with a deliberately simple auth model: one shared env password today (it logs in as merchant 1; real per-merchant accounts arrive with the Firebase login prompt), a signed session cookie that carries the merchant id, and strict per-merchant data isolation (see "Tenant isolation"). This section exists so nobody mistakes a simple login for an insecure one.
 
 **In scope — this file defends against:**
 - An unauthenticated stranger on the internet reaching `/api/bookings` and reading real client names/phone numbers
@@ -27,10 +27,10 @@ EventFlow v1 is a **single-merchant tool**, not a multi-tenant SaaS product. The
 
 ## Auth model overview
 
-- **One merchant, one password, no user accounts table.** There is no concept of "which user" — only "authenticated" or not.
+- **One shared password, no user accounts table yet.** The login identifies the merchant (always merchant 1 for now), not a person; per-merchant accounts come with the Firebase login prompt.
 - Password is never stored in plaintext. A bcrypt hash lives in `MERCHANT_PASSWORD_HASH` (env var, server-side only).
 - On successful login, the server issues a JWT in an **httpOnly cookie** — not returned in the response body, not stored in `localStorage`, not accessible to client-side JS at all. This is the single biggest XSS mitigation in the whole app: even if malicious JS somehow ran in the merchant's browser, it cannot read the session token.
-- The JWT itself carries no sensitive payload — just an issued-at/expiry pair. There's nothing inside it worth protecting if decoded; the cookie's `httpOnly` flag is what actually matters, not the token contents.
+- The JWT carries only `{ merchant_id }` plus issued-at/expiry: no personal data, nothing worth protecting if decoded. The cookie's `httpOnly` flag is what actually matters, not the token's contents. `merchant_id` is trusted only because the token is signed with `JWT_SECRET`; it is never taken from the request.
 - Every **business** route requires a valid session. No "just for testing" bypasses left in committed code. The only intentional unauthenticated routes are `POST /api/auth/login` and `GET /api/health` (liveness only — returns `{ status: 'ok' }`, no data). This includes inventory, settings, reports, records, and usage routes — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
 
 ---
@@ -90,28 +90,42 @@ Cookie name comes from `process.env.SESSION_COOKIE_NAME` (set to `eventflow_sess
 ## `requireAuth` middleware — exact pattern
 
 ```js
-// middleware/requireAuth.js
+// middleware/requireAuth.js (the shape that matters; see the file for the full text)
 import jwt from 'jsonwebtoken'
+import { pool } from '../db/database.js'
 
-export const requireAuth = (req, res, next) => {
+export const requireAuth = async (req, res, next) => {
   const token = req.cookies[process.env.SESSION_COOKIE_NAME]
+  if (!token) return res.status(401).json({ error: 'You must be logged in to do that.' })
 
-  if (!token) {
-    return res.status(401).json({ error: 'You must be logged in to do that.' })
+  let payload
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
+  } catch {
+    return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
+  }
+
+  // Tokens issued before merchants existed carry no merchant_id: force a fresh login.
+  const merchantId = payload?.merchant_id
+  if (!Number.isInteger(merchantId) || merchantId <= 0) {
+    return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
   }
 
   try {
-    jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] })
-    next()
+    const { rows } = await pool.query('SELECT 1 FROM merchants WHERE id = $1', [merchantId])
+    if (rows.length === 0) return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
   } catch (err) {
-    return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
+    return next(err)
   }
+
+  req.merchantId = merchantId // only ever from the signed token
+  next()
 }
 ```
 
 Rules:
-- Always `401`, never `403` — there's no concept of "logged in but not allowed" in a single-merchant app, so don't introduce that distinction.
-- The two failure messages above ("must be logged in" vs "session has expired") are the only two cases — don't add more granular messages (e.g. "invalid token signature") that could hint at *why* verification failed. There's nothing to gain from that detail and no reason to expose JWT internals to a client.
+- Always `401` for authentication failures, never `403`. A request for another merchant's data is not an authorization error: it returns the same 404 as a missing id (see "Tenant isolation").
+- The two failure messages above ("must be logged in" vs "session has expired"; an invalid signature, a missing `merchant_id` and an unknown merchant all use the second one) are the only two cases — don't add more granular messages (e.g. "invalid token signature") that could hint at *why* verification failed. There's nothing to gain from that detail and no reason to expose JWT internals to a client.
 - Never log the token value itself, even in dev-only debug logging.
 
 ---
@@ -139,7 +153,7 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
       return res.status(401).json({ error: 'Incorrect password.' })
     }
 
-    const token = jwt.sign({}, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' })
+    const token = jwt.sign({ merchant_id: LEGACY_LOGIN_MERCHANT_ID }, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' })
 
     const isProd = process.env.NODE_ENV === 'production'
 
@@ -358,7 +372,7 @@ Every query uses `pg`'s parameterized `pool.query()` / `client.query()` with `$1
 Multi-merchant data is isolated in two layers; the database layer exists so a route bug cannot silently cross tenants.
 
 - **Database (migration 002):** every business table has `merchant_id NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant by composite foreign keys (`(booking_id, merchant_id)` and `(item_id, merchant_id)`), so inserting a row that points at another merchant's booking or item fails with `23503`. Names are unique per merchant, settings are keyed by `(merchant_id, key)`.
-- **Session:** the login JWT is `{ merchant_id }` (HS256). `requireAuth` verifies it with `algorithms: ['HS256']`, requires an integer `merchant_id` that exists in `merchants` (a token without one, or for a merchant that no longer exists, gets 401 "Your session has expired. Please log in again.", which also forces everyone to re-login once after this change) and sets `req.merchantId`. **A merchant id is never read from the body, query or params**; zod strips unknown keys, so a `merchant_id` in a request body is ignored.
+- **Session:** the login JWT is `{ merchant_id }` (HS256). `requireAuth` verifies it with `algorithms: ['HS256']`, requires an integer `merchant_id` that exists in `merchants` (a token without one, or for a merchant that no longer exists, gets 401 "Your session has expired. Please log in again.", which also forces everyone to re-login once after this change) and sets `req.merchantId`. **A merchant id is never read from the body or params** (the single exception is the documented `?merchant_id=` filter on the admin feed, which already requires the admin key); zod strips unknown keys, so a `merchant_id` in a request body is ignored.
 - **Routes:** every SELECT/UPDATE/DELETE on a business table binds `merchant_id = req.merchantId`, every INSERT sets it explicitly (including `trackUsage`, which takes it from `req.merchantId` or, on login, `res.locals.merchantId`). Aggregates are scoped too (`COUNT(DISTINCT phone)`, availability sums, usage/me incl. last-active, analytics, reports, records, settings).
 - **The 404 rule:** an id that belongs to another merchant returns exactly what a nonexistent id returns (same status, same message: `Booking not found.`, `Inventory item not found.` / `Item not found.`, `Expense not found.`; `check-availability` keeps its 400 "Inventory item N not found."). Never 403, never a different message, so ids cannot be probed. Unparsable or out-of-range ids take the same path.
 - **Booking inventory lines** must reference the merchant's own items, otherwise 400 "One or more inventory items are invalid."; a composite-FK violation (pg `23503`) is mapped to the same 400, never a 500.
@@ -439,7 +453,7 @@ This is the checklist `PROMPTS.md`'s Prompt 12 refers to. Run through all of it,
 - **No defense against the merchant's own device being compromised** (keylogger, shoulder-surfing, shared device). That's a physical/device-security problem for the merchant, not something this app's auth layer can solve — flag it in the plain-language conversation described in `DATA_PRIVACY.md`, don't try to engineer around it.
 - **No protection against the developer themselves.** You have direct database access during build and via the hosting dashboards. `DATA_PRIVACY.md` covers the transparency obligation that comes with that access — this file is about external threats, not insider trust, which is a different problem with a different (non-technical) solution at this scale.
 - **No DDoS protection beyond basic rate limiting.** `loginRateLimiter` and `bookingCreateRateLimiter` stop scripted brute-forcing and accidental abuse; they are not a substitute for platform-level protection (e.g. Cloudflare) at real scale. Not worth building further for a single-merchant POC.
-- **No multi-tenant data isolation.** There's only one merchant, so there's nothing to isolate yet. This entire file would need a substantial rewrite before onboarding a second merchant — `ROADMAP.md`'s v5+ section already flags this explicitly; don't try to half-build multi-tenancy into v1's auth model.
+- **Real per-merchant accounts and sign-up.** Data is isolated per merchant (see "Tenant isolation"), but there is still one shared login that maps to merchant 1; Firebase auth and onboarding are the next prompt. Billing/subscriptions remain out of scope (ROADMAP.md).
 - **No race-condition-proof inventory locking.** Like the existing date-conflict check, the inventory availability check is select-then-decide, not atomic. For a single merchant typing manually this is a low-probability, low-stakes bug — see `BUGS.md`.
 
 ---

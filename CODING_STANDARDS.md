@@ -349,17 +349,17 @@ router.post('/', requireAuth, validate(bookingSchema), async (req, res, next) =>
 
     const clashResult = await pool.query(
       `SELECT id, client_name, event_type FROM bookings
-       WHERE event_date = $1 AND status != 'cancelled'
+       WHERE merchant_id = $1 AND event_date = $2 AND status != 'cancelled'
        LIMIT 1`,
-      [event_date],
+      [req.merchantId, event_date],
     )
     const clash = clashResult.rows[0]
 
     const insertResult = await pool.query(
-      `INSERT INTO bookings (client_name, phone, event_type, event_date, guest_count, venue, advance, total)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [client_name, phone, event_type, event_date, guest_count, venue, advance, total],
+      `INSERT INTO bookings (merchant_id, client_name, phone, event_type, event_date, guest_count, venue, advance, total)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, client_name, phone, event_type, event_date, guest_count, venue, advance, total, status`,
+      [req.merchantId, client_name, phone, event_type, event_date, guest_count, venue, advance, total],
     )
     const newBooking = insertResult.rows[0]
 
