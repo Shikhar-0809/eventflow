@@ -165,6 +165,17 @@ export const seedDemoAnalytics = async (pool) => {
     return { skipped: true, reason: 'production' }
   }
 
+  // Guard on the bookings this seed creates. event_log alone is not enough: purgeNonDemoEventLog
+  // empties it on every boot (these events carry no demo_seed marker), which used to make this
+  // seed insert another 10 bookings each time.
+  const { rows: existingRows } = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM bookings WHERE phone = ANY($1::text[])',
+    [DEMO_BOOKINGS.map((row) => row.phone)],
+  )
+  if (existingRows[0].count > 0) {
+    return { skipped: true, reason: 'demo analytics bookings already present', existing: existingRows[0].count }
+  }
+
   const { rows: countRows } = await pool.query('SELECT COUNT(*)::int AS count FROM event_log')
   if (countRows[0].count >= 5) {
     return { skipped: true, reason: 'event_log already populated', existing: countRows[0].count }
