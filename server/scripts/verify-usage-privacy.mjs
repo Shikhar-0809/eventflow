@@ -51,6 +51,18 @@ const countByType = async (type) => {
   return Number(rows[0].n)
 }
 
+// Usage rows are inserted fire-and-forget, after the HTTP response. Wait (up to 3s) until at least `atLeast` rows exist,
+// then let the count settle briefly so a stray extra row would still show up.
+const settledCount = async (type, atLeast) => {
+  let n = await countByType(type)
+  for (let i = 0; i < 20 && n < atLeast; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    n = await countByType(type)
+  }
+  await new Promise((resolve) => setTimeout(resolve, 300))
+  return Math.max(n, await countByType(type))
+}
+
 const piiPatterns = [
   'client_name',
   'phone',
@@ -164,6 +176,7 @@ const cookie = cookieHeader(login.setCookie)
 // Date conflict is alert-only: the booking is created (201, with a conflict notice) and booking_created is logged once.
 // (First a booking is created for the date, so the second one really clashes.)
 const conflictDate = '2026-06-03'
+const createdBeforeSeed = await countByType('booking_created')
 const clashSeed = await request('/bookings', {
   method: 'POST',
   cookie,
@@ -178,7 +191,7 @@ const clashSeed = await request('/bookings', {
     total: 5000,
   },
 })
-const createdBeforeConflict = await countByType('booking_created')
+const createdBeforeConflict = await settledCount('booking_created', createdBeforeSeed + 1)
 const conflict = await request('/bookings', {
   method: 'POST',
   cookie,
@@ -193,7 +206,7 @@ const conflict = await request('/bookings', {
     total: 5000,
   },
 })
-const createdAfterConflict = await countByType('booking_created')
+const createdAfterConflict = await settledCount('booking_created', createdBeforeConflict + 1)
 
 results.check5_conflictAlertOnly = {
   seedStatus: clashSeed.status,
@@ -254,12 +267,7 @@ const change = await request(`/bookings/${bookingId}/log`, {
   cookie,
   body: { note: piiNote },
 })
-// The usage insert is fire-and-forget (it lands after the response), so wait briefly for the row instead of racing it.
-let changeLoggedAfter = await countByType('change_logged')
-for (let i = 0; i < 20 && changeLoggedAfter <= changeLoggedBefore; i += 1) {
-  await new Promise((resolve) => setTimeout(resolve, 150))
-  changeLoggedAfter = await countByType('change_logged')
-}
+const changeLoggedAfter = await settledCount('change_logged', changeLoggedBefore + 1)
 const changeRow = (await pool.query(
   "SELECT metadata FROM event_log WHERE event_type = 'change_logged' ORDER BY id DESC LIMIT 1",
 )).rows[0]
