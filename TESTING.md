@@ -45,6 +45,17 @@ Given the timeline, this is **not** asking you to write a full automated test su
 - [ ] Try accessing `/api/analytics/summary`, `/api/usage/admin`, and `/api/inventory` directly without being logged in — confirm all return 401
 - [ ] Open Analytics screen with a freshly seeded/near-empty database — confirm it shows the "not enough data" empty state, not a broken chart
 
+### Email OTP (signup and password reset)
+- [ ] Signup OTP happy path: Sign up, enter a new email, receive the 6-digit code, type it (or paste it), set business name and password, land in an empty dashboard
+- [ ] Wrong code x5 lockout: enter five wrong codes, then the correct one; every attempt says "Code is invalid or expired." and the boxes clear. Request a new code (after the 60 s cooldown) and confirm it works
+- [ ] Resend cooldown: the button reads "Resend code in 1:00" and counts down disabled; after it ends, Resend sends a new code and the countdown restarts; clicking "Send code" again early shows "Please wait before requesting another code."
+- [ ] Expired code: wait 10 minutes after requesting a code, enter it, and confirm "Code is invalid or expired."
+- [ ] Forgot password with an unknown email shows exactly the same message ("If an account exists for this email, we've sent a code.") and moves to the code step, and no email arrives
+- [ ] A reset logs out a second browser: log in on browser A and B, reset the password on A, reload B and confirm it shows the login screen
+- [ ] Signup spam doesn't block reset: for an email that already has an account, press "Send code" on Sign up five or more times (it says an account exists), then use Forgot password for the same email and confirm the code still arrives
+- [ ] Daily cap: request a sixth code for the same email within 24 hours (clear the 60 s cooldown between requests, or use different networks); Sign up shows "Too many codes requested for this email. Please try again tomorrow.", Forgot password still shows the generic message and no sixth email arrives
+- [ ] Layout: the three steps of both flows at 375px and 1280px have no horizontal scroll and the six boxes fit on one row
+
 ### Rebrand check
 - [ ] Sidebar shows "Bala Ji Tent House", not "Sharma Tent House" or "EventFlow"
 - [ ] Browser tab title reads "EventFlow — Bala Ji Tent House"

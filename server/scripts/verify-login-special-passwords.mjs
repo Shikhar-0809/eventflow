@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { pool } from '../db/database.js'
 import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
+import { deleteOtpsFor, plantSignupOtp } from './lib/devOtp.mjs'
 import { startProdLikeProxy } from './lib/prodLikeProxy.mjs'
 
 assertConfirmedDatabaseHost()
@@ -48,6 +49,7 @@ const record = (name, passed, detail = '') => {
 }
 
 const cleanup = async () => {
+  await deleteOtpsFor(pool, EMAIL_SUFFIX)
   const { rows } = await pool.query('SELECT id FROM merchants WHERE email LIKE $1', [`%${EMAIL_SUFFIX}`])
   const ids = rows.map((r) => r.id)
   if (ids.length === 0) return 0
@@ -96,13 +98,19 @@ try {
 
   for (const [index, { label, value }] of PASSWORDS.entries()) {
     const email = `pw${index}${EMAIL_SUFFIX}`
-    const signup = await fetch(`${API}/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ business_name: `PW Check ${index}`, email, password: value }),
-    })
+    // The real sign-up flow: a code planted in the dev
+    // database stands in for the inbox (send-otp is skipped so no real email goes out), then the real verify-otp,
+    // then signup with the verification token.
+    const post = (route, body) =>
+      fetch(`${API}/auth/${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const code = await plantSignupOtp(pool, email)
+    const verify = await post('signup/verify-otp', { email, code })
+    const { verificationToken } = verify.ok ? await verify.json() : {}
+    const signup = verificationToken
+      ? await post('signup', { verificationToken, business_name: `PW Check ${index}`, password: value })
+      : verify
     if (signup.status !== 201 && signup.status !== 200) {
-      record(`${label}: test merchant created`, false, `signup status ${signup.status}`)
+      record(`${label}: test merchant created`, false, `signup status ${signup.status} (verify-otp ${verify.status})`)
       continue
     }
 

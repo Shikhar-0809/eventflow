@@ -26,7 +26,7 @@ If code and these docs disagree, say so — don't silently pick one.
 - The production database host lives only in `server/config/productionHosts.js`. `db/database.js` refuses it when `NODE_ENV !== 'production'`; verify and seed scripts import `scripts/lib/refuseProductionDatabase.mjs`; destructive scripts also need `--i-really-mean-production` for it. Never pass that flag, set `NODE_ENV=production` for a script, or edit the host list without asking me. Details in `SECURITY.md`.
 - Never `git push` without asking me first. Never rewrite git history.
 - Every SQL query uses `$1`-style parameters. Multi-table writes run in a transaction (BEGIN/COMMIT/ROLLBACK, `client.release()` in `finally`).
-- Every route except `GET /api/health` and `POST /api/auth/login` has `requireAuth`. Validation (zod) runs server-side before any DB call.
+- Every route has `requireAuth` except `GET /api/health`, `POST /api/auth/login` and the public sign-up / password-reset routes (`POST /api/auth/signup`, `/signup/send-otp`, `/signup/resend-otp`, `/signup/verify-otp`, `/forgot/send-otp`, `/forgot/resend-otp`, `/forgot/verify-otp`, `/forgot/reset`). Those are public, rate limited and validated, and never reveal whether an email has an account (sign-up's 409 is the one accepted exception, BUGS #073). Validation (zod) runs server-side before any DB call.
 - Product rule: conflicts and shortfalls alert, they don't block. Date conflicts never disable submit; inventory shortfalls require an explicit confirm-anyway step.
 
 ## Workflow

@@ -49,9 +49,47 @@ export const loginIpBackstopLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// OTP emails cost money and can be used to spam an inbox: 5 per hour per purpose, email and source, plus a looser
+// per-source backstop shared by every purpose for spraying many addresses. Same keying approach as the login limiters (BUGS #078/#079).
+// The purpose is fixed per route when the limiter is built (never read from the body), so each purpose has its
+// own bucket: spamming signup/send-otp for an existing email cannot use up that email's password-reset quota.
+const makeOtpSendLimiter = (purpose) => rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => digest(`${purpose}|${normalisedEmail(req)}|${clientIpKey(req.ip)}`),
+  message: { error: 'Too many code requests. Please try again in an hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+export const otpSendLimiters = {
+  signup: makeOtpSendLimiter('signup'),
+  forgot: makeOtpSendLimiter('forgot'),
+  change_email: makeOtpSendLimiter('change_email'),
+}
+
+export const otpSendIpBackstopLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => digest(clientIpKey(req.ip)),
+  message: { error: 'Too many code requests. Please try again in an hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+export const otpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => digest(clientIpKey(req.ip)),
+  message: { error: 'Too many attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 export const signupRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
+  keyGenerator: (req) => digest(clientIpKey(req.ip)),
   message: { error: 'Too many sign-up attempts. Please try again in an hour.' },
   standardHeaders: true,
   legacyHeaders: false,

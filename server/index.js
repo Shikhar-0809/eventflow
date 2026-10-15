@@ -13,6 +13,7 @@ import usageRouter from './routes/usage.js'
 import settingsRouter from './routes/settings.js'
 import reportsRouter from './routes/reports.js'
 import recordsRouter from './routes/records.js'
+import { deleteOldOtps } from './services/otp.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requireProxySecret } from './middleware/requireProxySecret.js'
 
@@ -21,6 +22,14 @@ const REQUIRED_ENV = ['JWT_SECRET', 'SESSION_COOKIE_NAME']
 // Only production sits behind the Vercel proxy, so local dev does not need this.
 if (process.env.NODE_ENV === 'production') {
   REQUIRED_ENV.push('PROXY_SHARED_SECRET')
+}
+
+// Email codes are not required to boot (the merchant app works without them), but sign-up and password reset need these.
+if (process.env.NODE_ENV === 'production') {
+  const missingEmailEnv = ['BREVO_API_KEY', 'EMAIL_FROM', 'OTP_HMAC_SECRET'].filter((key) => !process.env[key])
+  if (missingEmailEnv.length > 0) {
+    console.warn(`Warning: ${missingEmailEnv.join(', ')} missing; sign-up and password-reset codes will fail.`)
+  }
 }
 
 for (const key of REQUIRED_ENV) {
@@ -100,6 +109,8 @@ app.use(errorHandler)
   try {
     await initDb()
     await seed()
+    // Housekeeping only; a failure must not stop the server.
+    await deleteOldOtps().catch(() => console.error('OTP cleanup failed.'))
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`)
     })

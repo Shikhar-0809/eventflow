@@ -27,12 +27,12 @@ EventFlow is a **multi-merchant product** with a deliberately simple auth model:
 
 ## Auth model overview
 
-- **One account per merchant, identified by email.** `merchants.email` (lowercased, unique) and `merchants.password_hash` (bcrypt, cost 10); the login identifies the merchant, not a person. Merchants create their own account at `POST /api/auth/signup`. There is no password reset or email verification yet.
+- **One account per merchant, identified by email.** `merchants.email` (lowercased, unique) and `merchants.password_hash` (bcrypt, cost 10); the login identifies the merchant, not a person. Merchants create their own account at `POST /api/auth/signup`. Email OTP (migration 006): signup requires a verified email (`/signup/send-otp`, `/signup/verify-otp`, then `/signup` with the `verificationToken`), and `/forgot/*` resets a password. Codes are 6 digits, sha256-hashed, 10-minute expiry, 5 attempts, 60-second resend cooldown; action tokens (15 min) carry an `eventflow:<purpose>` audience and `requireAuth` rejects any token that has an `aud`. The reset token carries the merchant's `tv` and is rejected if it no longer matches (single use). A reset bumps `merchants.token_version`, and `requireAuth` rejects sessions whose `tv` differs (tokens without `tv` count as 0). Forgot-password always answers 200 with the same message and sends the email after replying. Env vars: `BREVO_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME`, `EMAIL_DEV_LOG` (ignored when `NODE_ENV=production`), `APP_URL`.
 - Password is never stored in plaintext, and is capped at 72 bytes (bcrypt ignores the rest). `MERCHANT_PASSWORD_HASH` no longer exists. A merchant row with no `password_hash` cannot log in.
 - Login answers an unknown email and a wrong password identically (`401 "Incorrect email or password."`) and runs `bcrypt.compare` against a dummy hash for an unknown email so timing does not reveal registered emails. Sign-up does reveal an existing email (409): accepted, BUGS #073.
 - On successful login, the server issues a JWT in an **httpOnly cookie** — not returned in the response body, not stored in `localStorage`, not accessible to client-side JS at all. This is the single biggest XSS mitigation in the whole app: even if malicious JS somehow ran in the merchant's browser, it cannot read the session token.
-- The JWT carries only `{ merchant_id }` plus issued-at/expiry: no personal data, nothing worth protecting if decoded. The cookie's `httpOnly` flag is what actually matters, not the token's contents. `merchant_id` is trusted only because the token is signed with `JWT_SECRET`; it is never taken from the request.
-- Every **business** route requires a valid session. No "just for testing" bypasses left in committed code. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (liveness only — returns `{ status: 'ok' }`, no data). This includes inventory, settings, reports, records, and usage routes — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
+- The JWT carries only `{ merchant_id, tv }` plus issued-at/expiry (`tv` is `merchants.token_version`; a password reset bumps it and ends every older session): no personal data, nothing worth protecting if decoded. The cookie's `httpOnly` flag is what actually matters, not the token's contents. `merchant_id` is trusted only because the token is signed with `JWT_SECRET`; it is never taken from the request.
+- Every **business** route requires a valid session. No "just for testing" bypasses left in committed code. The only intentional unauthenticated routes are `GET /api/health` (liveness only — returns `{ status: 'ok' }`, no data), `POST /api/auth/login`, and the sign-up and password-reset routes: `POST /api/auth/signup`, `/signup/send-otp`, `/signup/resend-otp`, `/signup/verify-otp`, `/forgot/send-otp`, `/forgot/resend-otp`, `/forgot/verify-otp` and `/forgot/reset`. All of them are rate limited, and the last-step ones (`/signup`, `/forgot/reset`) also need a signed, purpose-bound action token. This includes inventory, settings, reports, records, and usage routes — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
 
 ---
 
@@ -45,6 +45,12 @@ Do this once per environment (local, and again separately for each deploy target
 openssl rand -base64 32
 ```
 Paste the output directly into `JWT_SECRET` in `.env`. Never reuse this value between dev and prod.
+
+**`OTP_HMAC_SECRET`** — the key that hashes emailed codes (HMAC-SHA256) before they are stored in `email_otps`, so a leaked database row cannot be brute-forced offline (a code has only 10^6 values). Same pattern, and a different value from `JWT_SECRET`:
+```bash
+openssl rand -base64 32
+```
+There is no fallback: without it, sending or verifying a code fails. Changing it invalidates every code in flight (harmless: they live 10 minutes). Set it in Render for production; the server logs one warning at boot if it is missing.
 
 **Merchant passwords** are not an env var any more (`MERCHANT_PASSWORD_HASH` was removed). Each merchant sets their own at sign-up and only the bcrypt hash is stored in `merchants.password_hash`. Never paste a real merchant password into a file, a commit or a chat.
 
@@ -103,6 +109,9 @@ export const requireAuth = async (req, res, next) => {
     return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
   }
 
+  // Action tokens (signup, reset) share the secret but carry an audience; they are never sessions.
+  if (payload?.aud !== undefined) return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
+
   // Tokens issued before merchants existed carry no merchant_id: force a fresh login.
   const merchantId = payload?.merchant_id
   if (!Number.isInteger(merchantId) || merchantId <= 0) {
@@ -110,8 +119,11 @@ export const requireAuth = async (req, res, next) => {
   }
 
   try {
-    const { rows } = await pool.query('SELECT 1 FROM merchants WHERE id = $1', [merchantId])
-    if (rows.length === 0) return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
+    const { rows } = await pool.query('SELECT token_version FROM merchants WHERE id = $1', [merchantId])
+    // A password reset bumps token_version, which ends every session issued before it (tokens without tv count as 0).
+    if (rows.length === 0 || rows[0].token_version !== (payload.tv ?? 0)) {
+      return res.status(401).json({ error: 'Your session has expired. Please log in again.' })
+    }
   } catch (err) {
     return next(err)
   }
@@ -135,34 +147,36 @@ Rules:
 const BCRYPT_COST = 10
 const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', BCRYPT_COST) // compared against when the email is unknown
 
-router.post('/signup', signupRateLimiter, validate(signupSchema), async (req, res, next) => {
+// Sign-up is two steps: prove the email with a code (see "Email OTP" below), then:
+router.post('/signup', signupRateLimiter, validate(signupSchema), trackUsage('signup_verified'), async (req, res, next) => {
+  // 0. verifyActionToken(verificationToken, 'signup'): the email comes from the token, never the body (401 if invalid)
   // 1. 409 if lower(email) already exists   2. bcrypt.hash(password, 10)
-  // 3. INSERT INTO merchants (business_name, email, password_hash) ... RETURNING id, business_name
+  // 3. INSERT INTO merchants (business_name, email, password_hash) ... RETURNING id, business_name, token_version
   //    (a 23505 from the unique index, i.e. a race, is also a 409)
-  // 4. issueSession(res, merchant.id)  5. 201 { authenticated: true, merchant: { business_name } }
+  // 4. issueSession(res, merchant.id, merchant.token_version)  5. 201 { authenticated: true, merchant: { business_name } }
 })
 
 router.post('/login', loginRateLimiter, validate(loginSchema), trackUsage('login'), async (req, res, next) => {
-  // SELECT id, business_name, password_hash FROM merchants WHERE lower(email) = $1
+  // SELECT id, business_name, password_hash, token_version FROM merchants WHERE lower(email) = $1
   const isValid = await bcrypt.compare(password, merchant?.password_hash ?? DUMMY_HASH)
   if (!merchant?.password_hash || !isValid) {
     return res.status(401).json({ error: 'Incorrect email or password.' }) // never say which one was wrong
   }
   res.locals.merchantId = merchant.id // requireAuth has not run; trackUsage reads it from here
-  issueSession(res, merchant.id)
+  issueSession(res, merchant.id, merchant.token_version)
   res.status(200).json({ authenticated: true, merchant: { business_name: merchant.business_name } })
 })
 
-// issueSession: jwt.sign({ merchant_id }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' }) and the
+// issueSession: jwt.sign({ merchant_id, tv }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' }) and the
 // session cookie exactly as configured in "Session cookie configuration" above (flags unchanged).
 
 router.post('/logout', requireAuth, ...)  // clears the cookie
 router.get('/me', requireAuth, ...)       // { authenticated: true, merchant: { business_name } }
 ```
 
-Schemas (`schemas/merchant.schema.js`, mirrored on the client): sign-up needs `business_name` 2-100 chars, `email` valid and at most 255 (trimmed, lowercased), `password` 8 characters minimum and at most 72 bytes. Login only requires a valid email and a non-empty password, so it never leaks the password policy. Confirm-password exists only in the sign-up form.
+Schemas (`schemas/merchant.schema.js`, mirrored on the client): sign-up needs `verificationToken`, `business_name` 2-100 chars and `password` 8 characters minimum (the email comes from the token; the OTP routes take `email` valid and at most 255, trimmed and lowercased, and a 6-digit `code`) and at most 72 bytes. Login only requires a valid email and a non-empty password, so it never leaks the password policy. Confirm-password exists only in the sign-up form.
 
-Always `bcrypt.compare` — never a plain `===` string comparison. The token carries `merchant_id` only; the merchant is never read from the request.
+Always `bcrypt.compare` — never a plain `===` string comparison. The token carries `merchant_id` and `tv` only; the merchant is never read from the request.
 
 ## Rate limiting — exact config
 
@@ -201,10 +215,18 @@ export const loginIpBackstopLimiter = rateLimit({
 export const signupRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 10,
+  keyGenerator: (req) => digest(clientIpKey(req.ip)), // same IPv6 /64 reduction as the other auth limiters
   message: { error: 'Too many sign-up attempts. Please try again in an hour.' },
   standardHeaders: true,
   legacyHeaders: false,
 })
+
+// Email codes: 5 per hour per PURPOSE + email + source (the purpose is fixed by the route, never read from the body,
+// so signup spam cannot use up an email's password-reset quota, BUGS #080), a per-source backstop of 20 per hour
+// shared by every purpose, and 20 verify attempts per 15 minutes per source. All keys hashed like the login limiter.
+export const otpSendLimiters = { signup, forgot, change_email } // makeOtpSendLimiter(purpose): max 5, 1 hour
+export const otpSendIpBackstopLimiter // max 20, 1 hour, keyed on source only
+export const otpVerifyLimiter // max 20, 15 minutes, keyed on source only
 
 export const bookingCreateRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -222,6 +244,17 @@ export const bookingCreateRateLimiter = rateLimit({
 `signupRateLimiter` (1 hour window, 10 attempts, same shape as `loginRateLimiter`) goes on `POST /api/auth/signup` only, ahead of `validate`. `loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only, and it must run **before** `validate(bookingSchema)` so invalid bodies still consume a slot. The limit is high enough that a real merchant double-clicking submit never hits it, and low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
 
 Inventory and booking-edit routes are **not** separately rate limited — they're low-volume, manually-triggered actions for a single merchant, and adding limiters there would be solving a problem that doesn't exist at this scale. Don't add them speculatively.
+
+---
+
+## Email OTP (sign-up and password reset)
+
+- **Codes:** 6 digits from `crypto.randomInt`, stored only as HMAC-SHA256 (`OTP_HMAC_SECRET`) of `purpose:email:code`, compared with `timingSafeEqual`. They expire after 10 minutes, are single use, and allow 5 attempts (counted in one UPDATE, so parallel guesses cannot exceed it). Every failure gives the same message, `Code is invalid or expired.`
+- **Sending limits:** a 60-second resend cooldown and a **daily cap of 5 codes per email and purpose**, counted in `email_otps` under the issue lock whatever the source address, so rotating IPs cannot multiply the guesses. The 24-hour cleanup only deletes rows older than 24 hours, so the cap cannot undercount. A capped signup request returns `429 { error, retryAfter }`; `/forgot/*` still returns the generic 200 and simply does not send.
+- **No enumeration on reset:** `/forgot/send-otp` and `/forgot/resend-otp` always answer `200 { sent, cooldownSeconds, message }` after one lookup; the code is issued and sent after the reply, only for real accounts. Sign-up reveals an existing email (409): accepted, BUGS #073.
+- **Action tokens:** `/signup/verify-otp` returns a 15-minute `verificationToken`, `/forgot/verify-otp` a `resetToken` carrying the merchant's `tv`. Each has audience `eventflow:<purpose>`, so neither works as the other or as a session. `/forgot/reset` runs in a transaction, locks the merchant row, rejects a token whose `tv` no longer matches, then sets the new hash and bumps `token_version`. Tokens live in client memory only.
+- **Logging:** never the code, the token or the email. Server-side failures log the merchant id only. The dev-only `[dev email]` log (`EMAIL_DEV_LOG=true`) is ignored when `NODE_ENV=production`.
+- **Test helper:** `scripts/lib/devOtp.mjs` plants a known code in a dev database for verify scripts. It imports `refuseProductionDatabase.mjs`; the server has no test-only path.
 
 ---
 
@@ -253,7 +286,10 @@ Cross-check against this table any time a new route is added — every business 
 |---|---|---|
 | `GET /api/health` | No — intentional liveness; returns `{ status: 'ok' }` only, no data | No |
 | Any other `/api/*` path | No — catch-all mounted after every route, returns `404 { error: 'Not found.' }` and no data (in production the proxy-secret check still runs first) | No |
-| `POST /api/auth/signup` | No | Yes — `signupRateLimiter` |
+| `POST /api/auth/signup/send-otp`, `/signup/resend-otp`, `/forgot/send-otp`, `/forgot/resend-otp` | No | Yes — `otpSendIpBackstopLimiter` (20/h per source) then `otpSendLimiters[purpose]` (5/h per purpose + email + source; one bucket each for signup and forgot, BUGS #080) |
+| `POST /api/auth/signup/verify-otp`, `/forgot/verify-otp` | No | Yes — `otpVerifyLimiter` (20 per 15 min per source) |
+| `POST /api/auth/forgot/reset` | No (needs a `reset` action token) | Yes — `otpVerifyLimiter` |
+| `POST /api/auth/signup` | No (needs a `signup` action token) | Yes — `signupRateLimiter` |
 | `POST /api/auth/login` | No | Yes — `loginIpBackstopLimiter` then `loginRateLimiter` (per email + source) |
 | `POST /api/auth/logout` | Yes | No |
 | `GET /api/auth/me` | Yes | No |

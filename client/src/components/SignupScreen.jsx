@@ -1,144 +1,92 @@
 import { useState } from 'react'
-import { CalendarDays } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
-import { signupSchema } from '../schemas/merchant.schema'
-import { PasswordInput } from './PasswordInput'
+import { api } from '../utils/api'
+import { AuthCard } from './AuthCard'
+import { EmailStep } from './EmailStep'
+import { OtpVerifyStep } from './OtpVerifyStep'
+import { SetPasswordForm } from './SetPasswordForm'
 
-const CONFIRM_MISMATCH = 'Passwords do not match'
-
-const inputClass = (hasError) =>
-  `w-full px-3 py-2 border rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent transition-all duration-200 ${
-    hasError ? 'border-red-400' : 'border-slate-200'
-  }`
-
-// Returns { field: message } for the whole form. The confirm field is checked here because the server never sees it.
-const collectErrors = (values) => {
-  const errors = {}
-  const result = signupSchema.safeParse({
-    business_name: values.business_name,
-    email: values.email,
-    password: values.password,
-  })
-  if (!result.success) {
-    for (const issue of result.error.issues) {
-      if (!errors[issue.path[0]]) errors[issue.path[0]] = issue.message
-    }
-  }
-  if (values.confirm_password !== values.password) errors.confirm_password = CONFIRM_MISMATCH
-  return errors
+const SUBTITLES = {
+  email: 'Create your business account',
+  code: 'Verify your email',
+  details: 'Set up your account',
 }
 
 export const SignupScreen = ({ onShowLogin }) => {
-  const [values, setValues] = useState({ business_name: '', email: '', password: '', confirm_password: '' })
-  const [fieldErrors, setFieldErrors] = useState({})
-  const [touched, setTouched] = useState({})
-  const [error, setError] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [step, setStep] = useState('email')
+  const [email, setEmail] = useState('')
+  // Held in memory only: it is never written to localStorage, so a page reload starts the verification again.
+  const [verificationToken, setVerificationToken] = useState(null)
+  const [notice, setNotice] = useState(null)
   const { signup } = useAuthStore()
 
-  const isSubmitDisabled = isLoading || Object.values(values).some((value) => !value)
-
-  const validateField = (name, next) => {
-    const errors = collectErrors(next)
-    setFieldErrors((prev) => {
-      const updated = { ...prev, [name]: errors[name] }
-      // Changing the password can fix or break the confirm field that was already touched.
-      if (name === 'password' && touched.confirm_password) updated.confirm_password = errors.confirm_password
-      return updated
-    })
+  const handleSendCode = async (value) => {
+    await api.signupSendOtp(value)
+    setEmail(value)
+    setNotice(null)
+    setStep('code')
   }
 
-  const handleChange = (name, value) => {
-    const next = { ...values, [name]: value }
-    setValues(next)
-    if (touched[name]) validateField(name, next)
+  const handleVerify = async (code) => {
+    const { verificationToken: token } = await api.signupVerifyOtp(email, code)
+    setVerificationToken(token)
+    setStep('details')
   }
 
-  const handleBlur = (name) => {
-    setTouched((prev) => ({ ...prev, [name]: true }))
-    validateField(name, values)
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError(null)
-
-    const errors = collectErrors(values)
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors)
-      setTouched({ business_name: true, email: true, password: true, confirm_password: true })
-      return
-    }
-
-    setIsLoading(true)
+  const handleSignup = async ({ business_name, password }) => {
     try {
-      await signup({
-        business_name: values.business_name,
-        email: values.email,
-        password: values.password,
-      })
+      await signup({ verificationToken, business_name, password })
     } catch (err) {
-      setError(err.message)
-    } finally {
-      setIsLoading(false)
+      if (err.status === 401) {
+        // The 15-minute verification ran out (or was never valid): start the email step again.
+        setVerificationToken(null)
+        setNotice('Your verification expired. Please verify your email again.')
+        setStep('email')
+        return
+      }
+      throw err
     }
   }
-
-  const renderField = ({ name, label, type = 'text', autoComplete, toggleLabels }) => (
-    <div>
-      <label htmlFor={name} className="block text-sm font-medium text-slate-700 mb-1">
-        {label}
-      </label>
-      {type === 'password' ? (
-        <PasswordInput
-          id={name}
-          value={values[name]}
-          onChange={(e) => handleChange(name, e.target.value)}
-          onBlur={() => handleBlur(name)}
-          className={inputClass(touched[name] && fieldErrors[name])}
-          autoComplete={autoComplete}
-          {...toggleLabels}
-        />
-      ) : (
-        <input
-          id={name}
-          type={type}
-          value={values[name]}
-          onChange={(e) => handleChange(name, e.target.value)}
-          onBlur={() => handleBlur(name)}
-          className={inputClass(touched[name] && fieldErrors[name])}
-          autoComplete={autoComplete}
-        />
-      )}
-      {touched[name] && fieldErrors[name] && (
-        <p className="mt-1 text-sm text-red-700">{fieldErrors[name]}</p>
-      )}
-    </div>
-  )
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-xl shadow-lg w-full max-w-md p-8">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-teal-600 rounded-xl p-3 mb-4">
-            <CalendarDays className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-semibold text-slate-900">EventFlow</h1>
-          <p className="mt-1 text-sm text-slate-500">Create your business account</p>
-        </div>
+    <AuthCard subtitle={SUBTITLES[step]}>
+      {step === 'email' && (
+        <EmailStep
+          // Remounts with the email the user typed, so "Change it" keeps what they had.
+          key={`email-${email}-${notice ?? ''}`}
+          initialEmail={email}
+          notice={notice}
+          submitLabel="Send code"
+          loadingLabel="Sending code..."
+          onSubmit={handleSendCode}
+          errorExtra={(err) =>
+            err.status === 409 && (
+              <p className="text-sm text-slate-500">
+                <button
+                  type="button"
+                  onClick={onShowLogin}
+                  className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
+                >
+                  Log in instead
+                </button>
+              </p>
+            )
+          }
+        />
+      )}
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          {renderField({ name: 'business_name', label: 'Business name', autoComplete: 'organization' })}
-          {renderField({ name: 'email', label: 'Email', type: 'email', autoComplete: 'email' })}
-          {renderField({ name: 'password', label: 'Password', type: 'password', autoComplete: 'new-password' })}
-          {renderField({ name: 'confirm_password', label: 'Confirm password', type: 'password', autoComplete: 'new-password', toggleLabels: { showLabel: 'Show confirm password', hideLabel: 'Hide confirm password' } })}
+      {step === 'code' && (
+        <OtpVerifyStep
+          email={email}
+          intro="We sent a 6-digit code to"
+          onVerify={handleVerify}
+          onResend={() => api.signupResendOtp(email)}
+          onChangeEmail={() => setStep('email')}
+        />
+      )}
 
-          {error && (
-            <p className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
-
+      {step === 'details' && (
+        <SetPasswordForm withBusinessName submitLabel="Sign Up" loadingLabel="Creating account..." onSubmit={handleSignup}>
           <p className="text-xs text-slate-500">
             By creating an account you agree to our{' '}
             <a
@@ -151,42 +99,19 @@ export const SignupScreen = ({ onShowLogin }) => {
             </a>
             .
           </p>
+        </SetPasswordForm>
+      )}
 
-          <button
-            type="submit"
-            disabled={isSubmitDisabled}
-            className={`w-full py-2.5 rounded-lg font-medium transition-all duration-200 ${
-              isSubmitDisabled
-                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                : 'bg-teal-600 hover:bg-teal-700 text-white'
-            }`}
-          >
-            {isLoading ? 'Creating account...' : 'Sign Up'}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-500">
-          Already have an account?{' '}
-          <button
-            type="button"
-            onClick={onShowLogin}
-            className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
-          >
-            Log in
-          </button>
-        </p>
-
-        <p className="mt-6 text-center text-sm text-slate-500">
-          <a
-            href="/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
-          >
-            Privacy Policy
-          </a>
-        </p>
-      </div>
-    </div>
+      <p className="mt-6 text-center text-sm text-slate-500">
+        Already have an account?{' '}
+        <button
+          type="button"
+          onClick={onShowLogin}
+          className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
+        >
+          Log in
+        </button>
+      </p>
+    </AuthCard>
   )
 }

@@ -282,7 +282,12 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | Method | Route | Auth required | Description |
 |---|---|---|---|
 | GET | `/api/health` | **No** (intentional; returns `{ status: 'ok' }` only — no data) | Liveness check |
-| POST | `/api/auth/signup` | No | `{ business_name, email, password }` (zod). Creates the merchant (bcrypt cost 10), logs them in (same cookie as login), `201 { authenticated, merchant: { business_name } }`. `409` if the email exists. Rate limited by `signupRateLimiter` |
+| POST | `/api/auth/signup/send-otp`, `/signup/resend-otp` | No | `{ email }`. `409` if the email has an account; else emails a 6-digit code. `200 { sent, cooldownSeconds }`; `429 { error, retryAfter }` inside the 60 s cooldown |
+| POST | `/api/auth/signup/verify-otp` | No | `{ email, code }` returns `{ verificationToken }` (15 min, purpose `signup`); `400 "Code is invalid or expired."` |
+| POST | `/api/auth/signup` | No | `{ verificationToken, business_name, password }` (zod). Email comes from the token. Creates the merchant (bcrypt cost 10), logs them in (cookie JWT `{ merchant_id, tv }`), `201 { authenticated, merchant: { business_name } }`. `409` if the email exists; `401` if the verification token is invalid or expired. Rate limited by `signupRateLimiter` |
+| POST | `/api/auth/forgot/send-otp`, `/forgot/resend-otp` | No | `{ email }`. Always `200` with the same body whether or not an account exists |
+| POST | `/api/auth/forgot/verify-otp` | No | `{ email, code }` returns `{ resetToken }` (purpose `reset`) |
+| POST | `/api/auth/forgot/reset` | No | `{ resetToken, newPassword }`. Transaction: `token_version` must still equal the token's `tv` (else `400`), then new hash, `password_changed_at`, `token_version + 1` (ends all sessions). No auto-login; `200 { reset: true }` |
 | POST | `/api/auth/login` | No | `{ email, password }`. Looks the merchant up by email, `bcrypt.compare`, receives a JWT `{ merchant_id }` in an httpOnly cookie. `401 "Incorrect email or password."` for an unknown email and a wrong password alike. Every other route resolves `req.merchantId` from the token |
 | POST | `/api/auth/logout` | Yes | Clears session cookie |
 | GET | `/api/auth/me` | Yes | Session validity for the frontend route guard, plus `merchant: { business_name }` for the Sidebar |
@@ -314,7 +319,7 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | GET | `/api/reports/range` | Yes | Date-range report summary + bookings |
 | GET | `/api/records` | Yes | Filtered booking records for the Records screen / Excel export |
 
-All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (no data). See SECURITY.md for the full auth matrix.
+All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (no data), plus the OTP routes above. See SECURITY.md for the full auth matrix.
 
 ---
 
@@ -331,9 +336,15 @@ CORS_ORIGIN=http://localhost:5173
 SESSION_COOKIE_NAME=eventflow_session
 ADMIN_ACCESS_KEY=          # for GET /api/usage/admin (x-admin-key header)
 PROXY_SHARED_SECRET=       # production only; also set as a server-side (non-VITE_) Vercel env var
+BREVO_API_KEY=            # email codes (Brevo); required for sign-up and password reset
+EMAIL_FROM=                # verified Brevo sender address
+EMAIL_FROM_NAME=EventFlow
+EMAIL_DEV_LOG=false        # true logs codes instead of sending; ignored when NODE_ENV=production
+OTP_HMAC_SECRET=          # hashes emailed codes; openssl rand -base64 32
+APP_URL=                  # optional, shown in emails
 ```
 
-Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET` in production). `MERCHANT_PASSWORD_HASH` no longer exists: logins are per merchant, in the `merchants` table.
+Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET` in production). `BREVO_API_KEY`, `EMAIL_FROM` and `OTP_HMAC_SECRET` are not required to boot (production logs one warning if missing) but sign-up and password reset fail without them. `MERCHANT_PASSWORD_HASH` no longer exists: logins are per merchant, in the `merchants` table.
 
 **Client (`client/.env`)**:
 

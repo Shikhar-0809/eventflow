@@ -5,10 +5,12 @@ const BASE = import.meta.env.VITE_API_URL
 const TOO_MANY_REQUESTS_MESSAGE = 'Too many attempts. Please wait a few minutes and try again.'
 
 class ApiError extends Error {
-  constructor(message, status, conflictBooking = null) {
+  constructor(message, status, conflictBooking = null, retryAfter = null) {
     super(message)
     this.status = status
     this.conflictBooking = conflictBooking
+    // Seconds until another code may be requested (only on a resend that came too soon).
+    this.retryAfter = retryAfter
   }
 }
 
@@ -32,6 +34,7 @@ const request = async (path, options = {}) => {
       (typeof body?.error === 'string' && body.error) || fallback,
       res.status,
       body?.conflict ? body.booking : null,
+      Number.isFinite(body?.retryAfter) ? body.retryAfter : null,
     )
   }
 
@@ -45,6 +48,14 @@ const request = async (path, options = {}) => {
 export const api = {
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   signup: (data) => request('/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
+  signupSendOtp: (email) => request('/auth/signup/send-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+  signupResendOtp: (email) => request('/auth/signup/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+  signupVerifyOtp: (email, code) => request('/auth/signup/verify-otp', { method: 'POST', body: JSON.stringify({ email, code }) }),
+  forgotSendOtp: (email) => request('/auth/forgot/send-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+  forgotResendOtp: (email) => request('/auth/forgot/resend-otp', { method: 'POST', body: JSON.stringify({ email }) }),
+  forgotVerifyOtp: (email, code) => request('/auth/forgot/verify-otp', { method: 'POST', body: JSON.stringify({ email, code }) }),
+  forgotReset: (resetToken, newPassword) =>
+    request('/auth/forgot/reset', { method: 'POST', body: JSON.stringify({ resetToken, newPassword }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   getMe: () => request('/auth/me'),
   getBookings: () => request('/bookings'),

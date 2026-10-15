@@ -20,6 +20,7 @@ const RecordsView = lazyNamed(() => import('./components/RecordsView'), 'Records
 const PendingBalancesView = lazyNamed(() => import('./components/PendingBalancesView'), 'PendingBalancesView')
 const BookingPage = lazyNamed(() => import('./components/BookingPage'), 'BookingPage')
 const BookingDetail = lazyNamed(() => import('./components/BookingDetail'), 'BookingDetail')
+const ForgotPasswordScreen = lazyNamed(() => import('./components/ForgotPasswordScreen'), 'ForgotPasswordScreen')
 
 // Tab title per screen: "<screen> — <business name>". Names match the sidebar.
 const VIEW_TITLES = {
@@ -45,6 +46,8 @@ export default function App() {
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [authScreen, setAuthScreen] = useState('login')
+  // One-off green message on the login screen (after a password reset).
+  const [loginNotice, setLoginNotice] = useState(null)
 
   useEffect(() => {
     checkAuth()
@@ -62,7 +65,8 @@ export default function App() {
       return
     }
     if (!isAuthenticated) {
-      document.title = authScreen === 'signup' ? 'Create account — EventFlow' : 'Sign in — EventFlow'
+      const authTitles = { signup: 'Create account — EventFlow', forgot: 'Reset password — EventFlow' }
+      document.title = authTitles[authScreen] ?? 'Sign in — EventFlow'
       return
     }
     document.title = `${VIEW_TITLES[activeView] ?? 'EventFlow'} — ${businessName || 'EventFlow'}`
@@ -98,9 +102,37 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return authScreen === 'signup'
-      ? <SignupScreen onShowLogin={() => setAuthScreen('login')} />
-      : <LoginScreen onShowSignup={() => setAuthScreen('signup')} />
+    const showLogin = () => {
+      setLoginNotice(null)
+      setAuthScreen('login')
+    }
+    if (authScreen === 'signup') return <SignupScreen onShowLogin={showLogin} />
+    if (authScreen === 'forgot') {
+      return (
+        <ScreenBoundary>
+          <ForgotPasswordScreen
+            onShowLogin={showLogin}
+            onDone={() => {
+              setLoginNotice('Password updated. Please log in.')
+              setAuthScreen('login')
+            }}
+          />
+        </ScreenBoundary>
+      )
+    }
+    return (
+      <LoginScreen
+        notice={loginNotice}
+        onShowSignup={() => {
+          setLoginNotice(null)
+          setAuthScreen('signup')
+        }}
+        onShowForgot={() => {
+          setLoginNotice(null)
+          setAuthScreen('forgot')
+        }}
+      />
+    )
   }
 
   return (
