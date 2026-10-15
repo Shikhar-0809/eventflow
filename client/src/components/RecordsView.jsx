@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Search, SearchX } from 'lucide-react'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
-import { exportToExcel } from '../utils/excelExporter'
 import { useAuthStore } from '../store/authStore'
 
 const STATUS_STYLES = {
@@ -86,6 +85,8 @@ export const RecordsView = () => {
   const [records, setRecords] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState(null)
   const searchDebounceRef = useRef(null)
   const businessName = useAuthStore((state) => state.businessName)
 
@@ -158,12 +159,22 @@ export const RecordsView = () => {
     }))
   }
 
-  const handleExport = () => {
-    if (records.length === 0) return
-    exportToExcel(records, { from: filters.from || undefined, to: filters.to || undefined, businessName })
+  // The spreadsheet library is large, so it is only fetched when someone actually exports.
+  const handleExport = async () => {
+    if (records.length === 0 || isExporting) return
+    setExportError(null)
+    setIsExporting(true)
+    try {
+      const { exportToExcel } = await import('../utils/excelExporter')
+      exportToExcel(records, { from: filters.from || undefined, to: filters.to || undefined, businessName })
+    } catch {
+      setExportError("Couldn't prepare the Excel file. Please check your connection and try again.")
+    } finally {
+      setIsExporting(false)
+    }
   }
 
-  const canExport = !isLoading && records.length > 0
+  const canExport = !isLoading && !isExporting && records.length > 0
 
   return (
     <div className="h-full overflow-y-auto p-4 md:p-6 space-y-6 min-w-0">
@@ -183,6 +194,12 @@ export const RecordsView = () => {
           Export to Excel
         </button>
       </div>
+
+      {exportError && (
+        <p role="alert" className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">
+          {exportError}
+        </p>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-4">
         <div className="relative">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, useEffect, useState } from 'react'
 import { Menu, RefreshCw } from 'lucide-react'
 import { useAuthStore } from './store/authStore'
 import { LoginScreen } from './components/LoginScreen'
@@ -7,14 +7,19 @@ import { PrivacyPolicyPage, PRIVACY_POLICY_PATH } from './components/PrivacyPoli
 import { NotFoundPage } from './components/NotFoundPage'
 import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
-import { AnalyticsView } from './components/AnalyticsView'
-import { UsageView } from './components/UsageView'
-import { InventoryView } from './components/InventoryView'
-import { RecordsView } from './components/RecordsView'
-import { PendingBalancesView } from './components/PendingBalancesView'
-import { BookingPage } from './components/BookingPage'
-import { BookingDetail } from './components/BookingDetail'
+import { ScreenBoundary } from './components/ScreenBoundary'
 import { useBookingStore } from './store/bookingStore'
+
+// Everything except the first screen (the calendar) loads on demand, so the first page load stays small.
+// The components are named exports, hence the .then().
+const lazyNamed = (load, name) => lazy(() => load().then((module) => ({ default: module[name] })))
+const AnalyticsView = lazyNamed(() => import('./components/AnalyticsView'), 'AnalyticsView')
+const UsageView = lazyNamed(() => import('./components/UsageView'), 'UsageView')
+const InventoryView = lazyNamed(() => import('./components/InventoryView'), 'InventoryView')
+const RecordsView = lazyNamed(() => import('./components/RecordsView'), 'RecordsView')
+const PendingBalancesView = lazyNamed(() => import('./components/PendingBalancesView'), 'PendingBalancesView')
+const BookingPage = lazyNamed(() => import('./components/BookingPage'), 'BookingPage')
+const BookingDetail = lazyNamed(() => import('./components/BookingDetail'), 'BookingDetail')
 
 // Tab title per screen: "<screen> — <business name>". Names match the sidebar.
 const VIEW_TITLES = {
@@ -126,18 +131,22 @@ export default function App() {
           </header>
 
           <main className="flex-1 min-h-0 overflow-auto bg-slate-50 min-w-0">
-            {activeView === 'analytics' && <AnalyticsView />}
-            {activeView === 'usage' && <UsageView />}
-            {activeView === 'inventory' && <InventoryView />}
-            {activeView === 'records' && <RecordsView />}
-            {activeView === 'pending-balances' && <PendingBalancesView />}
-            {activeView === 'calendar' && <CalendarView />}
+            <ScreenBoundary key={activeView}>
+              {activeView === 'analytics' && <AnalyticsView />}
+              {activeView === 'usage' && <UsageView />}
+              {activeView === 'inventory' && <InventoryView />}
+              {activeView === 'records' && <RecordsView />}
+              {activeView === 'pending-balances' && <PendingBalancesView />}
+              {activeView === 'calendar' && <CalendarView />}
+            </ScreenBoundary>
           </main>
         </div>
       </div>
 
-      <BookingDetail />
-      <BookingPage />
+      <ScreenBoundary variant="overlay" fallback={null}>
+        <BookingDetail />
+        <BookingPage />
+      </ScreenBoundary>
     </>
   )
 }

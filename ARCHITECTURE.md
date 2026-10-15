@@ -75,6 +75,8 @@ eventflow/
 │       │   ├── SignupScreen.jsx           # Business name, email, password, confirm; validates on blur
 │       │   ├── PasswordInput.jsx          # Password field with show/hide toggle (login, sign-up)
 │       │   ├── PrivacyPolicyPage.jsx      # Public policy at /privacy, rendered by App.jsx before the auth gate
+│       │   ├── NotFoundPage.jsx           # Any path other than / and /privacy (rendered by App.jsx before the auth gate)
+│       │   ├── ScreenBoundary.jsx         # Suspense + error boundary for lazy screens (Loading..., "Couldn't load this screen")
 │       │   ├── Sidebar.jsx
 │       │   └── UsageView.jsx
 │       ├── schemas/
