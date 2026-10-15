@@ -53,6 +53,7 @@ Given the timeline, this is **not** asking you to write a full automated test su
 - [ ] Forgot password with an unknown email shows exactly the same message ("If an account exists for this email, we've sent a code.") and moves to the code step, and no email arrives
 - [ ] A reset logs out a second browser: log in on browser A and B, reset the password on A, reload B and confirm it shows the login screen
 - [ ] Signup spam doesn't block reset: for an email that already has an account, press "Send code" on Sign up five or more times (it says an account exists), then use Forgot password for the same email and confirm the code still arrives
+- [ ] Which account: on Forgot password, start with a wrong email, press "Wrong email? Change it", use a different one, finish the reset; steps 2 and 3 say "Resetting password for" the masked second email, the green login banner names it, and the login email is already filled in
 - [ ] Daily cap: request a sixth code for the same email within 24 hours (clear the 60 s cooldown between requests, or use different networks); Sign up shows "Too many codes requested for this email. Please try again tomorrow.", Forgot password still shows the generic message and no sixth email arrives
 - [ ] Layout: the three steps of both flows at 375px and 1280px have no horizontal scroll and the six boxes fit on one row
 

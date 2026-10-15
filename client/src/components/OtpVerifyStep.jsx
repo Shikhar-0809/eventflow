@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { maskEmail } from '../utils/maskEmail'
 import { ErrorMessage } from './AuthCard'
 import { OtpInput } from './OtpInput'
 import { ResendOtpButton } from './ResendOtpButton'
@@ -26,7 +27,7 @@ export const OtpVerifyStep = ({ email, intro, onVerify, onResend, onChangeEmail 
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-700 text-center">
-        {intro} <span className="font-medium break-all">{email}</span>
+        {intro} <span className="font-medium break-all">{maskEmail(email)}</span>
       </p>
       <p className="text-center text-sm">
         <button

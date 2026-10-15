@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../utils/api'
+import { maskEmail } from '../utils/maskEmail'
 import { AuthCard } from './AuthCard'
 import { EmailStep } from './EmailStep'
 import { OtpVerifyStep } from './OtpVerifyStep'
@@ -28,6 +29,13 @@ export const ForgotPasswordScreen = ({ onShowLogin, onDone }) => {
     setStep('code')
   }
 
+  // Going back to change the email drops the token and the code step, so nothing carries over to another address.
+  const handleChangeEmail = () => {
+    setResetToken(null)
+    setNotice(null)
+    setStep('email')
+  }
+
   const handleVerify = async (code) => {
     const { resetToken: token } = await api.forgotVerifyOtp(email, code)
     setResetToken(token)
@@ -47,7 +55,7 @@ export const ForgotPasswordScreen = ({ onShowLogin, onDone }) => {
       }
       throw err
     }
-    onDone()
+    onDone(email)
   }
 
   return (
@@ -63,6 +71,12 @@ export const ForgotPasswordScreen = ({ onShowLogin, onDone }) => {
         />
       )}
 
+      {step !== 'email' && (
+        <p className="mb-4 text-sm font-medium text-slate-900 text-center">
+          Resetting password for <span className="break-all">{maskEmail(email)}</span>
+        </p>
+      )}
+
       {step === 'code' && (
         <>
           <p role="status" className="mb-4 text-sm text-slate-700 text-center">
@@ -70,13 +84,10 @@ export const ForgotPasswordScreen = ({ onShowLogin, onDone }) => {
           </p>
           <OtpVerifyStep
             email={email}
-            intro="Enter the 6-digit code sent to"
+            intro="Code sent to"
             onVerify={handleVerify}
             onResend={() => api.forgotResendOtp(email)}
-            onChangeEmail={() => {
-              setNotice(null)
-              setStep('email')
-            }}
+            onChangeEmail={handleChangeEmail}
           />
         </>
       )}

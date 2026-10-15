@@ -9,8 +9,8 @@ const inputClass = (hasError) =>
     hasError ? 'border-red-400' : 'border-slate-200'
   }`
 
-export const LoginScreen = ({ onShowSignup, onShowForgot, notice = null }) => {
-  const [email, setEmail] = useState('')
+export const LoginScreen = ({ onShowSignup, onShowForgot, notice = null, initialEmail = '' }) => {
+  const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [touched, setTouched] = useState({})
@@ -109,6 +109,7 @@ export const LoginScreen = ({ onShowSignup, onShowForgot, notice = null }) => {
               onBlur={(e) => handleBlur('password', e.target.value)}
               className={inputClass(touched.password && fieldErrors.password)}
               autoComplete="current-password"
+              autoFocus={Boolean(initialEmail)}
             />
             {touched.password && fieldErrors.password && (
               <p className="mt-1 text-sm text-red-700">{fieldErrors.password}</p>

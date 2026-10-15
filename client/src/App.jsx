@@ -9,6 +9,7 @@ import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
 import { ScreenBoundary } from './components/ScreenBoundary'
 import { useBookingStore } from './store/bookingStore'
+import { maskEmail } from './utils/maskEmail'
 
 // Everything except the first screen (the calendar) loads on demand, so the first page load stays small.
 // The components are named exports, hence the .then().
@@ -46,8 +47,9 @@ export default function App() {
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [authScreen, setAuthScreen] = useState('login')
-  // One-off green message on the login screen (after a password reset).
+  // One-off green message and email prefill on the login screen (after a password reset).
   const [loginNotice, setLoginNotice] = useState(null)
+  const [loginEmail, setLoginEmail] = useState('')
 
   useEffect(() => {
     checkAuth()
@@ -102,8 +104,12 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    const showLogin = () => {
+    const clearLoginHint = () => {
       setLoginNotice(null)
+      setLoginEmail('')
+    }
+    const showLogin = () => {
+      clearLoginHint()
       setAuthScreen('login')
     }
     if (authScreen === 'signup') return <SignupScreen onShowLogin={showLogin} />
@@ -112,8 +118,9 @@ export default function App() {
         <ScreenBoundary>
           <ForgotPasswordScreen
             onShowLogin={showLogin}
-            onDone={() => {
-              setLoginNotice('Password updated. Please log in.')
+            onDone={(email) => {
+              setLoginNotice(`Password updated for ${maskEmail(email)}. Log in with that email.`)
+              setLoginEmail(email)
               setAuthScreen('login')
             }}
           />
@@ -123,12 +130,13 @@ export default function App() {
     return (
       <LoginScreen
         notice={loginNotice}
+        initialEmail={loginEmail}
         onShowSignup={() => {
-          setLoginNotice(null)
+          clearLoginHint()
           setAuthScreen('signup')
         }}
         onShowForgot={() => {
-          setLoginNotice(null)
+          clearLoginHint()
           setAuthScreen('forgot')
         }}
       />

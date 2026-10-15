@@ -27,6 +27,13 @@ export const SignupScreen = ({ onShowLogin }) => {
     setStep('code')
   }
 
+  // Going back to change the email drops the token and the code step, so nothing carries over to another address.
+  const handleChangeEmail = () => {
+    setVerificationToken(null)
+    setNotice(null)
+    setStep('email')
+  }
+
   const handleVerify = async (code) => {
     const { verificationToken: token } = await api.signupVerifyOtp(email, code)
     setVerificationToken(token)
@@ -78,10 +85,10 @@ export const SignupScreen = ({ onShowLogin }) => {
       {step === 'code' && (
         <OtpVerifyStep
           email={email}
-          intro="We sent a 6-digit code to"
+          intro="Code sent to"
           onVerify={handleVerify}
           onResend={() => api.signupResendOtp(email)}
-          onChangeEmail={() => setStep('email')}
+          onChangeEmail={handleChangeEmail}
         />
       )}
 
