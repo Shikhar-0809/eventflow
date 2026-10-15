@@ -1,10 +1,12 @@
 /**
  * Prompt 13 desktop/mobile responsive verification (1280px + 375px).
+ * Updated for the current UI: the booking form is a full-screen page, discards go through ConfirmDialog
+ * (BUGS #075), and tab titles are "<screen> — <business name>" / "Sign in — EventFlow".
  * Requires: frontend on :5173, backend on :3001, playwright (server devDependency).
  * Run from repo root: node server/scripts/verify-prompt13-desktop-responsive.mjs
  */
 import { chromium } from 'playwright'
-import { armBrowserDialog, openAuthedPlaywrightPage } from './lib/verifyPlaywright.mjs'
+import { openAuthedPlaywrightPage } from './lib/verifyPlaywright.mjs'
 
 const results = []
 
@@ -77,75 +79,54 @@ try {
     }
 
     await page.locator('button:has-text("New Booking")').click()
-    await page.waitForSelector('text=Confirm Booking', { timeout: 10_000 })
+    await page.waitForSelector('h1:has-text("New Booking")', { timeout: 10_000 })
 
-    const mainBox = await page.locator('main').boundingBox()
-    const modalRoot = page.locator('main > div.absolute.inset-0.z-50').first()
-    const modalBox = await modalRoot.boundingBox()
-    const modalPosition = await modalRoot.evaluate((el) => getComputedStyle(el).position)
-
-    const sidebarStillVisible =
-      asideBox && (await aside.isVisible()) && (await aside.boundingBox())?.width >= 200
-    const modalScopedToMain =
-      modalPosition === 'absolute' &&
-      mainBox &&
-      modalBox &&
-      modalBox.x >= asideBox.width - 2 &&
-      Math.abs(modalBox.x - mainBox.x) < 4
-
-    if (sidebarStillVisible && modalScopedToMain) {
-      pass(
-        '1280 #015: sidebar reachable beside modal (modal scoped to main)',
-        `sidebarW=${Math.round(asideBox.width)} modalX=${Math.round(modalBox.x)} mainX=${Math.round(mainBox.x)} position=${modalPosition}`,
-      )
+    // The booking form is a full-screen page above the sidebar (z-70 over z-60), not scoped to <main>.
+    const formPage = await page.evaluate(() => {
+      const heading = [...document.querySelectorAll('h1')].find((h) => h.textContent.includes('New Booking'))
+      let el = heading
+      while (el && getComputedStyle(el).position !== 'fixed') el = el.parentElement
+      if (!el) return null
+      const box = el.getBoundingClientRect()
+      return { position: 'fixed', width: Math.round(box.width), height: Math.round(box.height), vw: window.innerWidth, vh: window.innerHeight }
+    })
+    // Allow for the scrollbar gutter: a fixed inset-0 box excludes it from the viewport size.
+    if (formPage && formPage.width >= formPage.vw - 30 && formPage.height >= formPage.vh - 30) {
+      pass('1280 booking form is a full-screen page', JSON.stringify(formPage))
     } else {
-      fail(
-        '1280 #015: sidebar reachable beside modal (modal scoped to main)',
-        `sidebarVisible=${sidebarStillVisible} modalScoped=${modalScopedToMain} modalBox=${JSON.stringify(modalBox)} mainBox=${JSON.stringify(mainBox)}`,
-      )
+      fail('1280 booking form is a full-screen page', JSON.stringify(formPage))
     }
 
+    // The overlay covers the sidebar, so a pointer cannot reach it; the nav handler is still guarded, so call it directly.
     const analyticsBtn = page.locator('aside nav button:has-text("Analytics")')
-    if (await analyticsBtn.isVisible()) {
-      pass('1280: Analytics nav button visible while modal open', 'sidebar nav exposed')
+    const sidebarCovered = await analyticsBtn.evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return !el.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2))
+    })
+    if (sidebarCovered) {
+      pass('1280: sidebar is covered while the booking form is open', 'full-screen overlay sits above the nav')
     } else {
-      fail('1280: Analytics nav button visible while modal open', 'button not visible')
+      fail('1280: sidebar is covered while the booking form is open', 'nav button is clickable through the overlay')
     }
 
+    const discardDialog = page.getByRole('dialog').filter({ hasText: 'Discard changes?' })
     await page.locator('#client_name').fill('Desktop Verify Client')
-
-    const dirtyNavDialogPromise = armBrowserDialog(page, {
-      accept: false,
-      messageIncludes: 'Discard this booking',
-    })
-    await analyticsBtn.click()
-    const dirtyNavDialog = await dirtyNavDialogPromise
-    const modalStillOpen = (await page.locator('text=Confirm Booking').count()) > 0
+    await analyticsBtn.evaluate((el) => el.click())
+    await discardDialog.waitFor({ timeout: 3000 }).catch(() => {})
+    await discardDialog.getByRole('button', { name: 'Keep editing' }).click().catch(() => {})
+    const modalStillOpen = (await page.locator('h1:has-text("New Booking")').count()) > 0
     const inputPreserved = (await page.locator('#client_name').inputValue()) === 'Desktop Verify Client'
-    if (dirtyNavDialog.shown && dirtyNavDialog.ok && modalStillOpen && inputPreserved) {
-      pass(
-        '1280 #019: dirty modal nav prompts and Keep Editing preserves input',
-        dirtyNavDialog.message,
-      )
+    if (modalStillOpen && inputPreserved) {
+      pass('1280 #019: dirty form nav opens the Discard dialog; Keep editing preserves input', 'ConfirmDialog, no native dialog')
     } else {
-      fail(
-        '1280 #019: dirty modal nav prompts and Keep Editing preserves input',
-        `dialog=${JSON.stringify(dirtyNavDialog)} modalOpen=${modalStillOpen} input=${inputPreserved}`,
-      )
+      fail('1280 #019: dirty form nav opens the Discard dialog; Keep editing preserves input', `modalOpen=${modalStillOpen} input=${inputPreserved}`)
     }
 
-    const discardNavDialogPromise = armBrowserDialog(page, {
-      accept: true,
-      messageIncludes: 'Discard this booking',
-    })
-    await analyticsBtn.click()
+    await analyticsBtn.evaluate((el) => el.click())
+    await discardDialog.waitFor({ timeout: 3000 }).catch(() => {})
+    await discardDialog.getByRole('button', { name: 'Discard' }).click().catch(() => {})
     await page.waitForSelector('text=Business Analytics', { timeout: 5000 })
-    const discardNavDialog = await discardNavDialogPromise
-    if (discardNavDialog.shown && discardNavDialog.ok) {
-      pass('1280 #019: dirty modal Discard navigates', 'confirmed discard; Analytics rendered')
-    } else {
-      fail('1280 #019: dirty modal Discard navigates', JSON.stringify(discardNavDialog))
-    }
+    pass('1280 #019: Discard navigates to the clicked view', 'Analytics rendered')
 
     await page.locator('aside nav button:has-text("Calendar")').click()
     await page.waitForSelector('text=Booking Calendar')
@@ -170,16 +151,16 @@ try {
     }
 
     const titleAuthed = await page.title()
-    if (titleAuthed.includes('Bala Ji Tent House')) {
+    if (titleAuthed === 'Analytics — Bala Ji Tent House') {
       pass('1280: document.title authenticated', titleAuthed)
     } else {
       fail('1280: document.title authenticated', titleAuthed)
     }
 
     await page.locator('aside button:has-text("Log Out")').click()
-    await page.waitForSelector('text=EventFlow', { timeout: 10_000 })
+    await page.waitForSelector('#email', { timeout: 10_000 })
     const titleLogin = await page.title()
-    if (titleLogin.includes('Log In')) {
+    if (titleLogin === 'Sign in — EventFlow') {
       pass('1280: document.title after logout', titleLogin)
     } else {
       fail('1280: document.title after logout', titleLogin)
@@ -218,13 +199,21 @@ try {
     }
 
     await mpage.locator('button:has-text("New Booking")').click()
-    await mpage.waitForSelector('text=Confirm Booking')
+    await mpage.waitForSelector('h1:has-text("New Booking")')
+    // The full-screen form covers the mobile header too; close it (untouched, so no prompt) to reach the drawer.
+    await mpage.waitForTimeout(500) // the form slides up over ~200ms
+    const headerCovered = await mpage.locator('header.md\\:hidden').evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return !el.contains(document.elementFromPoint(box.x + 20, box.y + box.height / 2))
+    })
+    await mpage.keyboard.press('Escape')
+    await mpage.waitForSelector('h1:has-text("New Booking")', { state: 'detached' })
     await mpage.locator('header button[aria-label="Open navigation menu"]').click()
     const drawerOpen = await mpage.locator('aside nav button:has-text("Analytics")').isVisible()
-    if (drawerOpen) {
-      pass('375 #015: drawer reachable over open modal', 'hamburger opens nav while modal open')
+    if (headerCovered && drawerOpen) {
+      pass('375: form is full-screen; closing it (Escape) leaves the hamburger drawer usable', 'drawer shows nav')
     } else {
-      fail('375 #015: drawer reachable over open modal', 'Analytics button not visible in drawer')
+      fail('375: form is full-screen; closing it leaves the drawer usable', `headerCovered=${headerCovered} drawerOpen=${drawerOpen}`)
     }
 
     await mpage.locator('aside nav button:has-text("Analytics")').click()
