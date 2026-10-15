@@ -1,0 +1,5 @@
+# EventFlow is a login-protected app; only the sign-in page and the privacy policy are public.
+User-agent: *
+Allow: /$
+Allow: /privacy
+Disallow: /

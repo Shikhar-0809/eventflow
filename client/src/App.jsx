@@ -15,6 +15,16 @@ import { BookingPage } from './components/BookingPage'
 import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
 
+// Tab title per screen: "<screen> — <business name>". Names match the sidebar.
+const VIEW_TITLES = {
+  calendar: 'Calendar',
+  inventory: 'Inventory',
+  'pending-balances': 'Pending Balances',
+  records: 'Records',
+  analytics: 'Analytics',
+  usage: 'My Activity',
+}
+
 // The privacy policy is public: it renders without waiting for (or needing) a login or the API.
 const isPrivacyPolicyRoute = () => window.location.pathname.replace(/\/+$/, '') === PRIVACY_POLICY_PATH
 
@@ -41,11 +51,11 @@ export default function App() {
       return
     }
     if (!isAuthenticated) {
-      document.title = 'EventFlow'
+      document.title = authScreen === 'signup' ? 'Create account — EventFlow' : 'Sign in — EventFlow'
       return
     }
-    document.title = businessName ? `EventFlow — ${businessName}` : 'EventFlow'
-  }, [isAuthenticated, connectionError, businessName, showPrivacyPolicy])
+    document.title = `${VIEW_TITLES[activeView] ?? 'EventFlow'} — ${businessName || 'EventFlow'}`
+  }, [isAuthenticated, connectionError, businessName, showPrivacyPolicy, authScreen, activeView])
 
   if (showPrivacyPolicy) return <PrivacyPolicyPage />
 
