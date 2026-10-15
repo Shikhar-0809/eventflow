@@ -3,10 +3,15 @@ import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
 import jwt from 'jsonwebtoken'
 import 'dotenv/config'
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001/api'
-const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
-const ADMIN_KEY = process.env.ADMIN_ACCESS_KEY || 'dev-admin-key-local-only'
+const PASSWORD = resolveVerifyPassword()
+const ADMIN_KEY = process.env.ADMIN_ACCESS_KEY
+if (!ADMIN_KEY) {
+  console.error('ADMIN_ACCESS_KEY is not set in the server env. Refusing to fall back to a default key.')
+  process.exit(1)
+}
 
 const request = async (path, { method = 'GET', body, cookie, headers = {} } = {}) => {
   const res = await fetch(`${BASE}${path}`, {

@@ -1,9 +1,10 @@
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001/api'
-const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
+const PASSWORD = resolveVerifyPassword()
 
 const pad = (n) => String(n).padStart(2, '0')
 const monthStart = (year, monthIndex) => `${year}-${pad(monthIndex + 1)}-01`

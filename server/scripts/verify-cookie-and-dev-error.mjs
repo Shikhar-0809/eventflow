@@ -1,5 +1,6 @@
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 const BASE = 'http://localhost:3001'
-const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
+const PASSWORD = resolveVerifyPassword()
 
 const login = await fetch(`${BASE}/api/auth/login`, {
   method: 'POST',

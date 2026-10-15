@@ -1,10 +1,11 @@
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001'
 const COOKIE_NAME = 'eventflow_session'
-const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
+const PASSWORD = resolveVerifyPassword()
 
 const results = []
 

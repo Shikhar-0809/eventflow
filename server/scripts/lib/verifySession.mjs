@@ -1,13 +1,14 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { resolveVerifyPassword } from './verifyScriptAuth.mjs'
 
 const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 export const VERIFY_SESSION_CACHE_PATH = join(scriptsDir, '.verify-session-cache.json')
 
 export const VERIFY_API_BASE = process.env.VERIFY_API_URL || 'http://localhost:3001/api'
 export const VERIFY_FRONTEND_URL = process.env.VERIFY_FRONTEND_URL || 'http://localhost:5173'
-export const VERIFY_TEST_PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'agrHXfapYOyJ-oP3'
+export const VERIFY_TEST_PASSWORD = resolveVerifyPassword()
 
 const parseSetCookieHeader = (raw, frontendUrl) => {
   const [pair, ...attrs] = raw.split(';')

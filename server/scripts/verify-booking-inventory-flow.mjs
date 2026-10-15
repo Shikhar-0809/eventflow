@@ -1,17 +1,11 @@
-import { readFileSync, existsSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
 import {
   deleteBookingById,
   deleteInventoryItemById,
 } from './lib/verifyDbCleanup.mjs'
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://127.0.0.1:3001/api'
-const scriptsDir = dirname(fileURLToPath(import.meta.url))
-const credentialPath = join(scriptsDir, '..', '.dev-login-credential')
-const PASSWORD = existsSync(credentialPath)
-  ? readFileSync(credentialPath, 'utf8').trim()
-  : 'testpass123'
+const PASSWORD = resolveVerifyPassword()
 
 const TEST_ITEM_NAME = 'ZZZ_TEST_Booking Inventory Flow'
 

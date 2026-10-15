@@ -3,6 +3,7 @@ import './lib/refuseProductionDatabase.mjs'
 import express from 'express'
 import { pool } from '../db/database.js'
 import { trackUsage } from '../middleware/trackUsage.js'
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 
 // trackUsage needs req.merchantId (normally set by requireAuth). These probe apps skip requireAuth, so they
 // act as the dev merchant, looked up by name, never by a hardcoded id.
@@ -15,7 +16,7 @@ const actAsTestMerchant = (req, _res, next) => {
 }
 
 const BASE = 'http://localhost:3001/api'
-const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
+const PASSWORD = resolveVerifyPassword()
 
 const request = async (path, { method = 'GET', body, cookie } = {}) => {
   const headers = { 'Content-Type': 'application/json' }
@@ -168,7 +169,7 @@ results.check5_badLogin = {
 
 const login = await request('/auth/login', { method: 'POST', body: { password: PASSWORD } })
 if (login.status !== 200) {
-  console.error('BLOCKED: login failed — restart server with VERIFY_TEST_PASSWORD or known hash')
+  console.error('BLOCKED: login failed — check server/.dev-login-credential matches the password hash the server uses')
   process.exit(2)
 }
 const cookie = cookieHeader(login.setCookie)

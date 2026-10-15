@@ -1,10 +1,15 @@
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001/api'
-const PASSWORD = process.env.VERIFY_TEST_PASSWORD || 'testpass123'
-const ADMIN_KEY = process.env.ADMIN_ACCESS_KEY || 'dev-admin-key-local-only'
+const PASSWORD = resolveVerifyPassword()
+const ADMIN_KEY = process.env.ADMIN_ACCESS_KEY
+if (!ADMIN_KEY) {
+  console.error('ADMIN_ACCESS_KEY is not set in the server env. Refusing to fall back to a default key.')
+  process.exit(1)
+}
 
 const pad = (n) => String(n).padStart(2, '0')
 const monthStart = (year, monthIndex) => `${year}-${pad(monthIndex + 1)}-01`

@@ -15,7 +15,7 @@ export const resolveVerifyPassword = () => {
     return readFileSync(CREDENTIAL_PATH, 'utf8').trim()
   }
   console.error(
-    'Missing password. Run server/scripts/set-dev-merchant-hash.mjs or pass --password yourpassword',
+    'Missing dev login credential: server/.dev-login-credential does not exist. There is no default password. Ask the owner to regenerate it (set-dev-merchant-hash.mjs) or pass --password <password>.',
   )
   process.exit(1)
 }
