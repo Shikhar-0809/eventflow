@@ -28,6 +28,7 @@ Never force-push or rewrite `main` to roll back (CLAUDE.md: never rewrite histor
 
 - **Render (API):** dashboard → the API service → *Deploys* → either *Rollback* on the last good deploy, or *Manual Deploy → Deploy a specific commit* and give the rollback SHA above.
 - **Vercel (frontend):** dashboard → *Deployments* → the last good production deployment → *Promote to Production* (instant rollback).
+- **After any Render rollback, re-enable auto-deploy.** Rolling back on Render turns auto-deploy off for the service, so later pushes to `main` will not deploy until you switch it back on (dashboard → the API service → *Settings* → *Build & Deploy* → *Auto-Deploy: Yes*). Vercel promotes a rollback the same way: check that the production alias follows new pushes again.
 - Verify: `GET /api/health` returns ok; log in; calendar, bookings, inventory load.
 
 What the old code (the rollback SHA) does on the migrated database, **as long as push (b) has NOT been applied** (the `DEFAULT 1` on `merchant_id` still exists):
