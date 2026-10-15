@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { loginSchema } from '../schemas/merchant.schema'
+import { PasswordInput } from './PasswordInput'
 
 const inputClass = (hasError) =>
   `w-full px-3 py-2 border rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent transition-all duration-200 ${
@@ -92,9 +93,8 @@ export const LoginScreen = ({ onShowSignup }) => {
             <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               value={password}
               onChange={(e) => {
                 setPassword(e.target.value)

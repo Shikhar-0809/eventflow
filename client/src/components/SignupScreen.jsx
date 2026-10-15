@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { signupSchema } from '../schemas/merchant.schema'
+import { PasswordInput } from './PasswordInput'
 
 const CONFIRM_MISMATCH = 'Passwords do not match'
 
@@ -88,15 +89,26 @@ export const SignupScreen = ({ onShowLogin }) => {
       <label htmlFor={name} className="block text-sm font-medium text-slate-700 mb-1">
         {label}
       </label>
-      <input
-        id={name}
-        type={type}
-        value={values[name]}
-        onChange={(e) => handleChange(name, e.target.value)}
-        onBlur={() => handleBlur(name)}
-        className={inputClass(touched[name] && fieldErrors[name])}
-        autoComplete={autoComplete}
-      />
+      {type === 'password' ? (
+        <PasswordInput
+          id={name}
+          value={values[name]}
+          onChange={(e) => handleChange(name, e.target.value)}
+          onBlur={() => handleBlur(name)}
+          className={inputClass(touched[name] && fieldErrors[name])}
+          autoComplete={autoComplete}
+        />
+      ) : (
+        <input
+          id={name}
+          type={type}
+          value={values[name]}
+          onChange={(e) => handleChange(name, e.target.value)}
+          onBlur={() => handleBlur(name)}
+          className={inputClass(touched[name] && fieldErrors[name])}
+          autoComplete={autoComplete}
+        />
+      )}
       {touched[name] && fieldErrors[name] && (
         <p className="mt-1 text-sm text-red-700">{fieldErrors[name]}</p>
       )}
