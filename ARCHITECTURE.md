@@ -24,7 +24,7 @@ Scope is still deliberately small (single merchant, no customer portal, no payme
 | Database | Postgres via `pg` | Persistent DB for deploy (ephemeral filesystems wipe SQLite). Local and prod both use Postgres via `DATABASE_URL`. |
 | API layer | REST (JSON) | Simple, no GraphQL overhead needed |
 | WhatsApp | `wa.me` deep links | No API key needed, opens WhatsApp with pre-filled text |
-| Auth | Single-merchant password + JWT session cookie | Not multi-tenant yet, but the app cannot be left open on the public internet with real client data and no login |
+| Auth | Per-merchant email + password (bcrypt), self-service sign-up, JWT session cookie `{ merchant_id }` | The app cannot be left open on the public internet with real client data and no login; each merchant only ever reaches their own rows |
 | Validation | `zod` (shared schema, frontend + backend) | One source of truth for what a valid booking — and a valid inventory item — looks like |
 | Charts | `recharts` | Lightweight, composable, good fit for a handful of simple charts — no need for a heavier charting lib at this scale |
 | Records export | SheetJS (`xlsx`) | Client-side `.xlsx` export from the Records screen |
@@ -69,14 +69,16 @@ eventflow/
 │       │   ├── InventoryItemCard.jsx
 │       │   ├── InventoryView.jsx
 │       │   ├── InventoryWarningBanner.jsx # Inline alert on shortfall; confirm step on submit
-│       │   ├── LoginScreen.jsx
+│       │   ├── LoginScreen.jsx            # Email + password login, link to sign-up
 │       │   ├── PendingBalancesView.jsx
 │       │   ├── RecordsView.jsx            # Filterable records + Excel export
+│       │   ├── SignupScreen.jsx           # Business name, email, password, confirm; validates on blur
 │       │   ├── Sidebar.jsx
 │       │   └── UsageView.jsx
 │       ├── schemas/
 │       │   ├── booking.schema.js
-│       │   └── inventory.schema.js
+│       │   ├── inventory.schema.js
+│       │   └── merchant.schema.js         # signupSchema, loginSchema (mirror of the server file)
 │       ├── store/
 │       │   ├── authStore.js
 │       │   ├── bookingStore.js
@@ -96,14 +98,15 @@ eventflow/
 ├── server/                        # Express backend
 │   ├── index.js                   # Express entry: CORS, mounts, initDb+seed, listen
 │   ├── package.json
-│   ├── .env.example               # JWT_SECRET, DATABASE_URL, MERCHANT_PASSWORD_HASH, ADMIN_ACCESS_KEY, PROXY_SHARED_SECRET, …
+│   ├── .env.example               # JWT_SECRET, DATABASE_URL, ADMIN_ACCESS_KEY, PROXY_SHARED_SECRET, …
 │   ├── db/
 │   │   ├── database.js            # pg Pool + production-database guard; initDb() runs the migrations
 │   │   ├── migrate.js             # Migration runner: advisory lock, one transaction per file, ids-only output
 │   │   ├── migrations/            # SCHEMA SOURCE OF TRUTH: 001_baseline.sql, 002_multi_merchant.sql, ...
 │   │   ├── seed.js                # Dev seed orchestrator (production-gated, per merchant)
 │   │   ├── seedMerchants.js       # Merchant ids used by the dev seeds
-│   │   ├── devMerchantSeed.js     # Dev-only second merchant "Test Tent Co"
+│   │   ├── devMerchantSeed.js     # Dev-only second demo merchant "Shree Ganesh Caterers" (Raipur caterer: 6 months of bookings, equipment, damage, expenses)
+│   │   ├── demoActivitySeed.js    # Dev-only: keeps a week of "My Activity" events fresh for each demo merchant (refreshes daily on boot)
 │   │   ├── demoSeed.js
 │   │   ├── demoAnalyticsSeed.js
 │   │   └── analyticsHistorySeed.js
@@ -126,6 +129,7 @@ eventflow/
 │   ├── schemas/
 │   │   ├── booking.schema.js
 │   │   ├── inventory.schema.js
+│   │   ├── merchant.schema.js     # signupSchema, loginSchema
 │   │   ├── records.schema.js
 │   │   └── settings.schema.js
 │   └── scripts/                   # Verify/cleanup/wipe helpers
@@ -153,7 +157,7 @@ eventflow/
 
 **The schema lives in `server/db/migrations/`** (numbered SQL files, each applied once, in order). `initDb()` calls `runMigrations()` (`server/db/migrate.js`) on every boot; applied ids are recorded in `schema_migrations (id, applied_at)`. The runner takes a transaction-scoped advisory lock (safe through Neon's pooled endpoint), runs each file in its own transaction, and throws on failure so the server refuses to start on a half-migrated database. A database that already has the `bookings` table but no `schema_migrations` adopts `001_baseline` without running it, after checking it really is at the baseline: required columns, `ON DELETE CASCADE` on the booking foreign keys, and the CHECK constraints (`booking_inventory_quantity_check`, `booking_expenses_amount_check`, `bookings_status_check`). A missing CHECK that a later migration repairs (today only `bookings_status_check`, repaired by `003`) is reported as known drift and allowed; anything else missing is refused and the server does not start. Run it by hand with `npm run migrate -- --confirm-host=<host>` from `server/` (no seeds; prints migration ids only; production also needs `NODE_ENV=production` and `--i-really-mean-production`). Rules for writing migrations are in `CODING_STANDARDS.md`. Connection: `pg.Pool` with `connectionString: process.env.DATABASE_URL`; SSL when `NODE_ENV === 'production'`.
 
-**Multi-merchant.** `merchants` (`id`, `business_name`, `owner_name`, `whatsapp_phone`, `city`, `created_at`) is the tenant table; merchant 1 is Bala Ji Tent House (all pre-existing data). Every business table (`bookings`, `change_log`, `booking_inventory`, `inventory_items`, `inventory_damage_log`, `booking_expenses`, `event_log`, `merchant_settings`) has `merchant_id INTEGER NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant at the database level by composite foreign keys, so a cross-merchant link is impossible: `(booking_id, merchant_id) → bookings (id, merchant_id)` on `change_log`, `booking_expenses` and `booking_inventory` (`ON DELETE CASCADE`), and `(item_id, merchant_id) → inventory_items (id, merchant_id)` on `booking_inventory` and `inventory_damage_log`. `inventory_items` is unique on `(merchant_id, name)`; `merchant_settings` has `PRIMARY KEY (merchant_id, key)`. Every route scopes its queries to `req.merchantId` (from the JWT); the temporary `DEFAULT 1` is removed by migration `004_drop_merchant_defaults`. `GET /api/usage/admin` is the one cross-merchant read (admin key) and takes an optional `?merchant_id=` filter. See SECURITY.md, "Tenant isolation". The column listings below predate `merchant_id`; read them as having one more column.
+**Multi-merchant.** `merchants` (`id`, `business_name`, `owner_name`, `whatsapp_phone`, `city`, `created_at`, plus `email` and `password_hash` from migration `005_merchant_accounts`) is the tenant table. `email` is stored lowercased and is unique case-insensitively (`merchants_email_lower_key` on `lower(email)`); both credential columns are nullable, and a merchant with no `password_hash` cannot log in. Merchant 1 is Bala Ji Tent House (all pre-existing data); in production it has no credentials until the owner sets them (BUGS #068). Dev seeds give merchants 1 (Bala Ji Tent House) and 2 (Shree Ganesh Caterers) demo logins (`db/seedMerchants.js`, never run in production). The two have deliberately different data: merchant 1 is a tent house with chairs, tables, tents and sofas and venues across many cities; merchant 2 is a Raipur caterer with burners, degchi, chafing dishes and buffet counters, plus six months of history, a date clash, damaged stock and expenses. `scripts/delete-test-merchant.mjs` removes a throwaway merchant and its rows (`--confirm-host`, `--merchant-id`, `--expect-name`; it refuses merchant 1 and the demo merchants). Every business table (`bookings`, `change_log`, `booking_inventory`, `inventory_items`, `inventory_damage_log`, `booking_expenses`, `event_log`, `merchant_settings`) has `merchant_id INTEGER NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant at the database level by composite foreign keys, so a cross-merchant link is impossible: `(booking_id, merchant_id) → bookings (id, merchant_id)` on `change_log`, `booking_expenses` and `booking_inventory` (`ON DELETE CASCADE`), and `(item_id, merchant_id) → inventory_items (id, merchant_id)` on `booking_inventory` and `inventory_damage_log`. `inventory_items` is unique on `(merchant_id, name)`; `merchant_settings` has `PRIMARY KEY (merchant_id, key)`. Every route scopes its queries to `req.merchantId` (from the JWT); the temporary `DEFAULT 1` is removed by migration `004_drop_merchant_defaults`. `GET /api/usage/admin` is the one cross-merchant read (admin key) and takes an optional `?merchant_id=` filter. See SECURITY.md, "Tenant isolation". The column listings below predate `merchant_id`; read them as having one more column.
 
 ### `bookings`
 
@@ -275,9 +279,10 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | Method | Route | Auth required | Description |
 |---|---|---|---|
 | GET | `/api/health` | **No** (intentional; returns `{ status: 'ok' }` only — no data) | Liveness check |
-| POST | `/api/auth/login` | No | Merchant logs in with password, receives a JWT `{ merchant_id }` in an httpOnly cookie (until real accounts exist the single env password is merchant 1). Every other route resolves `req.merchantId` from it |
+| POST | `/api/auth/signup` | No | `{ business_name, email, password }` (zod). Creates the merchant (bcrypt cost 10), logs them in (same cookie as login), `201 { authenticated, merchant: { business_name } }`. `409` if the email exists. Rate limited by `signupRateLimiter` |
+| POST | `/api/auth/login` | No | `{ email, password }`. Looks the merchant up by email, `bcrypt.compare`, receives a JWT `{ merchant_id }` in an httpOnly cookie. `401 "Incorrect email or password."` for an unknown email and a wrong password alike. Every other route resolves `req.merchantId` from the token |
 | POST | `/api/auth/logout` | Yes | Clears session cookie |
-| GET | `/api/auth/me` | Yes | Returns current session validity (for frontend route guard) |
+| GET | `/api/auth/me` | Yes | Session validity for the frontend route guard, plus `merchant: { business_name }` for the Sidebar |
 | GET | `/api/bookings` | Yes | Return all bookings (for calendar population) |
 | GET | `/api/bookings/check-conflict?date=YYYY-MM-DD&excludeId=` | Yes | Returns conflicting booking if any. `excludeId` optional when editing |
 | GET | `/api/bookings/pending-balances` | Yes | Outstanding balances (confirmed/pending, balance > 0, upcoming) |
@@ -306,7 +311,7 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | GET | `/api/reports/range` | Yes | Date-range report summary + bookings |
 | GET | `/api/records` | Yes | Filtered booking records for the Records screen / Excel export |
 
-All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/login` and `GET /api/health` (no data). See SECURITY.md for the full auth matrix.
+All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (no data). See SECURITY.md for the full auth matrix.
 
 ---
 
@@ -319,14 +324,13 @@ NODE_ENV=development
 PORT=3001
 DATABASE_URL=              # Postgres connection string (required — app uses pg Pool)
 JWT_SECRET=                # long random string, generate with: openssl rand -base64 32
-MERCHANT_PASSWORD_HASH=    # bcrypt hash, never the plaintext password
 CORS_ORIGIN=http://localhost:5173
 SESSION_COOKIE_NAME=eventflow_session
 ADMIN_ACCESS_KEY=          # for GET /api/usage/admin (x-admin-key header)
 PROXY_SHARED_SECRET=       # production only; also set as a server-side (non-VITE_) Vercel env var
 ```
 
-Required at boot: `JWT_SECRET`, `MERCHANT_PASSWORD_HASH`, `SESSION_COOKIE_NAME`.
+Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET` in production). `MERCHANT_PASSWORD_HASH` no longer exists: logins are per merchant, in the `merchants` table.
 
 **Client (`client/.env`)**:
 

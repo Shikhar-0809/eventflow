@@ -96,9 +96,9 @@ Possible shape, once that discovery happens:
 
 Only relevant if EventFlow moves from "one merchant's tool" to "a product for many merchants." This is a different system, not an incremental feature:
 
-- Multi-tenancy (currently the entire auth model assumes one merchant) — **partly done (Prompts 24–25):** merchants table, merchant-scoped session and routes; real per-merchant accounts still to do (Prompt 26)
+- Multi-tenancy (currently the entire auth model assumes one merchant) — **partly done (Prompts 24–25):** merchants table, merchant-scoped session and routes; **email + password accounts and self-service sign-up now built** (migration `005`, `POST /api/auth/signup`). Still missing: email verification, password reset, Firebase/phone/Google login (Prompt 26)
 - Per-merchant data isolation — **done (Prompts 24–25):** enforced in the routes and by composite foreign keys, verified by `npm run verify:isolation`
-- Onboarding flow for new merchants — **next: Prompt 26** (Firebase auth + onboarding)
+- Onboarding flow for new merchants — sign-up screen done (email + password); business profile onboarding and Firebase auth remain (Prompt 26)
 - Billing/subscription model — **still out of scope**
 - *(Partly done: `DATA_PRIVACY.md` now describes the shared database and the pre-onboarding checklist; the full rewrite below is still open.)* This would also reopen `DATA_PRIVACY.md` for a full rewrite — single-merchant informal trust does not scale to multi-tenant SaaS, and DPDP Act obligations get materially heavier (formal privacy policy, consent flows, possibly a Data Protection Officer depending on scale)
 

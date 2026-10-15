@@ -10,7 +10,7 @@ This file was written after the fact — `PROMPTS.md`, `ARCHITECTURE.md`, `CODIN
 
 ## Threat model for v1 — be explicit about what this defends against
 
-EventFlow is a **multi-merchant product** with a deliberately simple auth model: one shared env password today (it logs in as merchant 1; real per-merchant accounts arrive with the Firebase login prompt), a signed session cookie that carries the merchant id, and strict per-merchant data isolation (see "Tenant isolation"). This section exists so nobody mistakes a simple login for an insecure one.
+EventFlow is a **multi-merchant product** with a deliberately simple auth model: per-merchant email + password accounts (self-service sign-up), a signed session cookie that carries the merchant id, and strict per-merchant data isolation (see "Tenant isolation"). This section exists so nobody mistakes a simple login for an insecure one.
 
 **In scope — this file defends against:**
 - An unauthenticated stranger on the internet reaching `/api/bookings` and reading real client names/phone numbers
@@ -27,11 +27,12 @@ EventFlow is a **multi-merchant product** with a deliberately simple auth model:
 
 ## Auth model overview
 
-- **One shared password, no user accounts table yet.** The login identifies the merchant (always merchant 1 for now), not a person; per-merchant accounts come with the Firebase login prompt.
-- Password is never stored in plaintext. A bcrypt hash lives in `MERCHANT_PASSWORD_HASH` (env var, server-side only).
+- **One account per merchant, identified by email.** `merchants.email` (lowercased, unique) and `merchants.password_hash` (bcrypt, cost 10); the login identifies the merchant, not a person. Merchants create their own account at `POST /api/auth/signup`. There is no password reset or email verification yet.
+- Password is never stored in plaintext, and is capped at 72 bytes (bcrypt ignores the rest). `MERCHANT_PASSWORD_HASH` no longer exists. A merchant row with no `password_hash` cannot log in.
+- Login answers an unknown email and a wrong password identically (`401 "Incorrect email or password."`) and runs `bcrypt.compare` against a dummy hash for an unknown email so timing does not reveal registered emails. Sign-up does reveal an existing email (409): accepted, BUGS #073.
 - On successful login, the server issues a JWT in an **httpOnly cookie** — not returned in the response body, not stored in `localStorage`, not accessible to client-side JS at all. This is the single biggest XSS mitigation in the whole app: even if malicious JS somehow ran in the merchant's browser, it cannot read the session token.
 - The JWT carries only `{ merchant_id }` plus issued-at/expiry: no personal data, nothing worth protecting if decoded. The cookie's `httpOnly` flag is what actually matters, not the token's contents. `merchant_id` is trusted only because the token is signed with `JWT_SECRET`; it is never taken from the request.
-- Every **business** route requires a valid session. No "just for testing" bypasses left in committed code. The only intentional unauthenticated routes are `POST /api/auth/login` and `GET /api/health` (liveness only — returns `{ status: 'ok' }`, no data). This includes inventory, settings, reports, records, and usage routes — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
+- Every **business** route requires a valid session. No "just for testing" bypasses left in committed code. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (liveness only — returns `{ status: 'ok' }`, no data). This includes inventory, settings, reports, records, and usage routes — see the Route auth matrix below, and don't assume a route is covered just because it "feels internal."
 
 ---
 
@@ -45,12 +46,9 @@ openssl rand -base64 32
 ```
 Paste the output directly into `JWT_SECRET` in `.env`. Never reuse this value between dev and prod.
 
-**`MERCHANT_PASSWORD_HASH`** — bcrypt hash of the chosen password, generated locally so the plaintext password never touches a file, a commit, or a chat log:
-```bash
-# run from /server, so bcryptjs resolves
-node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('your-chosen-password', 10))"
-```
-Copy the printed hash into `MERCHANT_PASSWORD_HASH` in `.env`. Do not put the plaintext password in `.env`, a code comment, a commit message, this file, `BUGS.md`, or anywhere else — including pasting it into Cursor or Claude while debugging. Only the merchant should know it; per `DATA_PRIVACY.md`, the developer should know the hash exists, never the plaintext.
+**Merchant passwords** are not an env var any more (`MERCHANT_PASSWORD_HASH` was removed). Each merchant sets their own at sign-up and only the bcrypt hash is stored in `merchants.password_hash`. Never paste a real merchant password into a file, a commit or a chat.
+
+**Demo logins (dev only).** `db/seedMerchants.js` publishes two fictional demo merchants and one demo password, and `db/seed.js` gives them credentials on dev databases only (`seed()` is a no-op in production, and only fills merchants that have no credentials yet). These are deliberately public, so never point a dev database at production data and never reuse the demo password anywhere real.
 
 **`ADMIN_ACCESS_KEY`** (see the `/api/usage/admin` section below) — same pattern:
 ```bash
@@ -130,65 +128,41 @@ Rules:
 
 ---
 
-## Login route — exact pattern
+## Sign-up and login routes — exact pattern
 
 ```js
-// routes/auth.js
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import { loginRateLimiter } from '../middleware/rateLimiter.js'
-import { requireAuth } from '../middleware/requireAuth.js'
+// routes/auth.js (the shape that matters; see the file for the full text)
+const BCRYPT_COST = 10
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-password', BCRYPT_COST) // compared against when the email is unknown
 
-router.post('/login', loginRateLimiter, async (req, res, next) => {
-  try {
-    const { password } = req.body
+router.post('/signup', signupRateLimiter, validate(signupSchema), async (req, res, next) => {
+  // 1. 409 if lower(email) already exists   2. bcrypt.hash(password, 10)
+  // 3. INSERT INTO merchants (business_name, email, password_hash) ... RETURNING id, business_name
+  //    (a 23505 from the unique index, i.e. a race, is also a 409)
+  // 4. issueSession(res, merchant.id)  5. 201 { authenticated: true, merchant: { business_name } }
+})
 
-    if (!password) {
-      return res.status(400).json({ error: 'Password is required.' })
-    }
-
-    const isValid = await bcrypt.compare(password, process.env.MERCHANT_PASSWORD_HASH)
-
-    if (!isValid) {
-      return res.status(401).json({ error: 'Incorrect password.' })
-    }
-
-    const token = jwt.sign({ merchant_id: LEGACY_LOGIN_MERCHANT_ID }, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' })
-
-    const isProd = process.env.NODE_ENV === 'production'
-
-    res.cookie(process.env.SESSION_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    })
-
-    res.status(200).json({ authenticated: true })
-  } catch (err) {
-    next(err)
+router.post('/login', loginRateLimiter, validate(loginSchema), trackUsage('login'), async (req, res, next) => {
+  // SELECT id, business_name, password_hash FROM merchants WHERE lower(email) = $1
+  const isValid = await bcrypt.compare(password, merchant?.password_hash ?? DUMMY_HASH)
+  if (!merchant?.password_hash || !isValid) {
+    return res.status(401).json({ error: 'Incorrect email or password.' }) // never say which one was wrong
   }
+  res.locals.merchantId = merchant.id // requireAuth has not run; trackUsage reads it from here
+  issueSession(res, merchant.id)
+  res.status(200).json({ authenticated: true, merchant: { business_name: merchant.business_name } })
 })
 
-router.post('/logout', (req, res) => {
-  res.clearCookie(process.env.SESSION_COOKIE_NAME, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-  })
-  res.status(200).json({ authenticated: false })
-})
+// issueSession: jwt.sign({ merchant_id }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' }) and the
+// session cookie exactly as configured in "Session cookie configuration" above (flags unchanged).
 
-router.get('/me', requireAuth, (req, res) => {
-  res.status(200).json({ authenticated: true })
-})
+router.post('/logout', requireAuth, ...)  // clears the cookie
+router.get('/me', requireAuth, ...)       // { authenticated: true, merchant: { business_name } }
 ```
 
-Always `bcrypt.compare` — never a plain `===` string comparison, even though there's only one password to check. A direct comparison is also vulnerable to a timing attack in theory; `bcrypt.compare` already handles this correctly.
+Schemas (`schemas/merchant.schema.js`, mirrored on the client): sign-up needs `business_name` 2-100 chars, `email` valid and at most 255 (trimmed, lowercased), `password` 8 characters minimum and at most 72 bytes. Login only requires a valid email and a non-empty password, so it never leaks the password policy. Confirm-password exists only in the sign-up form.
 
----
+Always `bcrypt.compare` — never a plain `===` string comparison. The token carries `merchant_id` only; the merchant is never read from the request.
 
 ## Rate limiting — exact config
 
@@ -204,6 +178,14 @@ export const loginRateLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+export const signupRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: { error: 'Too many sign-up attempts. Please try again in an hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 export const bookingCreateRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 20,
@@ -213,7 +195,7 @@ export const bookingCreateRateLimiter = rateLimit({
 })
 ```
 
-`loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only, and it must run **before** `validate(bookingSchema)` so invalid bodies still consume a slot. The limit is high enough that a real merchant double-clicking submit never hits it, and low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
+`signupRateLimiter` (1 hour window, 10 attempts, same shape as `loginRateLimiter`) goes on `POST /api/auth/signup` only, ahead of `validate`. `loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only, and it must run **before** `validate(bookingSchema)` so invalid bodies still consume a slot. The limit is high enough that a real merchant double-clicking submit never hits it, and low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
 
 Inventory and booking-edit routes are **not** separately rate limited — they're low-volume, manually-triggered actions for a single merchant, and adding limiters there would be solving a problem that doesn't exist at this scale. Don't add them speculatively.
 
@@ -239,13 +221,14 @@ The Render API must only be reachable through our Vercel proxy (BUGS #056). With
 
 ## Route auth matrix
 
-Cross-check against this table any time a new route is added — every business row needs `requireAuth` checked. Only login and health are intentionally unauthenticated.
+Cross-check against this table any time a new route is added — every business row needs `requireAuth` checked. Only sign-up, login and health are intentionally unauthenticated.
 
 **Production only:** every route in this table, `GET /api/health` excepted, also requires a valid `x-proxy-secret` header (see the proxy-only origin lock section above). Requests without it get `403 { "error": "Not found." }` before any other middleware runs.
 
 | Route | `requireAuth`? | Rate limited? |
 |---|---|---|
 | `GET /api/health` | No — intentional liveness; returns `{ status: 'ok' }` only, no data | No |
+| `POST /api/auth/signup` | No | Yes — `signupRateLimiter` |
 | `POST /api/auth/login` | No | Yes — `loginRateLimiter` |
 | `POST /api/auth/logout` | Yes | No |
 | `GET /api/auth/me` | Yes | No |
@@ -372,7 +355,7 @@ Every query uses `pg`'s parameterized `pool.query()` / `client.query()` with `$1
 Multi-merchant data is isolated in two layers; the database layer exists so a route bug cannot silently cross tenants.
 
 - **Database (migration 002):** every business table has `merchant_id NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant by composite foreign keys (`(booking_id, merchant_id)` and `(item_id, merchant_id)`), so inserting a row that points at another merchant's booking or item fails with `23503`. Names are unique per merchant, settings are keyed by `(merchant_id, key)`.
-- **Session:** the login JWT is `{ merchant_id }` (HS256). `requireAuth` verifies it with `algorithms: ['HS256']`, requires an integer `merchant_id` that exists in `merchants` (a token without one, or for a merchant that no longer exists, gets 401 "Your session has expired. Please log in again.", which also forces everyone to re-login once after this change) and sets `req.merchantId`. **A merchant id is never read from the body or params** (the single exception is the documented `?merchant_id=` filter on the admin feed, which already requires the admin key); zod strips unknown keys, so a `merchant_id` in a request body is ignored.
+- **Session:** the login or sign-up JWT is `{ merchant_id }` (HS256). `requireAuth` verifies it with `algorithms: ['HS256']`, requires an integer `merchant_id` that exists in `merchants` (a token without one, or for a merchant that no longer exists, gets 401 "Your session has expired. Please log in again.", which also forces everyone to re-login once after this change) and sets `req.merchantId`. **A merchant id is never read from the body or params** (the single exception is the documented `?merchant_id=` filter on the admin feed, which already requires the admin key); zod strips unknown keys, so a `merchant_id` in a request body is ignored.
 - **Routes:** every SELECT/UPDATE/DELETE on a business table binds `merchant_id = req.merchantId`, every INSERT sets it explicitly (including `trackUsage`, which takes it from `req.merchantId` or, on login, `res.locals.merchantId`). Aggregates are scoped too (`COUNT(DISTINCT phone)`, availability sums, usage/me incl. last-active, analytics, reports, records, settings).
 - **The 404 rule:** an id that belongs to another merchant returns exactly what a nonexistent id returns (same status, same message: `Booking not found.`, `Inventory item not found.` / `Item not found.`, `Expense not found.`; `check-availability` keeps its 400 "Inventory item N not found."). Never 403, never a different message, so ids cannot be probed. Unparsable or out-of-range ids take the same path.
 - **Booking inventory lines** must reference the merchant's own items, otherwise 400 "One or more inventory items are invalid."; a composite-FK violation (pg `23503`) is mapped to the same 400, never a 500.
@@ -428,7 +411,7 @@ In production the browser only hits the Vercel frontend origin; Vercel proxies `
 
 This is the checklist `PROMPTS.md`'s Prompt 12 refers to. Run through all of it, not just the items that feel relevant to whatever you just built.
 
-- [ ] Every business route has `requireAuth` in its middleware chain — including analytics, usage, inventory, settings, reports, records, expenses, and booking-edit/`status`/`delete` routes. Only `POST /api/auth/login` and `GET /api/health` are exempt (health must return no data)
+- [ ] Every business route has `requireAuth` in its middleware chain — including analytics, usage, inventory, settings, reports, records, expenses, and booking-edit/`status`/`delete` routes. Only `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` are exempt (health must return no data)
 - [ ] `errorHandler.js` never returns `err.message` or a stack trace when `NODE_ENV === 'production'` — verified by deliberately throwing an error and checking the response
 - [ ] No `console.log` anywhere includes `req.body`, a password, a token, or a full booking object (phone numbers count as sensitive here too)
 - [ ] Every SQL query uses parameterized `$n` placeholders via `pg` — no string concatenation, anywhere, including the inventory availability aggregate queries
@@ -453,7 +436,7 @@ This is the checklist `PROMPTS.md`'s Prompt 12 refers to. Run through all of it,
 - **No defense against the merchant's own device being compromised** (keylogger, shoulder-surfing, shared device). That's a physical/device-security problem for the merchant, not something this app's auth layer can solve — flag it in the plain-language conversation described in `DATA_PRIVACY.md`, don't try to engineer around it.
 - **No protection against the developer themselves.** You have direct database access during build and via the hosting dashboards. `DATA_PRIVACY.md` covers the transparency obligation that comes with that access — this file is about external threats, not insider trust, which is a different problem with a different (non-technical) solution at this scale.
 - **No DDoS protection beyond basic rate limiting.** `loginRateLimiter` and `bookingCreateRateLimiter` stop scripted brute-forcing and accidental abuse; they are not a substitute for platform-level protection (e.g. Cloudflare) at real scale. Not worth building further for a single-merchant POC.
-- **Real per-merchant accounts and sign-up.** Data is isolated per merchant (see "Tenant isolation"), but there is still one shared login that maps to merchant 1; Firebase auth and onboarding are the next prompt. Billing/subscriptions remain out of scope (ROADMAP.md).
+- **Email verification, password reset and social/phone login.** Accounts are email + password with self-service sign-up and no email check, so anyone can register any address. Firebase auth/onboarding (ROADMAP Prompt 26) would replace or extend this. Billing/subscriptions remain out of scope (ROADMAP.md).
 - **No race-condition-proof inventory locking.** Like the existing date-conflict check, the inventory availability check is select-then-decide, not atomic. For a single merchant typing manually this is a low-probability, low-stakes bug — see `BUGS.md`.
 
 ---
