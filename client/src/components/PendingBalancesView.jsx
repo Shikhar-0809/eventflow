@@ -66,6 +66,7 @@ export const PendingBalancesView = () => {
   const [error, setError] = useState(null)
   const [showBatchConfirm, setShowBatchConfirm] = useState(false)
   const { setSelectedBooking } = useBookingStore()
+  const businessName = useAuthStore((state) => state.businessName)
 
   const fetchRecords = useCallback(async () => {
     setIsLoading(true)
@@ -97,7 +98,7 @@ export const PendingBalancesView = () => {
   const nextEventDays = records[0]?.days_until_event
 
   const handleSendReminder = (booking) => {
-    const url = paymentReminderMessage(booking)
+    const url = paymentReminderMessage(booking, businessName)
     if (url) {
       window.open(url, '_blank', 'noopener,noreferrer')
     }
@@ -109,7 +110,7 @@ export const PendingBalancesView = () => {
 
   const handleBatchConfirm = () => {
     records.forEach((booking, index) => {
-      const url = paymentReminderMessage(booking)
+      const url = paymentReminderMessage(booking, businessName)
       if (!url) return
       setTimeout(() => {
         window.open(url, '_blank', 'noopener,noreferrer')

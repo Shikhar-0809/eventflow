@@ -18,7 +18,13 @@ const formatEventType = (type) => {
 const buildWaLink = (phone, message) =>
   `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`
 
-export const confirmationMessage = (booking) => {
+// Messages go out on the merchant's behalf, so they are signed with the logged-in merchant's business name.
+const signOff = (businessName) => {
+  const name = sanitizeText(businessName, 100)
+  return name ? ` - ${name}` : ''
+}
+
+export const confirmationMessage = (booking, businessName) => {
   const phone = validatePhoneForWhatsApp(booking?.phone)
   if (!phone) return null
 
@@ -34,12 +40,12 @@ export const confirmationMessage = (booking) => {
   const message =
     `Namaskar ${clientName}! Your booking is confirmed for ${eventDate}. ` +
     `Event: ${eventType}, Guests: ${guestCount}. Advance received: ${advance}. ` +
-    'Thank you! - Bala Ji Tent House'
+    `Thank you!${signOff(businessName)}`
 
   return buildWaLink(phone, message)
 }
 
-export const paymentReminderMessage = (booking) => {
+export const paymentReminderMessage = (booking, businessName) => {
   const phone = validatePhoneForWhatsApp(booking?.phone)
   if (!phone) return null
 
@@ -50,14 +56,14 @@ export const paymentReminderMessage = (booking) => {
 
   const message =
     `Namaskar ${clientName}! This is a reminder that your event is on ${eventDate}. ` +
-    'Kindly arrange the remaining balance before the event. Thank you! - Bala Ji Tent House'
+    `Kindly arrange the remaining balance before the event. Thank you!${signOff(businessName)}`
 
   return buildWaLink(phone, message)
 }
 
 const toINR = (n) => Number(n).toLocaleString('en-IN')
 
-export const selfSummaryMessage = (booking) => {
+export const selfSummaryMessage = (booking, businessName) => {
   const merchantPhone = String(import.meta.env.VITE_MERCHANT_PHONE ?? '').trim()
   if (!merchantPhone) return null
 
@@ -79,8 +85,7 @@ export const selfSummaryMessage = (booking) => {
   const message =
     `EventFlow Booking Summary — ${clientName}'s ${eventType} on ${eventDate}. ` +
     `Venue: ${venue}. Guests: ${guestCount}. ` +
-    `Total: ₹${toINR(total)}. Advance: ₹${toINR(advance)}. Pending: ₹${toINR(pending)}. ` +
-    '- Bala Ji Tent House'
+    `Total: ₹${toINR(total)}. Advance: ₹${toINR(advance)}. Pending: ₹${toINR(pending)}.${signOff(businessName)}`
 
   return buildWaLink(phone, message)
 }

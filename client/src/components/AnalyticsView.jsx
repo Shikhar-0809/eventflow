@@ -108,6 +108,7 @@ export const AnalyticsView = () => {
   const [reportApiError, setReportApiError] = useState(null)
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
   const { loadSettings, setMonthlyRevenueTarget } = useSettingsStore()
+  const businessName = useAuthStore((state) => state.businessName)
 
   const fetchSettings = useCallback(async () => {
     setSettingsLoading(true)
@@ -202,7 +203,7 @@ export const AnalyticsView = () => {
     setIsGeneratingReport(true)
     try {
       const data = await api.getReport(reportFrom, reportTo)
-      openReportWindow(data)
+      openReportWindow({ ...data, businessName })
     } catch (err) {
       if (err.status === 401) {
         useAuthStore.setState({ isAuthenticated: false, isLoading: false })

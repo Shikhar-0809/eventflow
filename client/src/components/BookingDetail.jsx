@@ -139,6 +139,7 @@ const normalizeBookingDetail = (data) => ({
 })
 
 export const BookingDetail = () => {
+  const businessName = useAuthStore((state) => state.businessName)
   const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal, updateBooking, removeBooking } = useBookingStore()
   const [booking, setBooking] = useState(null)
   const [changeLog, setChangeLog] = useState([])
@@ -257,8 +258,8 @@ export const BookingDetail = () => {
     }
 
     const url = type === 'confirmation'
-      ? confirmationMessage(target)
-      : paymentReminderMessage(target)
+      ? confirmationMessage(target, businessName)
+      : paymentReminderMessage(target, businessName)
 
     if (!url) {
       setWhatsappError('Something went wrong. Please try again.')
@@ -279,7 +280,7 @@ export const BookingDetail = () => {
     const target = booking ?? selectedBooking
     if (!target) return
 
-    const url = selfSummaryMessage(target)
+    const url = selfSummaryMessage(target, businessName)
     if (!url) {
       setSelfWhatsappError('Set VITE_MERCHANT_PHONE in .env to use this.')
       return

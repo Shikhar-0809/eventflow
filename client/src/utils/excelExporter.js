@@ -74,7 +74,7 @@ const buildSheet = (headers, dataRows) => {
   return worksheet
 }
 
-export const exportToExcel = (records, { from, to } = {}) => {
+export const exportToExcel = (records, { from, to, businessName } = {}) => {
   const summaryHeaders = [
     '#',
     'Client Name',
@@ -149,7 +149,7 @@ export const exportToExcel = (records, { from, to } = {}) => {
   XLSX.utils.book_append_sheet(workbook, buildSheet(fullHeaders, fullRows), 'Full Records')
 
   const aboutSheet = XLSX.utils.aoa_to_sheet([
-    ['EventFlow — Bala Ji Tent House'],
+    [businessName ? `EventFlow — ${businessName}` : 'EventFlow'],
     [`Exported on: ${exportedAt}`],
     [`Total bookings in export: ${records.length}`],
   ].map((row) => row.map(protectCell)))

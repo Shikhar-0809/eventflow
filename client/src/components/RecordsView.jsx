@@ -87,6 +87,7 @@ export const RecordsView = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const searchDebounceRef = useRef(null)
+  const businessName = useAuthStore((state) => state.businessName)
 
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
@@ -159,7 +160,7 @@ export const RecordsView = () => {
 
   const handleExport = () => {
     if (records.length === 0) return
-    exportToExcel(records, { from: filters.from || undefined, to: filters.to || undefined })
+    exportToExcel(records, { from: filters.from || undefined, to: filters.to || undefined, businessName })
   }
 
   const canExport = !isLoading && records.length > 0
