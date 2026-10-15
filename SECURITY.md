@@ -228,6 +228,7 @@ Cross-check against this table any time a new route is added — every business 
 | Route | `requireAuth`? | Rate limited? |
 |---|---|---|
 | `GET /api/health` | No — intentional liveness; returns `{ status: 'ok' }` only, no data | No |
+| Any other `/api/*` path | No — catch-all mounted after every route, returns `404 { error: 'Not found.' }` and no data (in production the proxy-secret check still runs first) | No |
 | `POST /api/auth/signup` | No | Yes — `signupRateLimiter` |
 | `POST /api/auth/login` | No | Yes — `loginRateLimiter` |
 | `POST /api/auth/logout` | Yes | No |

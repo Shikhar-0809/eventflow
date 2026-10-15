@@ -4,6 +4,7 @@ import { useAuthStore } from './store/authStore'
 import { LoginScreen } from './components/LoginScreen'
 import { SignupScreen } from './components/SignupScreen'
 import { PrivacyPolicyPage, PRIVACY_POLICY_PATH } from './components/PrivacyPolicyPage'
+import { NotFoundPage } from './components/NotFoundPage'
 import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
@@ -25,11 +26,16 @@ const VIEW_TITLES = {
   usage: 'My Activity',
 }
 
-// The privacy policy is public: it renders without waiting for (or needing) a login or the API.
-const isPrivacyPolicyRoute = () => window.location.pathname.replace(/\/+$/, '') === PRIVACY_POLICY_PATH
+// The app lives at "/" and the public privacy policy at "/privacy" (a trailing slash is fine). Any other
+// path is a 404. Both are decided before the auth gate: they render without needing a login or the API.
+const getRoute = () => {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/') return 'app'
+  return path === PRIVACY_POLICY_PATH ? 'privacy' : 'not-found'
+}
 
 export default function App() {
-  const showPrivacyPolicy = isPrivacyPolicyRoute()
+  const route = getRoute()
   const { isAuthenticated, isLoading, connectionError, businessName, checkAuth } = useAuthStore()
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -45,7 +51,7 @@ export default function App() {
   }, [isAuthenticated])
 
   useEffect(() => {
-    if (showPrivacyPolicy) return
+    if (route !== 'app') return
     if (connectionError) {
       document.title = 'EventFlow'
       return
@@ -55,9 +61,10 @@ export default function App() {
       return
     }
     document.title = `${VIEW_TITLES[activeView] ?? 'EventFlow'} — ${businessName || 'EventFlow'}`
-  }, [isAuthenticated, connectionError, businessName, showPrivacyPolicy, authScreen, activeView])
+  }, [isAuthenticated, connectionError, businessName, route, authScreen, activeView])
 
-  if (showPrivacyPolicy) return <PrivacyPolicyPage />
+  if (route === 'privacy') return <PrivacyPolicyPage />
+  if (route === 'not-found') return <NotFoundPage />
 
   if (isLoading) {
     return (

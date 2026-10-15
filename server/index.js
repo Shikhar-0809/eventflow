@@ -89,6 +89,11 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/reports', reportsRouter)
 app.use('/api/records', recordsRouter)
 
+// Unknown /api paths get a JSON 404 (after every route, before the error handler).
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'Not found.' })
+})
+
 app.use(errorHandler)
 
 ;(async () => {
