@@ -254,7 +254,12 @@ const change = await request(`/bookings/${bookingId}/log`, {
   cookie,
   body: { note: piiNote },
 })
-const changeLoggedAfter = await countByType('change_logged')
+// The usage insert is fire-and-forget (it lands after the response), so wait briefly for the row instead of racing it.
+let changeLoggedAfter = await countByType('change_logged')
+for (let i = 0; i < 20 && changeLoggedAfter <= changeLoggedBefore; i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  changeLoggedAfter = await countByType('change_logged')
+}
 const changeRow = (await pool.query(
   "SELECT metadata FROM event_log WHERE event_type = 'change_logged' ORDER BY id DESC LIMIT 1",
 )).rows[0]
