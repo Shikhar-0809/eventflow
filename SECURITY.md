@@ -168,11 +168,31 @@ Always `bcrypt.compare` — never a plain `===` string comparison. The token car
 
 ```js
 // middleware/rateLimiter.js
+import crypto from 'node:crypto'
 import rateLimit from 'express-rate-limit'
 
+// IPv6 addresses are reduced to their /64 prefix first (clientIpKey in middleware/rateLimiter.js; IPv4 and
+// IPv4-mapped addresses are used as is), because express-rate-limit 7.5 has no helper for it.
+const normalisedEmail = (req) => (typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '')
+const digest = (value) => crypto.createHash('sha256').update(value).digest('hex')
+
+// Per account AND source: one account's failures never lock out other accounts, even if req.ip is shared.
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5,
+  skipSuccessfulRequests: true, // only failed attempts count (BUGS #078)
+  keyGenerator: (req) => digest(`${normalisedEmail(req)}|${clientIpKey(req.ip)}`), // hashed: no email or IP in the store (BUGS #079)
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Backstop against spraying many emails from one source: 50 failures per source per 15 minutes.
+export const loginIpBackstopLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => digest(clientIpKey(req.ip)),
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -196,6 +216,8 @@ export const bookingCreateRateLimiter = rateLimit({
 ```
 
 **Why `skipSuccessfulRequests: true` on login:** the limit exists to stop password guessing, and a guess that works has already succeeded, so counting successful logins adds no protection and only locks real merchants out (five logins in 15 minutes, for example while testing or switching devices, produced a production 429 with the correct password). With the flag, a request counts only if the response status is 400 or above: wrong credentials (401), a malformed body (400) and any other failure all use a slot, while 200s never do. Five failures per 15 minutes per IP still block the sixth attempt with a 429, even if that attempt has the right password. It does not change who is keyed: the bucket is still `req.ip`, which depends on `trust proxy` = 4 (BUGS #040). `signupRateLimiter` deliberately keeps counting every request: an account creation is not a retry of something that failed. Verified by `verify-login-rate-limit-message.mjs` and `verify-auth-http.mjs`.
+
+**Why the login limiter is keyed on email + source (BUGS #079):** the limiter's bucket used to be just `req.ip`. In production that turned out to be shared by every visitor (a phone on mobile data and a laptop were locked out together), which means the hop count behind `trust proxy` = 4 no longer matches reality (BUGS #040) and `req.ip` is a Vercel or Cloudflare address, not the visitor. Keying on the normalised email (trimmed, lowercased) plus the source means that, even with a shared source, failures against one account lock only that account: five failures on one email block that email from that source, while every other email keeps its own five. The key is hashed (SHA-256) so neither the email nor the address is stored or logged. Trade-offs, stated plainly: the limit is now per account, not per source, so a guesser who rotates through source addresses (if `req.ip` is correct) gets five guesses per address per account, which the per-source backstop (50 failures per source per 15 minutes, any email) bounds; and if `req.ip` stays shared, the backstop's 50 failures are shared by everyone, which is why it is much looser. The real fix for a wrong `req.ip` is re-measuring the hop count (the `LOGIN_IP_DIAG` diagnostic below), after which `trust proxy` is corrected; keep the keyed limiter anyway. Both limiters run on `POST /api/auth/login` in the order backstop, then per-account, before `validate`. Verified by `verify-login-limiter-keys.mjs`.
 
 `signupRateLimiter` (1 hour window, 10 attempts, same shape as `loginRateLimiter`) goes on `POST /api/auth/signup` only, ahead of `validate`. `loginRateLimiter` goes on `POST /api/auth/login` only. `bookingCreateRateLimiter` goes on `POST /api/bookings` only, and it must run **before** `validate(bookingSchema)` so invalid bodies still consume a slot. The limit is high enough that a real merchant double-clicking submit never hits it, and low enough to blunt a scripted abuse attempt. Per `BUGS.md`: confirm this is actually wired into the route, not just defined and imported nowhere — that exact gap is a known gotcha to check before every deploy.
 
@@ -232,7 +254,7 @@ Cross-check against this table any time a new route is added — every business 
 | `GET /api/health` | No — intentional liveness; returns `{ status: 'ok' }` only, no data | No |
 | Any other `/api/*` path | No — catch-all mounted after every route, returns `404 { error: 'Not found.' }` and no data (in production the proxy-secret check still runs first) | No |
 | `POST /api/auth/signup` | No | Yes — `signupRateLimiter` |
-| `POST /api/auth/login` | No | Yes — `loginRateLimiter` |
+| `POST /api/auth/login` | No | Yes — `loginIpBackstopLimiter` then `loginRateLimiter` (per email + source) |
 | `POST /api/auth/logout` | Yes | No |
 | `GET /api/auth/me` | Yes | No |
 | `GET /api/bookings` | Yes | No |
