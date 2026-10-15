@@ -16,7 +16,7 @@ import recordsRouter from './routes/records.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requireProxySecret } from './middleware/requireProxySecret.js'
 
-const REQUIRED_ENV = ['JWT_SECRET', 'MERCHANT_PASSWORD_HASH', 'SESSION_COOKIE_NAME']
+const REQUIRED_ENV = ['JWT_SECRET', 'SESSION_COOKIE_NAME']
 
 // Only production sits behind the Vercel proxy, so local dev does not need this.
 if (process.env.NODE_ENV === 'production') {

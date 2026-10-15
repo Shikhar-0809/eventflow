@@ -8,6 +8,14 @@ export const loginRateLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+export const signupRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many sign-up attempts. Please try again in an hour.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 export const bookingCreateRateLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
