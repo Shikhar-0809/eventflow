@@ -93,8 +93,8 @@ const dbBookingsMonth = Number((await pool.query(
 const dbTotalClients = Number((await pool.query('SELECT COUNT(DISTINCT phone) AS v FROM bookings WHERE merchant_id = $1', [merchantId])).rows[0].v)
 const dbPeakRow = (await pool.query(
   `SELECT to_char(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS count
-   FROM bookings WHERE event_date >= $1 AND merchant_id = $2 GROUP BY 1 ORDER BY count DESC, month DESC LIMIT 1`,
-  [sixMonthStart, merchantId],
+   FROM bookings WHERE event_date >= $1 AND event_date < $2 AND merchant_id = $3 GROUP BY 1 ORDER BY count DESC, month DESC LIMIT 1`,
+  [sixMonthStart, currentEnd, merchantId],
 )).rows[0]
 const dbPeak = dbPeakRow ? { month: dbPeakRow.month, count: Number(dbPeakRow.count) } : undefined
 
