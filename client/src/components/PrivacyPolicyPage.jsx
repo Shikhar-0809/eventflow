@@ -4,9 +4,15 @@ import { ArrowLeft, CalendarDays } from 'lucide-react'
 export const PRIVACY_POLICY_PATH = '/privacy'
 const LAST_UPDATED = '15 October 2026'
 
-// Visible placeholders: replace before the policy is relied on (see DATA_PRIVACY.md).
-const Placeholder = ({ children }) => (
-  <mark className="bg-amber-100 text-amber-900 px-1 rounded font-medium">[{children}]</mark>
+const CONTACT_EMAIL = 'eventflow.support@gmail.com'
+
+const ContactEmail = () => (
+  <a
+    href={`mailto:${CONTACT_EMAIL}`}
+    className="font-medium text-teal-600 hover:text-teal-700 underline transition-all duration-200"
+  >
+    {CONTACT_EMAIL}
+  </a>
 )
 
 const Section = ({ id, title, children }) => (
@@ -55,8 +61,7 @@ export const PrivacyPolicyPage = () => {
 
           <Section id="who" title="1. Who we are">
             <p>
-              EventFlow is operated by <Placeholder>OPERATOR NAME</Placeholder>. You can reach us at{' '}
-              <Placeholder>CONTACT EMAIL</Placeholder>.
+              EventFlow is operated by EventFlow. You can reach us at <ContactEmail />.
             </p>
           </Section>
 
@@ -226,7 +231,7 @@ export const PrivacyPolicyPage = () => {
               ]}
             />
             <p>
-              Write to <Placeholder>CONTACT EMAIL</Placeholder> for any of these. If you are a merchant&apos;s client
+              Write to <ContactEmail /> for any of these. If you are a merchant&apos;s client
               and your details were entered by that merchant, the merchant is responsible for them (section 2).
               Please contact the merchant first, and we will help the merchant respond. If a grievance is not
               resolved, you may complain to the Data Protection Board of India.
