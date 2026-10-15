@@ -1,6 +1,11 @@
+// RUN THIS LAST. It deliberately exhausts the login rate limiter, so every login-dependent script that runs after
+// it against the same server session fails with 429. Run it on its own fresh server, after all the others.
+// The password comes from server/.dev-login-credential (or --password), never from this file.
+import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+
 const BASE = 'http://localhost:3001'
 const COOKIE_NAME = 'eventflow_session'
-const PASSWORD = 'testpass123'
+const PASSWORD = resolveVerifyPassword()
 
 const results = []
 
