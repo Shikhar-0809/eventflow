@@ -2,7 +2,6 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { pool } from '../db/database.js'
-import { loginIpDiagnostic } from '../middleware/loginIpDiagnostic.js'
 import { loginIpBackstopLimiter, loginRateLimiter, signupRateLimiter } from '../middleware/rateLimiter.js'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { trackUsage } from '../middleware/trackUsage.js'
@@ -69,7 +68,7 @@ router.post('/signup', signupRateLimiter, validate(signupSchema), async (req, re
   }
 })
 
-router.post('/login', loginIpDiagnostic, loginIpBackstopLimiter, loginRateLimiter, validate(loginSchema), trackUsage('login'), async (req, res, next) => {
+router.post('/login', loginIpBackstopLimiter, loginRateLimiter, validate(loginSchema), trackUsage('login'), async (req, res, next) => {
   try {
     const { email, password } = req.body
 
