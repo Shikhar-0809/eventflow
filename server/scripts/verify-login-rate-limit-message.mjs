@@ -2,7 +2,8 @@
  * Login 429 message check: the login screen must show the limiter's own message, and any 429 that has no
  * readable { error } (plain text, HTML, empty) must still say "too many attempts", not "Something went wrong".
  * Uses the real production bundle (VITE_API_URL=/api) behind the vercel.json-style local proxy.
- * No database writes: failed logins for an unknown email only fill the in-memory limiter bucket.
+ * Successful logins (BUGS #078): skipSuccessfulRequests means 6+ good logins in a row are never limited, while five
+ * failures still block the next attempt. This uses the dev demo merchant's login (the only DB effect is its usage log).
  *
  * Requires: dev API on :3001 (npm run dev), playwright (root devDependency).
  * Run from server/: node scripts/verify-login-rate-limit-message.mjs
@@ -14,6 +15,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { startProdLikeProxy } from './lib/prodLikeProxy.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const LIMITER_MESSAGE = 'Too many login attempts. Please try again in 15 minutes.'
@@ -64,6 +66,27 @@ try {
     const blocked = await shownError(page)
     record('the 6th attempt shows the limiter message', blocked === LIMITER_MESSAGE, blocked)
     await context.close()
+  }
+
+  // 1b. Successful logins never count: 7 in a row all pass, then the bucket still allows exactly 5 failures.
+  {
+    const ip = `198.51.100.${200 + (Date.now() % 50)}`
+    const login = (password) =>
+      fetch(`http://localhost:${proxy.port}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-test-ip': ip },
+        body: JSON.stringify({ email: VERIFY_LOGIN_EMAIL, password }),
+      })
+    const good = resolveVerifyPassword()
+    const statuses = []
+    for (let i = 0; i < 7; i++) statuses.push((await login(good)).status)
+    record('7 successful logins in a row are never limited', statuses.every((s) => s === 200), statuses.join(','))
+    const bad = []
+    for (let i = 0; i < 5; i++) bad.push((await login('definitely-wrong')).status)
+    record('then 5 failures are all answered 401', bad.every((s) => s === 401), bad.join(','))
+    const sixth = await login('definitely-wrong')
+    const sixthBody = await sixth.json().catch(() => null)
+    record('the 6th failure is blocked with the limiter message', sixth.status === 429 && sixthBody?.error === LIMITER_MESSAGE, String(sixth.status))
   }
 
   // 2. A 429 with no usable JSON body (as a proxy or host could send) still reads as "too many attempts".

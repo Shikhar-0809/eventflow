@@ -3,6 +3,9 @@ import rateLimit from 'express-rate-limit'
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  // Only failed attempts (status 400 and above) count. A merchant who logs in successfully, however often,
+  // must never be locked out; the limit exists to stop password guessing.
+  skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
