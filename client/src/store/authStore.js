@@ -19,6 +19,8 @@ const clearMerchantData = () => {
     detailNoteDirty: false,
     discardPromptOpen: false,
     pendingView: null,
+    notePromptOpen: false,
+    notePendingView: null,
     postSaveConflictNotice: null,
   })
   useInventoryStore.setState({ items: [] })

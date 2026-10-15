@@ -87,7 +87,6 @@ eventflow/
 │       └── utils/
 │           ├── api.js
 │           ├── dateHelpers.js
-│           ├── discardConfirm.js
 │           ├── excelExporter.js           # SheetJS .xlsx export
 │           ├── formatCurrency.js
 │           ├── formatRelativeTime.js

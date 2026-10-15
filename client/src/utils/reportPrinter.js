@@ -138,6 +138,7 @@ const buildReportHtml = (reportData) => {
       padding: 24px 20px 40px;
     }
     .no-print { margin-bottom: 24px; }
+    .pdf-error { margin: 12px 0 0; padding: 8px 12px; border: 1px solid #f87171; background: #fee2e2; color: #b91c1c; border-radius: 8px; font-size: 14px; }
     .download-btn,
     .print-btn {
       padding: 10px 20px;
@@ -300,6 +301,7 @@ const buildReportHtml = (reportData) => {
     <div class="no-print">
       <button type="button" id="download-btn" class="download-btn">Download PDF</button>
       <button type="button" id="print-btn" class="print-btn">Print</button>
+      <p id="pdf-error" class="pdf-error" role="alert" hidden></p>
     </div>
 
     <div id="report-body">
@@ -356,6 +358,8 @@ const downloadReportPdf = async (reportWindow, reportData) => {
   const doc = reportWindow.document
   const btn = doc.getElementById('download-btn')
   if (!btn) return
+  const errorEl = doc.getElementById('pdf-error')
+  if (errorEl) errorEl.hidden = true
   btn.disabled = true
   btn.textContent = 'Generating...'
 
@@ -399,7 +403,10 @@ const downloadReportPdf = async (reportWindow, reportData) => {
 
     pdf.save(`EventFlow-Report-${reportData.from}-to-${reportData.to}.pdf`)
   } catch {
-    reportWindow.alert('PDF generation failed. Please use the Print button instead.')
+    if (errorEl) {
+      errorEl.textContent = 'PDF generation failed. Please use the Print button instead.'
+      errorEl.hidden = false
+    }
   } finally {
     btn.disabled = false
     btn.textContent = 'Download PDF'

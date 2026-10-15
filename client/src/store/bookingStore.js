@@ -1,9 +1,5 @@
 import { create } from 'zustand'
 import { api } from '../utils/api'
-import {
-  confirmDiscard,
-  DISCARD_CHANGE_NOTE_MESSAGE,
-} from '../utils/discardConfirm.js'
 
 const closePanelsState = {
   isDetailOpen: false,
@@ -15,6 +11,16 @@ const closePanelsState = {
   detailNoteDirty: false,
   discardPromptOpen: false,
   pendingView: null,
+  notePromptOpen: false,
+  notePendingView: null,
+}
+
+const closeDetailState = {
+  isDetailOpen: false,
+  selectedBooking: null,
+  detailNoteDirty: false,
+  notePromptOpen: false,
+  notePendingView: null,
 }
 
 const closeModalState = {
@@ -38,6 +44,8 @@ export const useBookingStore = create((set, get) => ({
   detailNoteDirty: false,
   discardPromptOpen: false,
   pendingView: null,
+  notePromptOpen: false,
+  notePendingView: null,
 
   postSaveConflictNotice: null,
 
@@ -64,7 +72,8 @@ export const useBookingStore = create((set, get) => ({
       set({ discardPromptOpen: true, pendingView: activeView })
       return
     }
-    if (state.isDetailOpen && state.detailNoteDirty && !confirmDiscard(DISCARD_CHANGE_NOTE_MESSAGE)) {
+    if (state.isDetailOpen && state.detailNoteDirty) {
+      set({ notePromptOpen: true, notePendingView: activeView })
       return
     }
     set({ activeView, ...closePanelsState })
@@ -97,12 +106,21 @@ export const useBookingStore = create((set, get) => ({
     set(closeModalState)
     if (pendingView) get().setActiveView(pendingView)
   },
-  closeDetail: () => {
-    const state = get()
-    if (state.detailNoteDirty && !confirmDiscard(DISCARD_CHANGE_NOTE_MESSAGE)) {
+  // Unconditional close: use after a delete or when the session ended.
+  forceCloseDetail: () => set(closeDetailState),
+  // Guarded close (X, backdrop): asks first only when a change note is half-typed.
+  requestCloseDetail: () => {
+    if (!get().detailNoteDirty) {
+      set(closeDetailState)
       return
     }
-    set({ isDetailOpen: false, selectedBooking: null, detailNoteDirty: false })
+    set({ notePromptOpen: true, notePendingView: null })
+  },
+  keepNote: () => set({ notePromptOpen: false, notePendingView: null }),
+  discardNote: () => {
+    const { notePendingView } = get()
+    set(closeDetailState)
+    if (notePendingView) get().setActiveView(notePendingView)
   },
 
   loadBookings: async () => {

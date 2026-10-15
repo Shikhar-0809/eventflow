@@ -140,7 +140,7 @@ const normalizeBookingDetail = (data) => ({
 
 export const BookingDetail = () => {
   const businessName = useAuthStore((state) => state.businessName)
-  const { isDetailOpen, selectedBooking, closeDetail, setDetailNoteDirty, openModal, updateBooking, removeBooking } = useBookingStore()
+  const { isDetailOpen, selectedBooking, forceCloseDetail, requestCloseDetail, notePromptOpen, keepNote, discardNote, setDetailNoteDirty, openModal, updateBooking, removeBooking } = useBookingStore()
   const [booking, setBooking] = useState(null)
   const [changeLog, setChangeLog] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -206,7 +206,7 @@ export const BookingDetail = () => {
         console.error('BookingDetail load failed:', err)
         if (err.status === 401) {
           useAuthStore.setState({ isAuthenticated: false, isLoading: false })
-          closeDetail()
+          forceCloseDetail()
           return
         }
         setFetchError(err.message ?? 'Something went wrong. Please try again.')
@@ -219,7 +219,7 @@ export const BookingDetail = () => {
     }
 
     loadDetail()
-  }, [isDetailOpen, selectedBooking?.id, closeDetail, setDetailNoteDirty])
+  }, [isDetailOpen, selectedBooking?.id, forceCloseDetail, setDetailNoteDirty])
 
   useEffect(() => {
     if (!isDetailOpen || !selectedBooking?.id) return
@@ -429,7 +429,7 @@ export const BookingDetail = () => {
       removeBooking(selectedBooking.id)
       setShowDeleteConfirm(false)
       setDetailNoteDirty(false)
-      closeDetail()
+      forceCloseDetail()
     } catch (err) {
       setDeleteError(err.message ?? 'Something went wrong. Please try again.')
     } finally {
@@ -456,7 +456,7 @@ export const BookingDetail = () => {
     <>
       <div
         className="fixed inset-0 bg-black/50 z-40"
-        onClick={closeDetail}
+        onClick={requestCloseDetail}
         aria-hidden="true"
       />
       <div
@@ -479,7 +479,7 @@ export const BookingDetail = () => {
             </button>
             <button
               type="button"
-              onClick={closeDetail}
+              onClick={requestCloseDetail}
               className="p-1 text-slate-500 hover:text-slate-900 transition-all duration-200"
               aria-label="Close"
             >
@@ -890,6 +890,18 @@ export const BookingDetail = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={notePromptOpen}
+        title="Discard change note?"
+        message="You have an unsaved change note. If you leave now, it will be lost."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        confirmVariant="danger"
+        focusCancel
+        onConfirm={discardNote}
+        onCancel={keepNote}
+      />
 
       <ConfirmDialog
         isOpen={showCompleteConfirm}
