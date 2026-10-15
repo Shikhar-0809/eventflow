@@ -84,7 +84,7 @@ export const SignupScreen = ({ onShowLogin }) => {
     }
   }
 
-  const renderField = ({ name, label, type = 'text', autoComplete }) => (
+  const renderField = ({ name, label, type = 'text', autoComplete, toggleLabels }) => (
     <div>
       <label htmlFor={name} className="block text-sm font-medium text-slate-700 mb-1">
         {label}
@@ -97,6 +97,7 @@ export const SignupScreen = ({ onShowLogin }) => {
           onBlur={() => handleBlur(name)}
           className={inputClass(touched[name] && fieldErrors[name])}
           autoComplete={autoComplete}
+          {...toggleLabels}
         />
       ) : (
         <input
@@ -130,7 +131,7 @@ export const SignupScreen = ({ onShowLogin }) => {
           {renderField({ name: 'business_name', label: 'Business name', autoComplete: 'organization' })}
           {renderField({ name: 'email', label: 'Email', type: 'email', autoComplete: 'email' })}
           {renderField({ name: 'password', label: 'Password', type: 'password', autoComplete: 'new-password' })}
-          {renderField({ name: 'confirm_password', label: 'Confirm password', type: 'password', autoComplete: 'new-password' })}
+          {renderField({ name: 'confirm_password', label: 'Confirm password', type: 'password', autoComplete: 'new-password', toggleLabels: { showLabel: 'Show confirm password', hideLabel: 'Hide confirm password' } })}
 
           {error && (
             <p className="text-sm text-red-700 bg-red-100 border border-red-400 rounded-lg px-3 py-2">

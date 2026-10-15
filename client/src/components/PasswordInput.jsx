@@ -3,7 +3,12 @@ import { Eye, EyeOff } from 'lucide-react'
 
 // Password field with a show/hide toggle. The value stays in the parent's state; this component only
 // flips the input type. It goes back to hidden whenever the surrounding form is submitted.
-export const PasswordInput = ({ className = '', ...inputProps }) => {
+export const PasswordInput = ({
+  className = '',
+  showLabel = 'Show password',
+  hideLabel = 'Hide password',
+  ...inputProps
+}) => {
   const inputRef = useRef(null)
   const selectionRef = useRef(null)
   const [revealed, setRevealed] = useState(false)
@@ -49,7 +54,7 @@ export const PasswordInput = ({ className = '', ...inputProps }) => {
         onClick={toggle}
         // Keep focus (and the caret) in the field when the button is clicked with a mouse.
         onMouseDown={(e) => e.preventDefault()}
-        aria-label={revealed ? 'Hide password' : 'Show password'}
+        aria-label={revealed ? hideLabel : showLabel}
         aria-pressed={revealed}
         className="absolute inset-y-0 right-0 px-3 flex items-center rounded-r-lg text-slate-500 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 transition-all duration-200"
       >
