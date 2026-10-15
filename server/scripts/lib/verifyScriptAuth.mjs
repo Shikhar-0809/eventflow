@@ -1,30 +1,23 @@
-import { readFileSync, existsSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { DEMO_MERCHANTS, DEMO_PASSWORD } from '../../db/seedMerchants.js'
 
-const scriptsDir = dirname(fileURLToPath(import.meta.url))
 export const VERIFY_API_BASE = process.env.VERIFY_API_URL || 'http://127.0.0.1:3001/api'
-export const CREDENTIAL_PATH = join(scriptsDir, '..', '..', '.dev-login-credential')
+
+// Verify scripts log in as the first seeded demo merchant (db/seedMerchants.js) unless told otherwise.
+export const VERIFY_LOGIN_EMAIL = process.env.VERIFY_LOGIN_EMAIL || DEMO_MERCHANTS[0].email
 
 export const resolveVerifyPassword = () => {
   const flagIndex = process.argv.indexOf('--password')
   if (flagIndex !== -1 && process.argv[flagIndex + 1]) {
     return process.argv[flagIndex + 1]
   }
-  if (existsSync(CREDENTIAL_PATH)) {
-    return readFileSync(CREDENTIAL_PATH, 'utf8').trim()
-  }
-  console.error(
-    'Missing dev login credential: server/.dev-login-credential does not exist. There is no default password. Ask the owner to regenerate it (set-dev-merchant-hash.mjs) or pass --password <password>.',
-  )
-  process.exit(1)
+  return process.env.VERIFY_TEST_PASSWORD || DEMO_PASSWORD
 }
 
 export const loginVerifySession = async (password = resolveVerifyPassword()) => {
   const res = await fetch(`${VERIFY_API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ email: VERIFY_LOGIN_EMAIL, password }),
   })
   if (res.status !== 200) {
     throw new Error(`Login failed: ${res.status} ${await res.text()}`)

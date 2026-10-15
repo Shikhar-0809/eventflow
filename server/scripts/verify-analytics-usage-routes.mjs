@@ -3,7 +3,7 @@ import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
 import jwt from 'jsonwebtoken'
 import 'dotenv/config'
-import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = resolveVerifyPassword()
@@ -33,7 +33,7 @@ const request = async (path, { method = 'GET', body, cookie, headers = {} } = {}
 const cookieHeader = (setCookie) => setCookie.map((c) => c.split(';')[0]).join('; ')
 
 let cookie = ''
-const login = await request('/auth/login', { method: 'POST', body: { password: PASSWORD } })
+const login = await request('/auth/login', { method: 'POST', body: { email: VERIFY_LOGIN_EMAIL, password: PASSWORD } })
 if (login.status === 200) {
   cookie = cookieHeader(login.setCookie)
 } else {

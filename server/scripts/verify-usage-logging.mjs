@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { pool } from '../db/database.js'
-import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001/api'
 const PASSWORD = resolveVerifyPassword()
@@ -32,7 +32,7 @@ const cookieHeader = (setCookie) => setCookie.map((c) => c.split(';')[0]).join('
 
 const beforeCount = Number((await pool.query('SELECT COUNT(*) AS n FROM event_log')).rows[0].n)
 
-const login = await request('/auth/login', { method: 'POST', body: { password: PASSWORD } })
+const login = await request('/auth/login', { method: 'POST', body: { email: VERIFY_LOGIN_EMAIL, password: PASSWORD } })
 if (login.status !== 200) {
   console.error('Login failed', login.status, login.json)
   process.exit(1)

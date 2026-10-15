@@ -2,7 +2,7 @@ import {
   deleteBookingById,
   deleteInventoryItemById,
 } from './lib/verifyDbCleanup.mjs'
-import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://127.0.0.1:3001/api'
 const PASSWORD = resolveVerifyPassword()
@@ -13,7 +13,7 @@ const login = async () => {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: PASSWORD }),
+    body: JSON.stringify({ email: VERIFY_LOGIN_EMAIL, password: PASSWORD }),
   })
   if (res.status !== 200) throw new Error(`Login failed: ${res.status}`)
   return (res.headers.getSetCookie?.() ?? []).map((r) => r.split(';')[0]).join('; ')

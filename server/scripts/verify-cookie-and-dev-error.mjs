@@ -1,11 +1,11 @@
-import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 const BASE = 'http://localhost:3001'
 const PASSWORD = resolveVerifyPassword()
 
 const login = await fetch(`${BASE}/api/auth/login`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ password: PASSWORD }),
+  body: JSON.stringify({ email: VERIFY_LOGIN_EMAIL, password: PASSWORD }),
 })
 
 const cookies = login.headers.getSetCookie()

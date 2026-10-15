@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
-import { resolveVerifyPassword } from './verifyScriptAuth.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './verifyScriptAuth.mjs'
 
 const scriptsDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 export const VERIFY_SESSION_CACHE_PATH = join(scriptsDir, '.verify-session-cache.json')
@@ -62,7 +62,7 @@ const loginFresh = async () => {
   const loginRes = await fetch(`${VERIFY_API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: VERIFY_TEST_PASSWORD }),
+    body: JSON.stringify({ email: VERIFY_LOGIN_EMAIL, password: VERIFY_TEST_PASSWORD }),
   })
   if (loginRes.status !== 200) {
     throw new Error(`Verify login failed: ${loginRes.status} ${await loginRes.text()}`)

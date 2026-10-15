@@ -1,7 +1,7 @@
 // RUN THIS LAST. It deliberately exhausts the login rate limiter, so every login-dependent script that runs after
 // it against the same server session fails with 429. Run it on its own fresh server, after all the others.
-// The password comes from server/.dev-login-credential (or --password), never from this file.
-import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+// Logs in as the seeded demo merchant (db/seedMerchants.js); override with VERIFY_LOGIN_EMAIL / VERIFY_TEST_PASSWORD / --password.
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 
 const BASE = 'http://localhost:3001'
 const COOKIE_NAME = 'eventflow_session'
@@ -43,7 +43,7 @@ const request = async (method, path, { body, cookie, headers = {} } = {}) => {
 
 const run = async () => {
   // 1. Correct login
-  const loginOk = await request('POST', '/api/auth/login', { body: { password: PASSWORD } })
+  const loginOk = await request('POST', '/api/auth/login', { body: { email: VERIFY_LOGIN_EMAIL, password: PASSWORD } })
   const hasSetCookie = loginOk.setCookie.some((c) => c.startsWith(`${COOKIE_NAME}=`))
   const sessionToken = loginOk.setCookie
     .find((c) => c.startsWith(`${COOKIE_NAME}=`))
@@ -60,11 +60,11 @@ const run = async () => {
   )
 
   // 2. Wrong password
-  const loginBad = await request('POST', '/api/auth/login', { body: { password: 'wrong' } })
+  const loginBad = await request('POST', '/api/auth/login', { body: { email: VERIFY_LOGIN_EMAIL, password: 'wrong' } })
   record(
     2,
     'POST /api/auth/login wrong password → 401 exact message',
-    loginBad.status === 401 && loginBad.json?.error === 'Incorrect password.',
+    loginBad.status === 401 && loginBad.json?.error === 'Incorrect email or password.',
     `status=${loginBad.status}, body=${JSON.stringify(loginBad.json)}`,
   )
 
@@ -97,9 +97,9 @@ const run = async () => {
 
   // 10. Rate limiter — 4 more wrong attempts (already did 1 wrong in step 2) = 5 total, then 6th should 429
   for (let i = 0; i < 4; i++) {
-    await request('POST', '/api/auth/login', { body: { password: 'wrong' } })
+    await request('POST', '/api/auth/login', { body: { email: VERIFY_LOGIN_EMAIL, password: 'wrong' } })
   }
-  const rateLimited = await request('POST', '/api/auth/login', { body: { password: 'wrong' } })
+  const rateLimited = await request('POST', '/api/auth/login', { body: { email: VERIFY_LOGIN_EMAIL, password: 'wrong' } })
   record(
     10,
     'loginRateLimiter 6th failed attempt → 429 exact message',

@@ -3,7 +3,7 @@ import './lib/refuseProductionDatabase.mjs'
 import express from 'express'
 import { pool } from '../db/database.js'
 import { trackUsage } from '../middleware/trackUsage.js'
-import { resolveVerifyPassword } from './lib/verifyScriptAuth.mjs'
+import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 
 // trackUsage needs req.merchantId (normally set by requireAuth). These probe apps skip requireAuth, so they
 // act as the dev merchant, looked up by name, never by a hardcoded id.
@@ -158,7 +158,7 @@ const results = {}
 const loginFailBefore = await countByType('login')
 const bookingCreatedBefore = await countByType('booking_created')
 
-const badLogin = await request('/auth/login', { method: 'POST', body: { password: 'definitely-wrong-password' } })
+const badLogin = await request('/auth/login', { method: 'POST', body: { email: VERIFY_LOGIN_EMAIL, password: 'definitely-wrong-password' } })
 const loginFailAfter = await countByType('login')
 
 results.check5_badLogin = {
@@ -167,9 +167,9 @@ results.check5_badLogin = {
   pass: badLogin.status === 401 && loginFailAfter === loginFailBefore,
 }
 
-const login = await request('/auth/login', { method: 'POST', body: { password: PASSWORD } })
+const login = await request('/auth/login', { method: 'POST', body: { email: VERIFY_LOGIN_EMAIL, password: PASSWORD } })
 if (login.status !== 200) {
-  console.error('BLOCKED: login failed — check server/.dev-login-credential matches the password hash the server uses')
+  console.error('BLOCKED: login failed — check the demo merchant has been seeded (server start) and VERIFY_TEST_PASSWORD, if set, is right')
   process.exit(2)
 }
 const cookie = cookieHeader(login.setCookie)
