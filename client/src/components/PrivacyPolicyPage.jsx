@@ -59,7 +59,7 @@ export const PrivacyPolicyPage = () => {
             kept, and what you can ask us to do with it.
           </p>
 
-          <Section id="who" title="1. Who we are">
+          <Section id="who" title="1. About this policy">
             <p>
               This policy explains how EventFlow handles data. If you have questions or requests about
               your data, contact us at <ContactEmail />.
