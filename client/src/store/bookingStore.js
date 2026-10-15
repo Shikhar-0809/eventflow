@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { api } from '../utils/api'
 import {
   confirmDiscard,
-  DISCARD_BOOKING_MESSAGE,
   DISCARD_CHANGE_NOTE_MESSAGE,
 } from '../utils/discardConfirm.js'
 
@@ -14,6 +13,17 @@ const closePanelsState = {
   modalMode: 'create',
   modalFormDirty: false,
   detailNoteDirty: false,
+  discardPromptOpen: false,
+  pendingView: null,
+}
+
+const closeModalState = {
+  isModalOpen: false,
+  prefillDate: null,
+  modalMode: 'create',
+  modalFormDirty: false,
+  discardPromptOpen: false,
+  pendingView: null,
 }
 
 export const useBookingStore = create((set, get) => ({
@@ -26,6 +36,8 @@ export const useBookingStore = create((set, get) => ({
   activeView: 'calendar',
   modalFormDirty: false,
   detailNoteDirty: false,
+  discardPromptOpen: false,
+  pendingView: null,
 
   postSaveConflictNotice: null,
 
@@ -48,7 +60,8 @@ export const useBookingStore = create((set, get) => ({
   setSelectedBooking: (booking) => set({ selectedBooking: booking, isDetailOpen: true }),
   setActiveView: (activeView) => {
     const state = get()
-    if (state.isModalOpen && state.modalFormDirty && !confirmDiscard(DISCARD_BOOKING_MESSAGE)) {
+    if (state.isModalOpen && state.modalFormDirty) {
+      set({ discardPromptOpen: true, pendingView: activeView })
       return
     }
     if (state.isDetailOpen && state.detailNoteDirty && !confirmDiscard(DISCARD_CHANGE_NOTE_MESSAGE)) {
@@ -68,12 +81,21 @@ export const useBookingStore = create((set, get) => ({
       modalFormDirty: false,
     })
   },
-  closeModal: () => {
-    const state = get()
-    if (state.modalFormDirty && !confirmDiscard(DISCARD_BOOKING_MESSAGE)) {
+  // Unconditional close: use after a successful save or when the form cannot render its own dialog.
+  forceCloseModal: () => set(closeModalState),
+  // Guarded close (X button, Escape): asks first only when the form has unsaved changes.
+  requestCloseModal: () => {
+    if (!get().modalFormDirty) {
+      set(closeModalState)
       return
     }
-    set({ isModalOpen: false, prefillDate: null, modalMode: 'create', modalFormDirty: false })
+    set({ discardPromptOpen: true, pendingView: null })
+  },
+  keepEditing: () => set({ discardPromptOpen: false, pendingView: null }),
+  discardChanges: () => {
+    const { pendingView } = get()
+    set(closeModalState)
+    if (pendingView) get().setActiveView(pendingView)
   },
   closeDetail: () => {
     const state = get()

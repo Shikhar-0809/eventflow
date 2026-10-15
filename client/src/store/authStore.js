@@ -17,6 +17,8 @@ const clearMerchantData = () => {
     activeView: 'calendar',
     modalFormDirty: false,
     detailNoteDirty: false,
+    discardPromptOpen: false,
+    pendingView: null,
     postSaveConflictNotice: null,
   })
   useInventoryStore.setState({ items: [] })

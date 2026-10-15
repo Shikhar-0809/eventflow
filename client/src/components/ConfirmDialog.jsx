@@ -9,6 +9,7 @@ export const ConfirmDialog = ({
   confirmLabel,
   cancelLabel,
   confirmVariant = 'default',
+  focusCancel = false,
   confirmingLabel = 'Saving...',
   isConfirming = false,
   onConfirm,
@@ -61,6 +62,7 @@ export const ConfirmDialog = ({
               onCancel()
             }}
             disabled={isConfirming}
+            autoFocus={focusCancel}
             className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all duration-200 disabled:opacity-50"
           >
             {resolvedCancelLabel}

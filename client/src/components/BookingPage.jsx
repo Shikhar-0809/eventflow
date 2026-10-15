@@ -168,7 +168,11 @@ export const BookingPageContent = () => {
     prefillDate,
     modalMode,
     selectedBooking,
-    closeModal,
+    forceCloseModal,
+    requestCloseModal,
+    discardPromptOpen,
+    keepEditing,
+    discardChanges,
     addBooking,
     updateBooking,
     setModalFormDirty,
@@ -682,6 +686,26 @@ export const BookingPageContent = () => {
 
   const hasConflict = conflictBooking !== null
 
+  const handleRequestClose = () => {
+    if (isSubmitting || showConfirmDialog) return
+    requestCloseModal()
+  }
+
+  useEffect(() => {
+    if (!isModalOpen) return undefined
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      if (discardPromptOpen) {
+        keepEditing()
+        return
+      }
+      if (showConfirmDialog || isSubmitting) return
+      requestCloseModal()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isModalOpen, discardPromptOpen, showConfirmDialog, isSubmitting, keepEditing, requestCloseModal])
+
   const submitBooking = useCallback(async () => {
     if (submittingRef.current) return
 
@@ -711,11 +735,11 @@ export const BookingPageContent = () => {
       }
 
       setShowConfirmDialog(false)
-      closeModal()
+      forceCloseModal()
     } catch (err) {
       if (err.status === 401) {
         useAuthStore.setState({ isAuthenticated: false, isLoading: false })
-        closeModal()
+        forceCloseModal()
         return
       }
       if (err.status === 400) {
@@ -730,7 +754,7 @@ export const BookingPageContent = () => {
   }, [
     addBooking,
     resolvedBilling,
-    closeModal,
+    forceCloseModal,
     conflictBooking,
     form,
     isEditMode,
@@ -971,7 +995,7 @@ export const BookingPageContent = () => {
         </p>
         <button
           type="button"
-          onClick={closeModal}
+          onClick={requestCloseModal}
           className="mt-4 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-all duration-200"
         >
           Close
@@ -995,7 +1019,7 @@ export const BookingPageContent = () => {
           </h1>
           <button
             type="button"
-            onClick={closeModal}
+            onClick={handleRequestClose}
             className="p-1 text-slate-500 hover:text-slate-800 transition-all duration-200"
             aria-label="Close"
           >
@@ -1254,6 +1278,18 @@ export const BookingPageContent = () => {
         onConfirm={submitBooking}
         onCancel={() => setShowConfirmDialog(false)}
       />
+
+      <ConfirmDialog
+        isOpen={discardPromptOpen && !showConfirmDialog && !isSubmitting}
+        title="Discard changes?"
+        message="You have unsaved changes to this booking. If you leave now, they'll be lost."
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        confirmVariant="danger"
+        focusCancel
+        onConfirm={discardChanges}
+        onCancel={keepEditing}
+      />
     </>
   )
 }
@@ -1297,10 +1333,10 @@ class BookingPageErrorBoundary extends Component {
 }
 
 export const BookingPage = () => {
-  const { isModalOpen, closeModal } = useBookingStore()
+  const { isModalOpen, forceCloseModal } = useBookingStore()
 
   return (
-    <BookingPageErrorBoundary isOpen={isModalOpen} onClose={closeModal}>
+    <BookingPageErrorBoundary isOpen={isModalOpen} onClose={forceCloseModal}>
       <BookingPageContent />
     </BookingPageErrorBoundary>
   )
