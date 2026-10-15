@@ -1,6 +1,8 @@
+import bcrypt from 'bcryptjs'
 import { pool } from './database.js'
-import { PRIMARY_MERCHANT_ID } from './seedMerchants.js'
+import { DEMO_MERCHANTS, DEMO_PASSWORD, PRIMARY_MERCHANT_ID } from './seedMerchants.js'
 import { seedDevMerchant } from './devMerchantSeed.js'
+import { refreshRecentActivity } from './demoActivitySeed.js'
 import { seedAnalyticsHistory } from './analyticsHistorySeed.js'
 import { seedDemoAnalytics } from './demoAnalyticsSeed.js'
 import {
@@ -125,6 +127,25 @@ const seedInventory = async (merchantId) => {
   }
 }
 
+// Gives each demo merchant a login. Only fills merchants that have no credentials yet, so a password
+// changed later (or an account that signed up first) is never overwritten.
+const seedDemoCredentials = async () => {
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10)
+  for (const demo of DEMO_MERCHANTS) {
+    try {
+      const { rowCount } = await pool.query(
+        `UPDATE merchants SET email = $1, password_hash = $2
+         WHERE business_name = $3 AND email IS NULL AND password_hash IS NULL`,
+        [demo.email, passwordHash, demo.business_name],
+      )
+      if (rowCount > 0) console.log(`Seeded demo login for ${demo.business_name}`)
+    } catch (err) {
+      if (err.code !== '23505') throw err
+      console.log(`Demo login skipped for ${demo.business_name}: email already taken`)
+    }
+  }
+}
+
 export const seed = async () => {
   if (process.env.NODE_ENV === 'production') {
     console.log('Seed skipped: NODE_ENV is production. Demo seed data will not run.')
@@ -185,4 +206,14 @@ export const seed = async () => {
 
   // A second dev-only merchant so cross-merchant leaks show up locally.
   await seedDevMerchant(pool)
+
+  await seedDemoCredentials()
+
+  // A week of recent activity for every demo merchant, so "My Activity" is never empty in a demo.
+  const { rows: demoRows } = await pool.query('SELECT id FROM merchants WHERE business_name = ANY($1)', [
+    DEMO_MERCHANTS.map((m) => m.business_name),
+  ])
+  for (const row of demoRows) {
+    await refreshRecentActivity(pool, row.id)
+  }
 }

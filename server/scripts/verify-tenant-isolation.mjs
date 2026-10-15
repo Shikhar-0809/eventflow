@@ -17,7 +17,7 @@ assertConfirmedDatabaseHost()
 const { pool } = await import('../db/database.js')
 
 const NAME_A = 'Bala Ji Tent House'
-const NAME_B = 'Test Tent Co'
+const NAME_B = 'Shree Ganesh Caterers'
 const LABEL = 'ISOLATION-FIXTURE'
 const PORT = Number(process.env.ISOLATION_PORT) || 3007
 const BASE = `http://127.0.0.1:${PORT}/api`
