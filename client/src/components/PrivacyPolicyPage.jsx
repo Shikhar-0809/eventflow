@@ -61,7 +61,8 @@ export const PrivacyPolicyPage = () => {
 
           <Section id="who" title="1. Who we are">
             <p>
-              EventFlow is operated by EventFlow. You can reach us at <ContactEmail />.
+              This policy explains how EventFlow handles data. If you have questions or requests about
+              your data, contact us at <ContactEmail />.
             </p>
           </Section>
 
