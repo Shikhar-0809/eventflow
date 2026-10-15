@@ -41,7 +41,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [logoutError, setLogoutError] = useState(null)
   const [pendingBalanceCount, setPendingBalanceCount] = useState(null)
-  const { logout } = useAuthStore()
+  const { logout, businessName } = useAuthStore()
   const { activeView, setActiveView, bookings } = useBookingStore()
   const { monthlyRevenueTarget, loadSettings } = useSettingsStore()
 
@@ -137,7 +137,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
       <div className="shrink-0 px-4 py-5 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <Tent className="w-5 h-5 text-teal-400 shrink-0" />
-          <h1 className="text-white font-bold text-sm leading-tight">Bala Ji Tent House</h1>
+          <h1 className="text-white font-bold text-sm leading-tight">{businessName || 'EventFlow'}</h1>
         </div>
       </div>
 

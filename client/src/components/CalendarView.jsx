@@ -32,11 +32,10 @@ const eventTypeLabel = (booking) =>
 
 const pad = (n) => String(n).padStart(2, '0')
 
-const getGreeting = () => {
+const getGreeting = (businessName) => {
   const hour = new Date().getHours()
-  if (hour < 12) return 'Good morning, Bharat!'
-  if (hour < 17) return 'Good afternoon, Bharat!'
-  return 'Good evening, Bharat!'
+  const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
+  return businessName ? `Good ${timeOfDay}, ${businessName}!` : `Good ${timeOfDay}!`
 }
 
 const getMondaySundayWeek = () => {
@@ -147,6 +146,7 @@ export const CalendarView = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const { bookings, setBookings, setSelectedBooking, openModal, postSaveConflictNotice, clearPostSaveConflictNotice } = useBookingStore()
+  const businessName = useAuthStore((state) => state.businessName)
 
   useEffect(() => {
     if (searchQuery === '') {
@@ -296,7 +296,7 @@ export const CalendarView = () => {
               </button>
               <div className="flex items-center gap-2 pr-6">
                 <Sparkles className="w-5 h-5 text-teal-500 shrink-0" aria-hidden="true" />
-                <p className="text-slate-800 font-semibold">{getGreeting()}</p>
+                <p className="text-slate-800 font-semibold">{getGreeting(businessName)}</p>
               </div>
               <ul className="mt-2 space-y-1 pl-7">
                 {briefingLines.map((line) => (

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Menu, RefreshCw } from 'lucide-react'
 import { useAuthStore } from './store/authStore'
 import { LoginScreen } from './components/LoginScreen'
+import { SignupScreen } from './components/SignupScreen'
 import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
@@ -14,13 +15,19 @@ import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
 
 export default function App() {
-  const { isAuthenticated, isLoading, connectionError, checkAuth } = useAuthStore()
+  const { isAuthenticated, isLoading, connectionError, businessName, checkAuth } = useAuthStore()
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [authScreen, setAuthScreen] = useState('login')
 
   useEffect(() => {
     checkAuth()
   }, [checkAuth])
+
+  // After signing up and logging out, return to the login screen, not the sign-up form.
+  useEffect(() => {
+    if (isAuthenticated) setAuthScreen('login')
+  }, [isAuthenticated])
 
   useEffect(() => {
     if (connectionError) {
@@ -31,8 +38,8 @@ export default function App() {
       document.title = 'EventFlow'
       return
     }
-    document.title = 'EventFlow — Bala Ji Tent House'
-  }, [isAuthenticated, connectionError])
+    document.title = businessName ? `EventFlow — ${businessName}` : 'EventFlow'
+  }, [isAuthenticated, connectionError, businessName])
 
   if (isLoading) {
     return (
@@ -61,7 +68,9 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginScreen />
+    return authScreen === 'signup'
+      ? <SignupScreen onShowLogin={() => setAuthScreen('login')} />
+      : <LoginScreen onShowSignup={() => setAuthScreen('signup')} />
   }
 
   return (
@@ -88,7 +97,7 @@ export default function App() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-white font-bold text-sm">Bala Ji Tent House</span>
+            <span className="text-white font-bold text-sm">{businessName || 'EventFlow'}</span>
           </header>
 
           <main className="flex-1 min-h-0 overflow-auto bg-slate-50 min-w-0">
