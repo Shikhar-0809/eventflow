@@ -12,3 +12,6 @@ dist/
 STATE_REPORT.md
 
 server/.verify-cookies.txt
+
+# One-off local scripts that handle credentials; never committed
+*.local.mjs
