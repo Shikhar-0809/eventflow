@@ -3,6 +3,7 @@ import { Menu, RefreshCw } from 'lucide-react'
 import { useAuthStore } from './store/authStore'
 import { LoginScreen } from './components/LoginScreen'
 import { SignupScreen } from './components/SignupScreen'
+import { PrivacyPolicyPage, PRIVACY_POLICY_PATH } from './components/PrivacyPolicyPage'
 import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
 import { AnalyticsView } from './components/AnalyticsView'
@@ -14,7 +15,11 @@ import { BookingPage } from './components/BookingPage'
 import { BookingDetail } from './components/BookingDetail'
 import { useBookingStore } from './store/bookingStore'
 
+// The privacy policy is public: it renders without waiting for (or needing) a login or the API.
+const isPrivacyPolicyRoute = () => window.location.pathname.replace(/\/+$/, '') === PRIVACY_POLICY_PATH
+
 export default function App() {
+  const showPrivacyPolicy = isPrivacyPolicyRoute()
   const { isAuthenticated, isLoading, connectionError, businessName, checkAuth } = useAuthStore()
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -30,6 +35,7 @@ export default function App() {
   }, [isAuthenticated])
 
   useEffect(() => {
+    if (showPrivacyPolicy) return
     if (connectionError) {
       document.title = 'EventFlow'
       return
@@ -39,7 +45,9 @@ export default function App() {
       return
     }
     document.title = businessName ? `EventFlow — ${businessName}` : 'EventFlow'
-  }, [isAuthenticated, connectionError, businessName])
+  }, [isAuthenticated, connectionError, businessName, showPrivacyPolicy])
+
+  if (showPrivacyPolicy) return <PrivacyPolicyPage />
 
   if (isLoading) {
     return (

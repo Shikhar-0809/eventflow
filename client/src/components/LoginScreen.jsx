@@ -138,6 +138,17 @@ export const LoginScreen = ({ onShowSignup }) => {
             Sign up
           </button>
         </p>
+
+        <p className="mt-6 text-center text-sm text-slate-500">
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
+          >
+            Privacy Policy
+          </a>
+        </p>
       </div>
     </div>
   )

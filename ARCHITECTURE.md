@@ -73,6 +73,8 @@ eventflow/
 │       │   ├── PendingBalancesView.jsx
 │       │   ├── RecordsView.jsx            # Filterable records + Excel export
 │       │   ├── SignupScreen.jsx           # Business name, email, password, confirm; validates on blur
+│       │   ├── PasswordInput.jsx          # Password field with show/hide toggle (login, sign-up)
+│       │   ├── PrivacyPolicyPage.jsx      # Public policy at /privacy, rendered by App.jsx before the auth gate
 │       │   ├── Sidebar.jsx
 │       │   └── UsageView.jsx
 │       ├── schemas/

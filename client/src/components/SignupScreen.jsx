@@ -139,6 +139,19 @@ export const SignupScreen = ({ onShowLogin }) => {
             </p>
           )}
 
+          <p className="text-xs text-slate-500">
+            By creating an account you agree to our{' '}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
+
           <button
             type="submit"
             disabled={isSubmitDisabled}
@@ -161,6 +174,17 @@ export const SignupScreen = ({ onShowLogin }) => {
           >
             Log in
           </button>
+        </p>
+
+        <p className="mt-6 text-center text-sm text-slate-500">
+          <a
+            href="/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
+          >
+            Privacy Policy
+          </a>
         </p>
       </div>
     </div>
