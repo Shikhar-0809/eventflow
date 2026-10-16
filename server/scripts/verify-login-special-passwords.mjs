@@ -8,6 +8,7 @@
  * Requires: dev API on :3001 (npm run dev), playwright (root devDependency).
  * Run from server/: node scripts/verify-login-special-passwords.mjs --confirm-host=<dev db host>
  */
+import './lib/guardFirst.mjs'
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { spawnSync } from 'node:child_process'
@@ -17,11 +18,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { pool } from '../db/database.js'
-import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 import { deleteOtpsFor, plantSignupOtp } from './lib/devOtp.mjs'
 import { startProdLikeProxy } from './lib/prodLikeProxy.mjs'
 
-assertConfirmedDatabaseHost()
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '../..')

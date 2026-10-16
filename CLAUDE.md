@@ -27,6 +27,9 @@ If code and these docs disagree, say so — don't silently pick one.
 - Never `git push` without asking me first. Never rewrite git history.
 - Every SQL query uses `$1`-style parameters. Multi-table writes run in a transaction (BEGIN/COMMIT/ROLLBACK, `client.release()` in `finally`).
 - Every route has `requireAuth` except `GET /api/health`, `POST /api/auth/login` and the public sign-up / password-reset routes (`POST /api/auth/signup`, `/signup/send-otp`, `/signup/resend-otp`, `/signup/verify-otp`, `/forgot/send-otp`, `/forgot/resend-otp`, `/forgot/verify-otp`, `/forgot/reset`). Those are public, rate limited and validated, and never reveal whether an email has an account (sign-up's 409 is the one accepted exception, BUGS #073). Validation (zod) runs server-side before any DB call.
+- `bumpTokenVersion(client, merchantId)` (`server/services/session.js`) is the only way a logged-in route bumps `merchants.token_version`: bump inside the transaction, issue the cookie (`issueSession`, same flags as login) only after COMMIT; never touch `res` inside a transaction. The one exception is `POST /api/auth/forgot/reset`, which has no session to keep.
+- `sign_in_log` holds a coarse device label ("Chrome on Android") and a timestamp, newest 10 per merchant. It never holds an IP address or the full user agent, and no log line may either.
+- The delete-account table list in `server/routes/profile.js` (`DELETE /api/profile`) is written out by hand, children before parents. Whenever a table with a `merchant_id` column is added, add it there in FK-safe order in the same commit (`scripts/verify-profile-api.mjs` fails if one is missing).
 - Product rule: conflicts and shortfalls alert, they don't block. Date conflicts never disable submit; inventory shortfalls require an explicit confirm-anyway step.
 
 ## Workflow

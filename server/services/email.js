@@ -1,3 +1,5 @@
+import { maskEmail } from '../utils/maskEmail.js'
+
 const BREVO_URL = 'https://api.brevo.com/v3/smtp/email'
 const TIMEOUT_MS = 10_000
 
@@ -68,18 +70,39 @@ export const signupCodeEmail = (code) =>
 export const resetCodeEmail = (code) =>
   codeEmail('Your EventFlow password reset code', 'Use this code to reset your EventFlow password.', code)
 
+// Sent to the stored address when a logged-in merchant resets their password with a code.
+export const resetPasswordCodeEmail = (code) =>
+  codeEmail('Your EventFlow password reset code', 'Use this code to set a new password for your EventFlow account.', code)
+
 // Sent to the NEW address, to prove the merchant controls it.
 export const changeEmailCodeEmail = (code) =>
   codeEmail('Confirm your new EventFlow email', 'Use this code to confirm this address as your new EventFlow login email.', code)
 
-// Sent to the OLD address after the change, so a hijack is noticed.
-export const emailChangedNoticeEmail = () => {
-  const app = appLine()
-  const line = 'The login email for your EventFlow account was just changed.'
-  const warn = "If you didn't make this change, contact support right away."
-  return {
+const NOTICES = {
+  password_changed: {
+    subject: 'Your EventFlow password was changed',
+    line: () => 'The password for your EventFlow account was just changed, and every other device was signed out.',
+    warn: "If you didn't make this change, reset your password and contact support.",
+  },
+  email_changed: {
     subject: 'Your EventFlow email was changed',
-    text: [line, warn, app].filter(Boolean).join('\n\n'),
-    html: `<p>${line}</p><p>${warn}</p>${app ? `<p><a href="${app}">${app}</a></p>` : ''}`,
-  }
+    line: ({ newEmail }) => `The login email for your EventFlow account was just changed to ${maskEmail(newEmail)}.`,
+    warn: "If this wasn't you, reset your password and contact support.",
+  },
+  account_deleted: {
+    subject: 'Your EventFlow account was deleted',
+    line: () => 'Your EventFlow account and all of its data were just deleted.',
+    warn: "If you didn't do this, contact support right away.",
+  },
 }
+
+// Plain-text security notice, sent to the address on file. No links that perform an action (the app address, if set,
+// is text only). Any other address in the body is masked. details for email_changed: { newEmail }.
+export const securityNoticeEmail = (kind, details = {}) => {
+  const notice = NOTICES[kind]
+  if (!notice) throw new Error(`Unknown security notice: ${kind}`)
+  const text = [notice.line(details), notice.warn, appLine()].filter(Boolean).join('\n\n')
+  return { subject: notice.subject, text }
+}
+
+export const sendSecurityNotice = (email, kind, details) => sendEmail({ to: email, ...securityNoticeEmail(kind, details) })

@@ -9,6 +9,7 @@
  * as this script (the server and the script load the same environment), plus playwright.
  * Run from server/: node scripts/verify-otp-ui.mjs --confirm-host=<dev db host>
  */
+import './lib/guardFirst.mjs'
 import 'dotenv/config'
 import './lib/refuseProductionDatabase.mjs'
 import { spawnSync } from 'node:child_process'
@@ -19,11 +20,9 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { pool } from '../db/database.js'
 import { hashOtpCode } from '../services/otp.js'
-import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 import { plantSignupOtp } from './lib/devOtp.mjs'
 import { startProdLikeProxy } from './lib/prodLikeProxy.mjs'
 
-assertConfirmedDatabaseHost()
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '../..')

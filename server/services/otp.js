@@ -23,7 +23,7 @@ export const deleteOldOtps = () => pool.query("DELETE FROM email_otps WHERE crea
 
 // Returns the plaintext code ONLY so the caller can pass it to sendEmail. It is never logged or put in a response.
 // Throws an error with status 429 and retryAfter (seconds) while a recent code is still within the resend cooldown.
-export const issueOtp = async ({ email, purpose, merchantId = null }) => {
+export const issueOtp = async ({ email, purpose, merchantId = null, dailyLimit = DAILY_CODE_LIMIT }) => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
@@ -39,7 +39,7 @@ export const issueOtp = async ({ email, purpose, merchantId = null }) => {
         WHERE email = $1 AND purpose = $2 AND created_at > NOW() - INTERVAL '24 hours'`,
       [email, purpose],
     )
-    if (daily[0].sent >= DAILY_CODE_LIMIT) {
+    if (daily[0].sent >= dailyLimit) {
       const err = new Error('Too many codes requested for this email. Please try again tomorrow.')
       err.status = 429
       err.retryAfter = Math.max(1, daily[0].retry_after)

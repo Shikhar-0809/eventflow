@@ -57,6 +57,18 @@ Given the timeline, this is **not** asking you to write a full automated test su
 - [ ] Daily cap: request a sixth code for the same email within 24 hours (clear the 60 s cooldown between requests, or use different networks); Sign up shows "Too many codes requested for this email. Please try again tomorrow.", Forgot password still shows the generic message and no sixth email arrives
 - [ ] Layout: the three steps of both flows at 375px and 1280px have no horizontal scroll and the six boxes fit on one row
 
+### Merchant profile API (`/api/profile`)
+Automated: `node scripts/verify-profile-api.mjs` from `server/` (dev database only; it starts its own server on port 3057 with `EMAIL_DEV_LOG=true`, seeds fictional `@profile-verify.test` merchants and removes them). 88 checks:
+- [ ] Every route rejects no session (401); an action token (with `aud`) is not a session
+- [ ] `GET /profile` is scoped: merchant A and B see only their own counts; email masked; no ids or hashes
+- [ ] `PATCH /business` validates (name 2-100, `whatsapp_phone` Indian mobile), trims, keeps or clears the phone
+- [ ] Wrong `current_password` -> 401 "Incorrect password." on password, email/send and delete; the 6th attempt -> 429 (even with the right password); another merchant is unaffected
+- [ ] Password change: other-device cookie 401, this device's new cookie 200, old cookie 401, login works with the new password only, notice sent with no code or link
+- [ ] Logout-others and in-session reset-by-code: same session checks; the code goes only to the stored address, never to an address in the body; single use
+- [ ] Change email: a taken address gets the same generic 200 and sends no email; the current address -> 400; verify swaps the email, kills other sessions, notifies the OLD address with the new one masked; a race on the unique index -> 409; the daily cap of 3 holds
+- [ ] Commit failure (a deferred DB trigger makes COMMIT fail after the token bump): `/password` and `/email/verify` return 500 with no `Set-Cookie`, and `token_version`, password and email are unchanged
+- [ ] Delete: zero rows left for the deleted merchant in every listed table, the other merchant fully intact, session cookie cleared, no `account_deleted` event row; schema guard fails if a merchant-scoped table is missing from the list
+- [ ] `sign_in_log` never exceeds 10 rows per merchant after 13 logins; labels are coarse; no IP or UA column; a failing write never breaks login
 ### Rebrand check
 - [ ] Sidebar shows "Bala Ji Tent House", not "Sharma Tent House" or "EventFlow"
 - [ ] Browser tab title reads "EventFlow — Bala Ji Tent House"
@@ -78,6 +90,7 @@ Given the timeline, this is **not** asking you to write a full automated test su
 - [ ] Confirm a logged-out session can't see any booking or inventory data, even by guessing API URLs
 - [ ] Confirm HTTPS is active, no browser security warnings
 - [ ] **Tenant isolation:** `cd server && npm run verify:isolation -- --confirm-host=<dev host>` passes on the dev database (all PASS, exit 0). It boots its own server (port 3007; override with the `ISOLATION_PORT` env var), creates labelled `ISOLATION-FIXTURE` rows and removes them again; if a run is killed, the next run removes the leftovers first. It never runs against production: use it on dev before every deploy, and confirm on the live site that a logged-in merchant sees only their own bookings
+- [ ] **`--confirm-host` guard:** `cd server && node scripts/verify-confirm-host-guard.mjs` passes (26/26, exit 0). It needs no database: it runs every guarded script with a wrong host against a local listener and asserts refusal and zero connection attempts (BUGS #084).
 - [ ] Test the full flow on the merchant's actual phone if possible, before calling it "deployed"
 
 ---

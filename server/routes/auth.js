@@ -1,6 +1,5 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import { pool } from '../db/database.js'
 import {
   loginIpBackstopLimiter,
@@ -15,6 +14,8 @@ import { trackUsage } from '../middleware/trackUsage.js'
 import { validate } from '../middleware/validate.js'
 import { loginSchema, resetPasswordSchema, sendOtpSchema, signupSchema, verifyOtpSchema } from '../schemas/merchant.schema.js'
 import { resetCodeEmail, sendEmail, signupCodeEmail } from '../services/email.js'
+import { clearSession, issueSession } from '../services/session.js'
+import { recordSignIn } from '../services/signInLog.js'
 import {
   INVALID_CODE_MESSAGE,
   OTP_COOLDOWN_SECONDS,
@@ -35,26 +36,6 @@ const SIGNUP_EXISTS = 'An account with this email already exists. Try logging in
 const FORGOT_MESSAGE = "If an account exists for this email, we've sent a code."
 const TOKEN_INVALID = 'Your verification has expired. Please verify your email again.'
 const RESET_EXPIRED = 'This reset link has expired. Please request a new code.'
-
-const sessionCookieOptions = (isProd) => ({
-  httpOnly: true,
-  secure: isProd,
-  sameSite: 'lax',
-  path: '/',
-})
-
-const issueSession = (res, merchantId, tokenVersion) => {
-  // tv ties the session to merchants.token_version: a password reset bumps it and ends every older session.
-  const token = jwt.sign({ merchant_id: merchantId, tv: tokenVersion }, process.env.JWT_SECRET, {
-    algorithm: 'HS256',
-    expiresIn: '7d',
-  })
-
-  res.cookie(process.env.SESSION_COOKIE_NAME, token, {
-    ...sessionCookieOptions(process.env.NODE_ENV === 'production'),
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  })
-}
 
 // A resend that comes too soon is a 429 with the seconds left; anything else goes to the error handler.
 const sendRetryAfter = (err, res) => {
@@ -174,6 +155,7 @@ router.post('/signup', signupRateLimiter, validate(signupSchema), trackUsage('si
 
     res.locals.merchantId = merchant.id
     issueSession(res, merchant.id, merchant.token_version)
+    recordSignIn(merchant.id, req.get('user-agent'))
     res.status(201).json({ authenticated: true, merchant: { business_name: merchant.business_name } })
   } catch (err) {
     next(err)
@@ -260,6 +242,7 @@ router.post('/login', loginIpBackstopLimiter, loginRateLimiter, validate(loginSc
     res.locals.merchantId = merchant.id
 
     issueSession(res, merchant.id, merchant.token_version)
+    recordSignIn(merchant.id, req.get('user-agent'))
     res.status(200).json({ authenticated: true, merchant: { business_name: merchant.business_name } })
   } catch (err) {
     next(err)
@@ -267,10 +250,7 @@ router.post('/login', loginIpBackstopLimiter, loginRateLimiter, validate(loginSc
 })
 
 router.post('/logout', requireAuth, (req, res) => {
-  res.clearCookie(
-    process.env.SESSION_COOKIE_NAME,
-    sessionCookieOptions(process.env.NODE_ENV === 'production'),
-  )
+  clearSession(res)
   res.status(200).json({ authenticated: false })
 })
 

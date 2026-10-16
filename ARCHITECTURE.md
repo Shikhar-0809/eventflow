@@ -122,6 +122,7 @@ eventflow/
 │   │   └── validate.js
 │   ├── routes/
 │   │   ├── auth.js
+│   │   ├── profile.js             # /api/profile: business details, sign-ins, password, email change, delete account
 │   │   ├── bookings.js
 │   │   ├── inventory.js
 │   │   ├── analytics.js
@@ -248,6 +249,9 @@ CREATE TABLE inventory_damage_log (
 );
 ```
 
+### Profile tables (migration `007_merchant_profile`)
+`merchants.whatsapp_phone` (nullable, the merchant's own number; CHECK `^[6-9][0-9]{9}$` added in 007; `business_name` and the column itself already existed from 002). `sign_in_log (id, merchant_id → merchants, device_label, created_at)` keeps the newest 10 rows per merchant with a coarse label such as "Chrome on Android"; it never stores an IP address or the user agent. Index `(merchant_id, created_at DESC)`. `email_otps.purpose` now also allows `reset_password` (the in-session reset flow). Both `sign_in_log` and `email_otps` are in the hand-written delete-account list in `routes/profile.js`.
+
 ### `merchant_settings`
 
 ```sql
@@ -318,6 +322,14 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | PATCH | `/api/settings` | Yes | Update settings (validated) |
 | GET | `/api/reports/range` | Yes | Date-range report summary + bookings |
 | GET | `/api/records` | Yes | Filtered booking records for the Records screen / Excel export |
+| GET | `/api/profile` | Yes | Masked email, member since, password changed at, business name and WhatsApp phone, summary counts (bookings, upcoming, inventory items, clients) |
+| PATCH | `/api/profile/business` | Yes | `{ business_name, whatsapp_phone? }` |
+| GET | `/api/profile/sign-ins` | Yes | Last 10 `{ device_label, created_at }` |
+| POST | `/api/profile/password` | Yes | `{ current_password, new_password }`; ends other sessions |
+| POST | `/api/profile/password/reset/send`, `/password/reset/verify` | Yes | Reset by email code (stored address only); `verify` takes `{ code, new_password }` |
+| POST | `/api/profile/logout-others` | Yes | Ends every other session, keeps this one |
+| POST | `/api/profile/email/send`, `/email/verify` | Yes | Change login email: `{ current_password, new_email }` then `{ code }`; the pending address lives in the `email_otps` row |
+| DELETE | `/api/profile` | Yes | `{ current_password, confirm_business_name }`; deletes the account and all its data in one transaction |
 
 All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (no data), plus the OTP routes above. See SECURITY.md for the full auth matrix.
 

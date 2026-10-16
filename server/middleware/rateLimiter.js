@@ -19,7 +19,8 @@ const clientIpKey = (ip) => {
   return `${all.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')).join(':')}::/64`
 }
 
-const normalisedEmail = (req) => (typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '')
+const normalisedField = (req, field) => (typeof req.body?.[field] === 'string' ? req.body[field].trim().toLowerCase() : '')
+const normalisedEmail = (req) => normalisedField(req, 'email')
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex')
 
 // Bucket per account AND source: if req.ip is wrong and every visitor shares one address (BUGS #079), one
@@ -53,10 +54,11 @@ export const loginIpBackstopLimiter = rateLimit({
 // per-source backstop shared by every purpose for spraying many addresses. Same keying approach as the login limiters (BUGS #078/#079).
 // The purpose is fixed per route when the limiter is built (never read from the body), so each purpose has its
 // own bucket: spamming signup/send-otp for an existing email cannot use up that email's password-reset quota.
-const makeOtpSendLimiter = (purpose) => rateLimit({
+// `field` names the body field that holds the address (change_email keys on new_email; reset_password has none).
+const makeOtpSendLimiter = (purpose, field = 'email') => rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
-  keyGenerator: (req) => digest(`${purpose}|${normalisedEmail(req)}|${clientIpKey(req.ip)}`),
+  keyGenerator: (req) => digest(`${purpose}|${normalisedField(req, field)}|${clientIpKey(req.ip)}`),
   message: { error: 'Too many code requests. Please try again in an hour.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -65,7 +67,8 @@ const makeOtpSendLimiter = (purpose) => rateLimit({
 export const otpSendLimiters = {
   signup: makeOtpSendLimiter('signup'),
   forgot: makeOtpSendLimiter('forgot'),
-  change_email: makeOtpSendLimiter('change_email'),
+  change_email: makeOtpSendLimiter('change_email', 'new_email'),
+  reset_password: makeOtpSendLimiter('reset_password'),
 }
 
 export const otpSendIpBackstopLimiter = rateLimit({
@@ -81,6 +84,19 @@ export const otpVerifyLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   keyGenerator: (req) => digest(clientIpKey(req.ip)),
+  message: { error: 'Too many attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Profile routes that take current_password: 5 FAILED attempts per 15 minutes per merchant (not per IP, so a shared
+// address cannot lock a merchant out and a stolen session cannot guess from many addresses). Runs after requireAuth.
+// Successful requests do not count, so a merchant making several changes in a row is never locked out.
+export const profileSensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => digest(`profile|${req.merchantId}`),
   message: { error: 'Too many attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,

@@ -13,6 +13,7 @@ import usageRouter from './routes/usage.js'
 import settingsRouter from './routes/settings.js'
 import reportsRouter from './routes/reports.js'
 import recordsRouter from './routes/records.js'
+import profileRouter from './routes/profile.js'
 import { deleteOldOtps } from './services/otp.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requireProxySecret } from './middleware/requireProxySecret.js'
@@ -97,6 +98,7 @@ app.use('/api/usage', usageRouter)
 app.use('/api/settings', settingsRouter)
 app.use('/api/reports', reportsRouter)
 app.use('/api/records', recordsRouter)
+app.use('/api/profile', profileRouter)
 
 // Unknown /api paths get a JSON 404 (after every route, before the error handler).
 app.use('/api', (req, res) => {

@@ -293,6 +293,15 @@ Cross-check against this table any time a new route is added — every business 
 | `POST /api/auth/login` | No | Yes — `loginIpBackstopLimiter` then `loginRateLimiter` (per email + source) |
 | `POST /api/auth/logout` | Yes | No |
 | `GET /api/auth/me` | Yes | No |
+| `GET /api/profile`, `GET /api/profile/sign-ins` | Yes | No |
+| `PATCH /api/profile/business` (`business_name`, `whatsapp_phone`) | Yes | No |
+| `POST /api/profile/password` | Yes | Yes — `profileSensitiveLimiter` (5 failed attempts per 15 min per merchant) |
+| `POST /api/profile/password/reset/send` | Yes | Yes — `otpSendIpBackstopLimiter` then `otpSendLimiters.reset_password`; no email in the body, the code goes to the stored address only |
+| `POST /api/profile/password/reset/verify` | Yes | Yes — `otpVerifyLimiter` |
+| `POST /api/profile/logout-others` | Yes | No |
+| `POST /api/profile/email/send` | Yes | Yes — `profileSensitiveLimiter`, `otpSendIpBackstopLimiter`, `otpSendLimiters.change_email` (keyed on `new_email`), plus a daily cap of 3 codes per new address. A taken address gets the same generic 200 and no email (unlike sign-up, BUGS #073) |
+| `POST /api/profile/email/verify` | Yes | Yes — `otpVerifyLimiter` |
+| `DELETE /api/profile` | Yes | Yes — `profileSensitiveLimiter` |
 | `GET /api/bookings` | Yes | No |
 | `GET /api/bookings/check-conflict` | Yes | No |
 | `GET /api/bookings/pending-balances` | Yes | No |
