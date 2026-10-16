@@ -24,7 +24,8 @@ const signOff = (businessName) => {
   return name ? ` - ${name}` : ''
 }
 
-export const confirmationMessage = (booking, businessName) => {
+// The confirmation text and the phone it goes to, or null when the booking is not complete enough to message.
+const confirmationParts = (booking, businessName) => {
   const phone = validatePhoneForWhatsApp(booking?.phone)
   if (!phone) return null
 
@@ -42,8 +43,16 @@ export const confirmationMessage = (booking, businessName) => {
     `Event: ${eventType}, Guests: ${guestCount}. Advance received: ${advance}. ` +
     `Thank you!${signOff(businessName)}`
 
-  return buildWaLink(phone, message)
+  return { phone, message }
 }
+
+export const confirmationMessage = (booking, businessName) => {
+  const parts = confirmationParts(booking, businessName)
+  return parts ? buildWaLink(parts.phone, parts.message) : null
+}
+
+// The plain confirmation text (no link). The Profile screen shows it as a sample of how messages are signed.
+export const confirmationPreview = (booking, businessName) => confirmationParts(booking, businessName)?.message ?? null
 
 export const paymentReminderMessage = (booking, businessName) => {
   const phone = validatePhoneForWhatsApp(booking?.phone)
@@ -63,10 +72,8 @@ export const paymentReminderMessage = (booking, businessName) => {
 
 const toINR = (n) => Number(n).toLocaleString('en-IN')
 
-export const selfSummaryMessage = (booking, businessName) => {
-  const merchantPhone = String(import.meta.env.VITE_MERCHANT_PHONE ?? '').trim()
-  if (!merchantPhone) return null
-
+// merchantPhone is the logged-in merchant's own whatsapp_phone from their profile (never an env var).
+export const selfSummaryMessage = (booking, businessName, merchantPhone) => {
   const phone = validatePhoneForWhatsApp(merchantPhone)
   if (!phone) return null
 

@@ -45,7 +45,57 @@ const request = async (path, options = {}) => {
   return body
 }
 
+// A 401 on a profile call normally means the session is gone. Three routes also answer 401 for a wrong current
+// password, so for those the session is checked separately (getMe) before the error is called a session expiry.
+// call sites read err.sessionExpired; nothing here shows or interprets the message.
+const profileRequest = async (path, options = {}, { checksPassword = false } = {}) => {
+  try {
+    return await request(`/profile${path}`, options)
+  } catch (err) {
+    if (err.status === 401) {
+      let expired = !checksPassword
+      if (checksPassword) {
+        try {
+          await request('/auth/me')
+        } catch (meErr) {
+          expired = meErr.status === 401
+        }
+      }
+      err.sessionExpired = expired
+    }
+    throw err
+  }
+}
+
+const jsonBody = (data) => JSON.stringify(data)
+
 export const api = {
+  getProfile: () => profileRequest('', { cache: 'no-store' }),
+  updateProfileBusiness: (data) => profileRequest('/business', { method: 'PATCH', body: jsonBody(data) }),
+  getSignIns: () => profileRequest('/sign-ins', { cache: 'no-store' }),
+  changePassword: (currentPassword, newPassword) =>
+    profileRequest(
+      '/password',
+      { method: 'POST', body: jsonBody({ current_password: currentPassword, new_password: newPassword }) },
+      { checksPassword: true },
+    ),
+  profileResetSend: () => profileRequest('/password/reset/send', { method: 'POST' }),
+  profileResetVerify: (code, newPassword) =>
+    profileRequest('/password/reset/verify', { method: 'POST', body: jsonBody({ code, new_password: newPassword }) }),
+  logoutOtherDevices: () => profileRequest('/logout-others', { method: 'POST' }),
+  profileEmailSend: (currentPassword, newEmail) =>
+    profileRequest(
+      '/email/send',
+      { method: 'POST', body: jsonBody({ current_password: currentPassword, new_email: newEmail }) },
+      { checksPassword: true },
+    ),
+  profileEmailVerify: (code) => profileRequest('/email/verify', { method: 'POST', body: jsonBody({ code }) }),
+  deleteAccount: (currentPassword, confirmBusinessName) =>
+    profileRequest(
+      '',
+      { method: 'DELETE', body: jsonBody({ current_password: currentPassword, confirm_business_name: confirmBusinessName }) },
+      { checksPassword: true },
+    ),
   login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   signup: (data) => request('/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
   signupSendOtp: (email) => request('/auth/signup/send-otp', { method: 'POST', body: JSON.stringify({ email }) }),

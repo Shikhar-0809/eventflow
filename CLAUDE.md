@@ -30,6 +30,7 @@ If code and these docs disagree, say so — don't silently pick one.
 - `bumpTokenVersion(client, merchantId)` (`server/services/session.js`) is the only way a logged-in route bumps `merchants.token_version`: bump inside the transaction, issue the cookie (`issueSession`, same flags as login) only after COMMIT; never touch `res` inside a transaction. The one exception is `POST /api/auth/forgot/reset`, which has no session to keep.
 - `sign_in_log` holds a coarse device label ("Chrome on Android") and a timestamp, newest 10 per merchant. It never holds an IP address or the full user agent, and no log line may either.
 - The delete-account table list in `server/routes/profile.js` (`DELETE /api/profile`) is written out by hand, children before parents. Whenever a table with a `merchant_id` column is added, add it there in FK-safe order in the same commit (`scripts/verify-profile-api.mjs` fails if one is missing).
+- The merchant's own WhatsApp number comes from `merchants.whatsapp_phone` (the profile, via `profileStore`), never an env var. `VITE_MERCHANT_PHONE` no longer exists.
 - Product rule: conflicts and shortfalls alert, they don't block. Date conflicts never disable submit; inventory shortfalls require an explicit confirm-anyway step.
 
 ## Workflow

@@ -234,6 +234,11 @@ const run = async () => {
   check('6th attempt -> 429', sixth.status === 429, String(sixth.status))
   const correctWhileLimited = await api('POST', '/profile/password', { cookie: sC, body: { current_password: PASSWORD, new_password: 'Another-Pass-5678' } })
   check('limited merchant is blocked even with the right password (429)', correctWhileLimited.status === 429)
+  const limitedEmail = await api('POST', '/profile/email/send', { cookie: sC, body: { current_password: PASSWORD, new_email: emailFor('zzz') } })
+  check('limited merchant: /email/send is 429 too, with the limiter sentence', limitedEmail.status === 429 && limitedEmail.body?.error === 'Too many attempts. Please try again in 15 minutes.', `${limitedEmail.status} ${limitedEmail.text}`)
+  check('limited merchant: /password answers 429 with the same sentence', sixth.body?.error === 'Too many attempts. Please try again in 15 minutes.', sixth.text)
+  const limitedDelete = await api('DELETE', '/profile', { cookie: sC, body: { current_password: PASSWORD, confirm_business_name: C.name } })
+  check('limited merchant: DELETE /profile is 429 and nothing is deleted', limitedDelete.status === 429 && (await pool.query('SELECT 1 FROM merchants WHERE id = $1', [C.id])).rowCount === 1)
   check('limiter is per merchant: merchant A is not limited', (await api('GET', '/profile', { cookie: sA })).status === 200 &&
     (await api('POST', '/profile/password', { cookie: sA, body: { current_password: 'nope-nope-1', new_password: 'Another-Pass-5678' } })).status === 401)
 

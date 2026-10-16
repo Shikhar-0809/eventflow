@@ -69,6 +69,20 @@ Automated: `node scripts/verify-profile-api.mjs` from `server/` (dev database on
 - [ ] Commit failure (a deferred DB trigger makes COMMIT fail after the token bump): `/password` and `/email/verify` return 500 with no `Set-Cookie`, and `token_version`, password and email are unchanged
 - [ ] Delete: zero rows left for the deleted merchant in every listed table, the other merchant fully intact, session cookie cleared, no `account_deleted` event row; schema guard fails if a merchant-scoped table is missing from the list
 - [ ] `sign_in_log` never exceeds 10 rows per merchant after 13 logins; labels are coarse; no IP or UA column; a failing write never breaks login
+### Merchant profile screen (UI)
+Automated: `node scripts/verify-profile-ui.mjs --confirm-host=<dev db host>` from `server/` (dev database only; needs the dev API on :3001 started with `EMAIL_DEV_LOG=true`; builds the client, seeds fictional `@profui.example.test` merchants, plants codes with `scripts/lib/devOtp.mjs`, removes everything at the end; 375px screenshots go to `SCREENSHOT_DIR`). 105 checks. Also rerun `verify-otp-ui.mjs`, `verify-profile-api.mjs` and `verify-whatsapp-templates.mjs` after touching these screens:
+- [ ] Profile loads: tab title "Profile — <business>", masked email only (the full address appears nowhere in the page text, in any step), "Never changed" for an untouched password, correct Bookings / Upcoming / Inventory items / Clients
+- [ ] Business details: the sign-off preview follows the name as you type; the Sidebar and tab title change only after Save; an invalid WhatsApp number shows an inline error and sends nothing; an empty number saves as null; Cancel drops the edit
+- [ ] Send to My WhatsApp: with no number the button is disabled and "Add your WhatsApp number in Profile" opens the Profile screen; with a number it opens `wa.me/91<that number>`
+- [ ] Change password: a confirm step first; a wrong current password shows "Incorrect password." and keeps you signed in; success shows "Password changed. You've been signed out on other devices.", empties the inputs, keeps this tab signed in (also after a reload) and bounces a second browser
+- [ ] Forgot your current password (in Profile): code goes to the masked stored address (no email field), a second send inside the cooldown shows the server's sentence, a wrong code returns to the code step, the right code + new password changes it
+- [ ] Log out other devices: confirm, toast, this tab stays signed in; another browser's next profile action lands on the login screen (401 handling, no reload needed)
+- [ ] Recent sign-ins: device label + relative time, only the newest marked "Most recent" (never "This device"), no IP, "No sign-ins recorded yet." when empty
+- [ ] Change email: a taken address gets the same generic message as a free one ("If that address can receive mail, a code is on its way to <masked>."), never "taken"/"in use"; going back and changing the address resets step 2; success refetches the profile and keeps you signed in
+- [ ] Delete account: the button stays disabled until the business name matches exactly (case matters); a wrong password shows an error and deletes nothing; success lands on login with "Your account has been deleted.", and logging in again fails
+- [ ] `/privacy` covers recent sign-ins, security notice emails, immediate permanent deletion and the stored WhatsApp number
+- [ ] Layout: every card and modal at 375px and 1280px, nothing sideways (the content column is only offset by the sidebar from the `md` breakpoint up)
+
 ### Rebrand check
 - [ ] Sidebar shows "Bala Ji Tent House", not "Sharma Tent House" or "EventFlow"
 - [ ] Browser tab title reads "EventFlow — Bala Ji Tent House"

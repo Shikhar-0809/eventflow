@@ -5,7 +5,9 @@ import { OtpInput } from './OtpInput'
 import { ResendOtpButton } from './ResendOtpButton'
 
 // Step 2 of sign-up and password reset: enter the emailed code. onVerify(code) must throw on a wrong code.
-export const OtpVerifyStep = ({ email, intro, onVerify, onResend, onChangeEmail }) => {
+// The Profile screen reuses it: no `intro` hides the "Code sent to" line (the caller prints its own wording), no
+// `onChangeEmail` hides the change link, and `initialCooldown` follows the server's resend cooldown.
+export const OtpVerifyStep = ({ email, intro, onVerify, onResend, onChangeEmail, initialCooldown }) => {
   const [error, setError] = useState(null)
   const [isVerifying, setIsVerifying] = useState(false)
   // A new key clears the boxes (and refocuses the first) after a wrong code.
@@ -26,19 +28,23 @@ export const OtpVerifyStep = ({ email, intro, onVerify, onResend, onChangeEmail 
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-700 text-center">
-        {intro} <span className="font-medium break-all">{maskEmail(email)}</span>
-      </p>
-      <p className="text-center text-sm">
-        <button
-          type="button"
-          onClick={onChangeEmail}
-          disabled={isVerifying}
-          className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
-        >
-          Wrong email? Change it
-        </button>
-      </p>
+      {intro && (
+        <p className="text-sm text-slate-700 text-center">
+          {intro} <span className="font-medium break-all">{maskEmail(email)}</span>
+        </p>
+      )}
+      {onChangeEmail && (
+        <p className="text-center text-sm">
+          <button
+            type="button"
+            onClick={onChangeEmail}
+            disabled={isVerifying}
+            className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
+          >
+            Wrong email? Change it
+          </button>
+        </p>
+      )}
 
       <OtpInput key={boxesKey} onComplete={handleComplete} disabled={isVerifying} hasError={Boolean(error)} />
 
@@ -47,7 +53,7 @@ export const OtpVerifyStep = ({ email, intro, onVerify, onResend, onChangeEmail 
       </p>
       <ErrorMessage>{error}</ErrorMessage>
 
-      <ResendOtpButton onResend={onResend} />
+      <ResendOtpButton onResend={onResend} initialCooldown={initialCooldown} />
       <p className="text-center text-xs text-slate-500">Check your spam folder if it doesn&apos;t arrive in a minute.</p>
     </div>
   )

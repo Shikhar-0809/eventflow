@@ -20,7 +20,9 @@ const collectErrors = (values, withBusinessName) => {
 
 // The last step of sign-up (business name + password) and of password reset (password only).
 // onSubmit({ business_name, password }) must throw on failure; the message is shown above the button.
-export const SetPasswordForm = ({ withBusinessName = false, submitLabel, loadingLabel, onSubmit, children }) => {
+// By default a successful submit leaves the button busy, because the screen moves on. The Profile screen keeps the
+// form on screen, so it passes `stayMounted` to get the button back (and remounts the form, with a new key, to clear it).
+export const SetPasswordForm = ({ withBusinessName = false, submitLabel, loadingLabel, onSubmit, children, stayMounted = false }) => {
   const [values, setValues] = useState({ business_name: '', password: '', confirm_password: '' })
   const [fieldErrors, setFieldErrors] = useState({})
   const [touched, setTouched] = useState({})
@@ -65,6 +67,7 @@ export const SetPasswordForm = ({ withBusinessName = false, submitLabel, loading
     setIsLoading(true)
     try {
       await onSubmit({ business_name: values.business_name, password: values.password })
+      if (stayMounted) setIsLoading(false)
     } catch (err) {
       setError(err.message)
       setIsLoading(false)

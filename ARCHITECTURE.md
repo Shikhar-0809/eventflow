@@ -51,7 +51,7 @@ eventflow/
 │   ├── postcss.config.js
 │   ├── tailwind.config.js
 │   ├── vite.config.js
-│   ├── .env.example               # VITE_API_URL, VITE_MERCHANT_PHONE
+│   ├── .env.example               # VITE_API_URL
 │   ├── .env.production            # VITE_API_URL=/api
 │   └── src/
 │       ├── App.jsx                # Auth gate, view switcher, mobile shell
@@ -71,6 +71,18 @@ eventflow/
 │       │   ├── InventoryWarningBanner.jsx # Inline alert on shortfall; confirm step on submit
 │       │   ├── LoginScreen.jsx            # Email + password login, link to sign-up
 │       │   ├── PendingBalancesView.jsx
+│       │   ├── ProfileView.jsx            # Profile screen: loads /api/profile, composes the sections below, owns the toast and the change-email modal
+│       │   ├── profile/                   # Profile screen parts (all use the shared profileUi.jsx: Card, ActionButton, Toast, ProfileModal)
+│       │   │   ├── AccountSection.jsx         # masked email, member since, password last changed, "Change email"
+│       │   │   ├── BusinessSection.jsx        # inline edit of business name + WhatsApp number, live sign-off preview
+│       │   │   ├── SummarySection.jsx         # four stat tiles
+│       │   │   ├── SecuritySection.jsx        # hosts the three blocks below plus log-out-other-devices
+│       │   │   ├── ChangePasswordPanel.jsx    # current + new password (SetPasswordForm), confirm step
+│       │   │   ├── ForgotInProfilePanel.jsx   # code to the stored address -> OtpVerifyStep -> new password
+│       │   │   ├── SignInsList.jsx            # last 10 sign-ins (device label + time), newest marked "Most recent"
+│       │   │   ├── ChangeEmailModal.jsx       # two steps: new email + password, then the code
+│       │   │   ├── DangerZone.jsx             # delete account (password + exact business name)
+│       │   │   └── profileUi.jsx
 │       │   ├── RecordsView.jsx            # Filterable records + Excel export
 │       │   ├── SignupScreen.jsx           # Business name, email, password, confirm; validates on blur
 │       │   ├── PasswordInput.jsx          # Password field with show/hide toggle (login, sign-up)
@@ -82,11 +94,12 @@ eventflow/
 │       ├── schemas/
 │       │   ├── booking.schema.js
 │       │   ├── inventory.schema.js
-│       │   └── merchant.schema.js         # signupSchema, loginSchema (mirror of the server file)
+│       │   └── merchant.schema.js         # signupSchema, loginSchema, profileBusinessSchema (mirror of the server file)
 │       ├── store/
 │       │   ├── authStore.js
 │       │   ├── bookingStore.js
 │       │   ├── inventoryStore.js
+│       │   ├── profileStore.js            # The merchant's own profile (incl. whatsapp_phone); fetched once after login, reset on every session change
 │       │   └── settingsStore.js           # Monthly revenue target
 │       └── utils/
 │           ├── api.js
@@ -94,9 +107,10 @@ eventflow/
 │           ├── excelExporter.js           # SheetJS .xlsx export
 │           ├── formatCurrency.js
 │           ├── formatRelativeTime.js
+│           ├── profileErrors.js           # handleProfileError: 401 -> login, anything else -> a human sentence
 │           ├── reportPrinter.js           # Printable HTML report (+ PDF via CDN)
 │           ├── sanitize.js
-│           └── whatsapp.js                # wa.me links — signed as "Bala Ji Tent House"
+│           └── whatsapp.js                # wa.me links — signed with the merchant's business name; self-summary goes to profile.whatsapp_phone
 │
 ├── server/                        # Express backend
 │   ├── index.js                   # Express entry: CORS, mounts, initDb+seed, listen
@@ -362,7 +376,6 @@ Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET
 
 ```
 VITE_API_URL=http://localhost:3001/api
-VITE_MERCHANT_PHONE=       # merchant WhatsApp number for self-summary / reminder links
 ```
 
 In production (`client/.env.production`): `VITE_API_URL=/api` (same-origin; Vercel proxies to Render).
@@ -438,7 +451,7 @@ The Inventory dashboard itself (`InventoryView.jsx`) shows `in_use_today` using 
 
 ## WhatsApp link generation
 
-No API key. No webhook. Pure deep link. Messages are signed as **Bala Ji Tent House**, not EventFlow — the message is on the merchant's behalf. Merchant phone for self-summary links comes from `VITE_MERCHANT_PHONE` (env), not a hardcoded literal.
+No API key. No webhook. Pure deep link. Messages are signed as **Bala Ji Tent House**, not EventFlow — the message is on the merchant's behalf. The merchant's own number for the "Send to My WhatsApp" summary is `whatsapp_phone` from their profile (set on the Profile screen, held in `profileStore`), never an env var; with no number the button is disabled and links to Profile. Client-facing links use the booking's phone.
 
 ```js
 // utils/whatsapp.js

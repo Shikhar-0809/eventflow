@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { ArrowLeft, CalendarDays } from 'lucide-react'
 
 export const PRIVACY_POLICY_PATH = '/privacy'
-const LAST_UPDATED = '15 October 2026'
+const LAST_UPDATED = '16 October 2026'
 
 const CONTACT_EMAIL = 'eventflow.support@gmail.com'
 
@@ -75,7 +75,7 @@ export const PrivacyPolicyPage = () => {
               behalf, to run the service.
             </p>
             <p>
-              For the merchant&apos;s own account details and usage records (sections 3.1 and 3.4), we decide
+              For the merchant&apos;s own account details and usage records (sections 3.1, 3.4 and 3.5), we decide
               how they are used, so we are responsible for them ourselves.
             </p>
           </Section>
@@ -88,7 +88,8 @@ export const PrivacyPolicyPage = () => {
                 'the business name',
                 'the email address used to log in',
                 'the password, kept only as a one-way scrambled value (a hash) from which the password cannot be read back',
-                'the date the account was created',
+                'the date the account was created, and the date the password was last changed',
+                'optionally, the merchant’s own WhatsApp number, which the merchant adds on the Profile screen and can change or remove at any time. It is used only to open a booking summary to yourself in WhatsApp, never to message anyone else',
               ]}
             />
 
@@ -128,11 +129,25 @@ export const PrivacyPolicyPage = () => {
               booking&apos;s ID number. It never holds a client&apos;s name, phone number or any other booking detail.
             </p>
 
-            <h3 className="font-semibold text-slate-800 pt-2">3.5 Technical information</h3>
+            <h3 className="font-semibold text-slate-800 pt-2">3.5 Recent sign-ins and security emails</h3>
+            <p>
+              So a merchant can spot a sign-in that was not theirs, the Profile screen lists recent sign-ins. For each
+              one we keep only a coarse device label, such as &quot;Chrome on Android&quot;, and the time. We keep no IP
+              address and no full browser details, and only the latest 10 sign-ins per account are kept; older ones are
+              removed automatically.
+            </p>
+            <p>
+              We also email the address on the account when something security-related happens: the password is
+              changed, the email address is changed (sent to the old address) or the account is deleted. These notices
+              contain no password and no code. Codes for signing up, resetting a password or changing the email address
+              are sent by email and expire after 10 minutes.
+            </p>
+
+            <h3 className="font-semibold text-slate-800 pt-2">3.6 Technical information</h3>
             <p>
               Like any web service, our servers see the network address (IP address) of each request. We use
               it briefly, in the server&apos;s memory, to slow down repeated login attempts, and we do not save it
-              in the EventFlow database. Our hosting providers (section 7) may keep their own standard technical
+              in the EventFlow database (not even in the sign-in list above). Our hosting providers (section 7) may keep their own standard technical
               logs under their own policies.
             </p>
           </Section>
@@ -215,8 +230,9 @@ export const PrivacyPolicyPage = () => {
                 'Bookings are kept after the event on purpose, so a merchant has a history to look back on. There is no automatic deletion.',
                 'A merchant can delete a booking, an expense or an inventory item inside the app. Deleting a booking also deletes its change-log notes, expenses and inventory lines.',
                 'A merchant can download their records as an Excel file from the Records screen.',
-                'Deleting a whole account, and a complete export of an account’s data, are available on request. Write to us at the contact address above.',
-                'Safety copies of the database made before software updates are kept for a few days.',
+                'A merchant can delete their whole account from the Profile screen (Danger zone), after entering their password and typing the business name. This is immediate and permanent: all bookings, inventory, expenses, settings, sign-in records and the account itself are removed at once, and we cannot bring them back. We email a notice to the account’s address when it happens.',
+                'A complete export of an account’s data is available on request. Write to us at the contact address above.',
+                'Safety copies of the database made before software updates are kept for a few days. A deleted account can still appear in such a copy until it is removed.',
               ]}
             />
           </Section>

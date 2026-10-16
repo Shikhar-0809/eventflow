@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-const emailField = z
+export const emailField = z
   .string({ required_error: 'Email is required' })
   .trim()
   .toLowerCase()
@@ -34,6 +34,18 @@ export const verifyOtpSchema = z.object({
 export const resetPasswordSchema = z.object({
   resetToken: tokenField('Reset token'),
   newPassword: passwordField,
+})
+
+// Same rule as the server's profileBusinessSchema (server/schemas/merchant.schema.js). An empty phone is allowed
+// and means "no number"; the form sends null for it.
+export const whatsappPhoneField = z
+  .string()
+  .trim()
+  .refine((value) => value === '' || /^[6-9]\d{9}$/.test(value), 'Enter a valid 10-digit Indian mobile number')
+
+export const profileBusinessSchema = z.object({
+  business_name: businessNameField,
+  whatsapp_phone: whatsappPhoneField,
 })
 
 // Login does not re-check password strength: it only needs something to compare.

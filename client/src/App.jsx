@@ -9,7 +9,9 @@ import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
 import { ScreenBoundary } from './components/ScreenBoundary'
 import { useBookingStore } from './store/bookingStore'
+import { useProfileStore } from './store/profileStore'
 import { maskEmail } from './utils/maskEmail'
+import { handleProfileError } from './utils/profileErrors'
 
 // Everything except the first screen (the calendar) loads on demand, so the first page load stays small.
 // The components are named exports, hence the .then().
@@ -22,6 +24,7 @@ const PendingBalancesView = lazyNamed(() => import('./components/PendingBalances
 const BookingPage = lazyNamed(() => import('./components/BookingPage'), 'BookingPage')
 const BookingDetail = lazyNamed(() => import('./components/BookingDetail'), 'BookingDetail')
 const ForgotPasswordScreen = lazyNamed(() => import('./components/ForgotPasswordScreen'), 'ForgotPasswordScreen')
+const ProfileView = lazyNamed(() => import('./components/ProfileView'), 'ProfileView')
 
 // Tab title per screen: "<screen> — <business name>". Names match the sidebar.
 const VIEW_TITLES = {
@@ -31,6 +34,7 @@ const VIEW_TITLES = {
   records: 'Records',
   analytics: 'Analytics',
   usage: 'My Activity',
+  profile: 'Profile',
 }
 
 // The app lives at "/" and the public privacy policy at "/privacy" (a trailing slash is fine). Any other
@@ -43,7 +47,8 @@ const getRoute = () => {
 
 export default function App() {
   const route = getRoute()
-  const { isAuthenticated, isLoading, connectionError, businessName, checkAuth } = useAuthStore()
+  const { isAuthenticated, isLoading, connectionError, businessName, checkAuth, loginNotice: storeNotice, clearLoginNotice } = useAuthStore()
+  const loadProfile = useProfileStore((state) => state.loadProfile)
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [authScreen, setAuthScreen] = useState('login')
@@ -59,6 +64,12 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated) setAuthScreen('login')
   }, [isAuthenticated])
+
+  // The merchant's own WhatsApp number (and business details) come from their profile, fetched once per login.
+  useEffect(() => {
+    if (route !== 'app' || !isAuthenticated) return
+    loadProfile().catch((err) => handleProfileError(err))
+  }, [route, isAuthenticated, loadProfile])
 
   useEffect(() => {
     if (route !== 'app') return
@@ -107,6 +118,7 @@ export default function App() {
     const clearLoginHint = () => {
       setLoginNotice(null)
       setLoginEmail('')
+      clearLoginNotice()
     }
     const showLogin = () => {
       clearLoginHint()
@@ -129,7 +141,7 @@ export default function App() {
     }
     return (
       <LoginScreen
-        notice={loginNotice}
+        notice={storeNotice ?? loginNotice}
         initialEmail={loginEmail}
         onShowSignup={() => {
           clearLoginHint()
@@ -157,7 +169,7 @@ export default function App() {
 
         <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
 
-        <div className="flex-1 flex flex-col min-h-0 ml-60">
+        <div className="flex-1 flex flex-col min-h-0 md:ml-60">
           <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0 z-20">
             <button
               type="button"
@@ -174,6 +186,7 @@ export default function App() {
             <ScreenBoundary key={activeView}>
               {activeView === 'analytics' && <AnalyticsView />}
               {activeView === 'usage' && <UsageView />}
+              {activeView === 'profile' && <ProfileView />}
               {activeView === 'inventory' && <InventoryView />}
               {activeView === 'records' && <RecordsView />}
               {activeView === 'pending-balances' && <PendingBalancesView />}

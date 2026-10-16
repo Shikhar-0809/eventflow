@@ -21,4 +21,17 @@ export const plantSignupOtp = async (pool, email, code = '424242') => {
   return code
 }
 
+// Any purpose: 'signup' | 'reset' | 'reset_password' (profile) | 'change_email' (profile, with the merchant's id).
+// A change_email code is stored under the NEW address, like the server does; the server issues its own code after it
+// has replied, so a script waits about 2.5 seconds after the send before planting.
+export const plantOtp = async (pool, { email, purpose, code = '424242', merchantId = null }) => {
+  await pool.query('UPDATE email_otps SET consumed_at = NOW() WHERE email = $1 AND purpose = $2 AND consumed_at IS NULL', [email, purpose])
+  await pool.query(
+    `INSERT INTO email_otps (email, purpose, merchant_id, code_hash, expires_at, last_sent_at)
+     VALUES ($1, $2, $3, $4, NOW() + INTERVAL '10 minutes', NOW())`,
+    [email, purpose, merchantId, hashOtpCode(purpose, email, code)],
+  )
+  return code
+}
+
 export const deleteOtpsFor = (pool, emailSuffix) => pool.query('DELETE FROM email_otps WHERE email LIKE $1', [`%${emailSuffix}`])

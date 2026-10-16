@@ -39,8 +39,9 @@ const bundle = buildSync({
   bundle: true,
   write: false,
   format: 'esm',
-  define: { 'import.meta.env.VITE_MERCHANT_PHONE': JSON.stringify('9876543299') },
 })
+// The merchant's own number is passed in from their profile (whatsapp_phone); there is no env var any more.
+const MERCHANT_PHONE = '9876543299'
 const mod = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`)
 
 const textOf = (url) => decodeURIComponent(new URL(url).searchParams.get('text') ?? '')
@@ -49,7 +50,7 @@ for (const name of ['Alpha Tents', 'Beta Caterers']) {
   const other = name === 'Alpha Tents' ? 'Beta Caterers' : 'Alpha Tents'
   const confirmation = textOf(mod.confirmationMessage(SAMPLE, name))
   const reminder = textOf(mod.paymentReminderMessage(SAMPLE, name))
-  const summary = textOf(mod.selfSummaryMessage(SAMPLE, name))
+  const summary = textOf(mod.selfSummaryMessage(SAMPLE, name, MERCHANT_PHONE))
   check(confirmation.endsWith(`Thank you! - ${name}`) && !confirmation.includes(other), `confirmation signed "${name}"`)
   check(reminder.endsWith(`Thank you! - ${name}`) && !reminder.includes(other), `payment reminder signed "${name}"`)
   check(summary.endsWith(`Pending: ₹40,000. - ${name}`) && !summary.includes(other), `self summary signed "${name}"`)
@@ -59,6 +60,11 @@ const unsigned = textOf(mod.confirmationMessage(SAMPLE, undefined))
 check(unsigned.endsWith('Thank you!') && !unsigned.includes('Bala Ji'), 'no business name: no sign-off, and no fallback to another business')
 check(textOf(mod.confirmationMessage(SAMPLE, '  ')).endsWith('Thank you!'), 'blank business name: no sign-off')
 check(mod.confirmationMessage({ ...SAMPLE, phone: '123' }, 'Alpha Tents') === null, 'invalid phone still returns null')
+check(source.includes('VITE_MERCHANT_PHONE') === false, 'whatsapp.js no longer reads VITE_MERCHANT_PHONE')
+check(mod.selfSummaryMessage(SAMPLE, 'Alpha Tents', null) === null && mod.selfSummaryMessage(SAMPLE, 'Alpha Tents', '') === null && mod.selfSummaryMessage(SAMPLE, 'Alpha Tents', '123') === null, 'self summary needs a valid merchant number (null / empty / invalid -> null)')
+check(new URL(mod.selfSummaryMessage(SAMPLE, 'Alpha Tents', MERCHANT_PHONE)).pathname === `/91${MERCHANT_PHONE}`, 'self summary goes to the number it is given')
+check(mod.confirmationPreview(SAMPLE, 'Alpha Tents').endsWith('Thank you! - Alpha Tents'), 'confirmationPreview is the same text the confirmation link carries')
+check(textOf(mod.confirmationMessage(SAMPLE, 'Alpha Tents')) === mod.confirmationPreview(SAMPLE, 'Alpha Tents'), 'preview text equals the link text')
 
 console.log('\n--- Sample confirmation message ---')
 console.log(textOf(mod.confirmationMessage(SAMPLE, 'Alpha Tents')))

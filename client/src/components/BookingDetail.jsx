@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { X, Phone, MessageCircle, Bell, Loader2, Pencil, Clock, Receipt, Trash2, CheckCircle2, Send, XCircle } from 'lucide-react'
 import { useBookingStore } from '../store/bookingStore'
 import { useAuthStore } from '../store/authStore'
+import { useProfileStore } from '../store/profileStore'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getDaysUntilEvent } from '../utils/dateHelpers'
@@ -140,7 +141,10 @@ const normalizeBookingDetail = (data) => ({
 
 export const BookingDetail = () => {
   const businessName = useAuthStore((state) => state.businessName)
-  const { isDetailOpen, selectedBooking, forceCloseDetail, requestCloseDetail, notePromptOpen, keepNote, discardNote, setDetailNoteDirty, openModal, updateBooking, removeBooking } = useBookingStore()
+  // The merchant's own number comes from their profile (Profile screen), never from an env var.
+  const merchantWhatsapp = useProfileStore((state) => state.profile?.whatsapp_phone ?? null)
+  const profileStatus = useProfileStore((state) => state.status)
+  const { isDetailOpen, selectedBooking, forceCloseDetail, setActiveView, requestCloseDetail, notePromptOpen, keepNote, discardNote, setDetailNoteDirty, openModal, updateBooking, removeBooking } = useBookingStore()
   const [booking, setBooking] = useState(null)
   const [changeLog, setChangeLog] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -280,9 +284,9 @@ export const BookingDetail = () => {
     const target = booking ?? selectedBooking
     if (!target) return
 
-    const url = selfSummaryMessage(target, businessName)
+    const url = selfSummaryMessage(target, businessName, merchantWhatsapp)
     if (!url) {
-      setSelfWhatsappError('Set VITE_MERCHANT_PHONE in .env to use this.')
+      setSelfWhatsappError('Something went wrong. Please try again.')
       return
     }
 
@@ -463,7 +467,7 @@ export const BookingDetail = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="booking-detail-title"
-        className="fixed right-0 top-0 h-full w-[480px] bg-white shadow-xl z-50 overflow-y-auto flex flex-col animate-[slideIn_0.2s_ease-out]"
+        className="fixed right-0 top-0 h-full w-full max-w-[480px] bg-white shadow-xl z-50 overflow-y-auto flex flex-col animate-[slideIn_0.2s_ease-out]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -811,11 +815,23 @@ export const BookingDetail = () => {
               <button
                 type="button"
                 onClick={handleSelfWhatsApp}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-slate-700 border border-slate-300 hover:bg-slate-50 transition-all duration-200"
+                disabled={!merchantWhatsapp}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium text-slate-700 border border-slate-300 hover:bg-slate-50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
               >
                 <Send className="w-4 h-4" />
                 Send to My WhatsApp
               </button>
+              {!merchantWhatsapp && profileStatus !== 'loading' && profileStatus !== 'idle' && (
+                <p className="text-xs text-slate-500">
+                  <button
+                    type="button"
+                    onClick={() => setActiveView('profile')}
+                    className="font-medium text-teal-600 hover:text-teal-700 underline transition-all duration-200"
+                  >
+                    {profileStatus === 'error' ? "Couldn't load your WhatsApp number. Open Profile" : 'Add your WhatsApp number in Profile'}
+                  </button>
+                </p>
+              )}
               {selfWhatsappError && (
                 <p className="text-red-500 text-xs">{selfWhatsappError}</p>
               )}

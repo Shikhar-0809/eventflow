@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Tent, Calendar, Package, TableProperties, BarChart2, Activity, IndianRupee } from 'lucide-react'
+import { Tent, Calendar, Package, TableProperties, BarChart2, Activity, IndianRupee, UserCircle } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
 import { useSettingsStore } from '../store/settingsStore'
@@ -261,8 +261,16 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
         )}
       </nav>
 
-      {/* Log Out — always pinned at bottom */}
+      {/* Profile and Log Out — always pinned at bottom */}
       <div className="shrink-0 px-3 pb-4 pt-2 border-t border-slate-700">
+        <button
+          type="button"
+          onClick={() => navigate('profile')}
+          className={navButtonClass('profile')}
+        >
+          <UserCircle className="w-4 h-4" />
+          Profile
+        </button>
         <button
           type="button"
           onClick={handleLogout}

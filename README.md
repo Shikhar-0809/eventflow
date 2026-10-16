@@ -42,7 +42,6 @@ cp server/.env.example server/.env
 **Client** (`client/.env`):
 
 - `VITE_API_URL` — already set to `http://localhost:3001/api` in `.env.example`
-- `VITE_MERCHANT_PHONE` — merchant WhatsApp number for self-summary / reminder links
 
 **Server** (`server/.env`):
 
