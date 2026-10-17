@@ -19,6 +19,7 @@ import bcrypt from 'bcryptjs'
 import { chromium } from 'playwright'
 import { pool } from '../db/database.js'
 import { startProdLikeProxy } from './lib/prodLikeProxy.mjs'
+import { freshPassword } from './lib/testPassword.mjs'
 
 if (process.env.NODE_ENV === 'production') {
   console.error('Refusing to run with NODE_ENV=production.')
@@ -28,7 +29,7 @@ if (process.env.NODE_ENV === 'production') {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SUFFIX = '@mobile.example.test'
 const EMAIL = `mobile-${String(Date.now()).slice(-6)}${SUFFIX}`
-const PASSWORD = 'Start-Pass-1234'
+const PASSWORD = freshPassword()
 const SHOTS = process.env.SCREENSHOT_DIR || path.join(tmpdir(), 'eventflow-mobile-shots')
 const W = 375
 

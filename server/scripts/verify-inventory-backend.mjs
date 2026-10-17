@@ -14,7 +14,7 @@ const json = async (res) => {
   return body
 }
 
-const loginRes = await fetch(`${BASE}/auth/login`, {
+const loginRes = await fetch(`${BASE}/auth/login`, { // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- verify script against the local dev API on 127.0.0.1
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ email: VERIFY_LOGIN_EMAIL, password: PASSWORD }),

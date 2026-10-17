@@ -14,7 +14,7 @@ const collectErrors = (values, withBusinessName) => {
   }
   const password = passwordField.safeParse(values.password)
   if (!password.success) errors.password = password.error.issues[0].message
-  if (values.confirm_password !== values.password) errors.confirm_password = CONFIRM_MISMATCH
+  if (values.confirm_password !== values.password) errors.confirm_password = CONFIRM_MISMATCH // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- client-side form check, not a credential
   return errors
 }
 

@@ -31,7 +31,7 @@ import { maskEmail } from '../utils/maskEmail.js'
 
 const BCRYPT_COST = 10
 const CHANGE_EMAIL_DAILY_LIMIT = 3
-const WRONG_PASSWORD = 'Incorrect password.'
+const WRONG_PASSWORD = 'Incorrect password.' // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- error message text, not a credential
 const CHANGE_EMAIL_MESSAGE = 'If that address can receive mail, a code is on its way.'
 const EMAIL_UNAVAILABLE = 'That email address cannot be used. Please try another.'
 
@@ -61,7 +61,7 @@ const sendNoticeLater = (merchantId, email, kind, details) => {
 // The send step of an OTP flow: the reply is a 429 with the seconds left while a recent code is cooling down.
 const sendRetryAfter = (err, res) => {
   if (err.status !== 429 || !err.retryAfter) return false
-  res.set('Retry-After', String(err.retryAfter))
+  res.set('Retry-After', String(err.retryAfter)) // nosemgrep: ajinabraham.njsscan.headers.header_injection.generic_header_injection -- numeric seconds from our own limiter, never user input
   res.status(429).json({ error: err.message, retryAfter: err.retryAfter })
   return true
 }

@@ -7,7 +7,7 @@ import { PasswordInput } from '../PasswordInput'
 import { SetPasswordForm } from '../SetPasswordForm'
 import { FieldLabel, TextLinkButton } from './profileUi'
 
-export const PASSWORD_CHANGED_NOTICE = "Password changed. You've been signed out on other devices."
+export const PASSWORD_CHANGED_NOTICE = "Password changed. You've been signed out on other devices." // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- UI message text, not a credential
 
 // Current password, then a new one (SetPasswordForm's rules), then a yes/no step. The backend re-issues this
 // device's cookie on success, so nothing here logs this tab out. Passwords live only in this component's state.

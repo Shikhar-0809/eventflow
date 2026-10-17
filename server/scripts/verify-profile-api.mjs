@@ -62,7 +62,7 @@ const waitForServer = async () => {
   for (let i = 0; i < 80; i += 1) {
     if (server.exitCode !== null) throw new Error(`Test server exited early.\n${serverOutput.slice(-500)}`)
     try {
-      if ((await fetch(`${BASE}/health`)).status === 200) return
+      if ((await fetch(`${BASE}/health`)).status === 200) return // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- verify script against its own local server on 127.0.0.1
     } catch { /* not up yet */ }
     await sleep(500)
   }

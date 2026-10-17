@@ -6,7 +6,7 @@ export const PRIMARY_MERCHANT_ID = 1
 // Demo logins for the dev seed (seed.js). Fictional businesses and a published demo password, so anyone
 // running the app locally can log in. seed() never runs in production, so these accounts only exist on
 // dev databases. Verify scripts log in as the first one.
-export const DEMO_PASSWORD = 'EventFlowDemo#2026'
+export const DEMO_PASSWORD = 'EventFlowDemo#2026' // nosemgrep: ajinabraham.njsscan.generic.hardcoded_secrets.node_password -- dev-only seed, skipped when NODE_ENV is production
 export const DEMO_MERCHANTS = [
   { business_name: 'Bala Ji Tent House', email: 'balaji@demo.eventflow.example' },
   { business_name: 'Shree Ganesh Caterers', email: 'shreeganesh@demo.eventflow.example' },

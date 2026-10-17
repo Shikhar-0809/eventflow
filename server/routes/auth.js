@@ -40,7 +40,7 @@ const RESET_EXPIRED = 'This reset link has expired. Please request a new code.'
 // A resend that comes too soon is a 429 with the seconds left; anything else goes to the error handler.
 const sendRetryAfter = (err, res) => {
   if (err.status !== 429 || !err.retryAfter) return false
-  res.set('Retry-After', String(err.retryAfter))
+  res.set('Retry-After', String(err.retryAfter)) // nosemgrep: ajinabraham.njsscan.headers.header_injection.generic_header_injection -- numeric seconds from our own limiter, never user input
   res.status(429).json({ error: err.message, retryAfter: err.retryAfter })
   return true
 }
