@@ -240,7 +240,7 @@ results.check5_validation400 = {
 }
 
 // Successful create for further tests
-const uniqueDate = `2026-11-${String(Math.floor(Math.random() * 20) + 10).padStart(2, '0')}`
+const uniqueDate = `2026-11-${String(Math.floor(Math.random() * 20) + 10).padStart(2, '0')}` // nosemgrep: ajinabraham.njsscan.crypto.crypto_node.node_insecure_random_generator -- picks a test date, not a security value
 const create = await request('/bookings', {
   method: 'POST',
   cookie,

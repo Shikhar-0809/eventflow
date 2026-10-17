@@ -41,7 +41,7 @@ const loadMigrations = (dir) => {
       throw new Error(`Two migrations share the number ${prefix}`)
     }
     seenPrefixes.add(prefix)
-    const sql = readFileSync(join(dir, name), 'utf8')
+    const sql = readFileSync(join(dir, name), 'utf8') // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- name comes from readdirSync of the migrations dir, filtered by FILE_PATTERN
     if (OWN_TRANSACTION.test(sql)) {
       throw new Error(`Migration ${name} must not contain BEGIN/COMMIT/ROLLBACK`)
     }

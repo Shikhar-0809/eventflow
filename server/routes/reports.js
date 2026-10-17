@@ -14,7 +14,7 @@ const validateDateRange = (from, to) => {
   if (!from || !to) {
     return 'from and to dates are required.'
   }
-  if (!DATE_PATTERN.test(from) || !DATE_PATTERN.test(to)) {
+  if (!DATE_PATTERN.test(from) || !DATE_PATTERN.test(to)) { // nosemgrep: ajinabraham.njsscan.dos.regex_dos.regex_dos -- DATE_PATTERN is anchored with fixed-width digit groups, no backtracking
     return 'Dates must be in YYYY-MM-DD format.'
   }
   if (from > to) {
