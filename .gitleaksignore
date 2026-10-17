@@ -1,0 +1,10 @@
+# Test-fixture passwords for throwaway accounts in verify scripts (BUGS #087). Not real credentials.
+# The scripts now generate passwords per run; these findings stay in history, so they are listed here.
+6a8c2e6ec6ea574ee336bb8b8adf3731523e3f69:server/scripts/verify-profile-ui.mjs:generic-api-key:40
+6a8c2e6ec6ea574ee336bb8b8adf3731523e3f69:server/scripts/verify-profile-ui.mjs:generic-api-key:312
+6a8c2e6ec6ea574ee336bb8b8adf3731523e3f69:server/scripts/verify-profile-ui.mjs:generic-api-key:438
+6a8c2e6ec6ea574ee336bb8b8adf3731523e3f69:server/scripts/verify-profile-ui.mjs:generic-api-key:493
+0b5db272e5b8d02778a2996cf7f11dfb64867da4:server/scripts/verify-profile-api.mjs:generic-api-key:402
+dd40ef731a92e960589e5e5d171e6ecd260523e9:server/scripts/verify-otp-ui.mjs:generic-api-key:221
+dd40ef731a92e960589e5e5d171e6ecd260523e9:server/scripts/verify-otp-ui.mjs:generic-api-key:222
+dd40ef731a92e960589e5e5d171e6ecd260523e9:server/scripts/verify-otp-ui.mjs:generic-api-key:227

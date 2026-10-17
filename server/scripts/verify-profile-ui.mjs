@@ -22,6 +22,7 @@ import bcrypt from 'bcryptjs'
 import { chromium } from 'playwright'
 import { pool } from '../db/database.js'
 import { plantOtp } from './lib/devOtp.mjs'
+import { freshPassword } from './lib/testPassword.mjs'
 import { startProdLikeProxy } from './lib/prodLikeProxy.mjs'
 
 if (process.env.NODE_ENV === 'production') {
@@ -35,9 +36,11 @@ const SUFFIX = '@profui.example.test'
 const RUN = String(Date.now()).slice(-6)
 const emailFor = (tag) => `${tag}-${RUN}${SUFFIX}`
 const SHOTS = process.env.SCREENSHOT_DIR || path.join(tmpdir(), 'eventflow-profile-ui-shots')
-const PASSWORD_0 = 'Start-Pass-1234'
-const PASSWORD_1 = 'Changed-Pass-5678'
-const PASSWORD_2 = 'Forgot-Pass-9012'
+const PASSWORD_0 = freshPassword()
+const PASSWORD_1 = freshPassword()
+const PASSWORD_2 = freshPassword()
+const WRONG_PASSWORD = freshPassword()
+const OTHER_PASSWORD = freshPassword()
 const GENERIC_SENT = 'If that address can receive mail, a code is on its way to'
 
 // Same rule as client/src/utils/maskEmail.js.
@@ -309,7 +312,7 @@ try {
     const submitChange = () => security.locator('button[type=submit]:has-text("Change password")').click()
     const confirm = () => p1.locator('[role=dialog]:has-text("Change your password?") button:has-text("Change password")').click()
 
-    await p1.fill('#current_password', 'definitely-wrong-1')
+    await p1.fill('#current_password', WRONG_PASSWORD)
     await p1.fill('#password', PASSWORD_1)
     await p1.fill('#confirm_password', PASSWORD_1)
     await submitChange()
@@ -435,7 +438,7 @@ try {
   await section('change email', async () => {
     await p1.click('[data-section="account"] button:has-text("Change email")')
     await p1.fill('#new-email', T.email)
-    await p1.fill('#change-email-password', 'definitely-wrong-1')
+    await p1.fill('#change-email-password', WRONG_PASSWORD)
     await p1.click('button[type=submit]:has-text("Send code")')
     await p1.waitForSelector('[role=dialog] [role=alert]:has-text("Incorrect password.")')
     ok('a wrong password stays on step 1 with "Incorrect password."', (await p1.locator('#new-email').count()) === 1)
@@ -490,7 +493,7 @@ try {
     await p1.fill('#delete-business-name', 'Renamed Profile Tents')
     ok('the exact name enables it', !(await deleteButton.isDisabled()))
     // A wrong password is reported inline and nothing is deleted.
-    await p1.fill('#delete-password', 'definitely-wrong-1')
+    await p1.fill('#delete-password', WRONG_PASSWORD)
     await deleteButton.click()
     await p1.waitForSelector('[role=dialog] [role=alert]:has-text("Incorrect password.")')
     ok('a wrong password shows an error and deletes nothing', (await pool.query('SELECT 1 FROM merchants WHERE id = $1', [M.id])).rowCount === 1)
@@ -517,14 +520,14 @@ try {
     const [c, p] = await newContext(1280)
     await login(p, L.email, PASSWORD_0)
     await openProfile(p)
-    const statuses = await p.evaluate(async () => {
+    const statuses = await p.evaluate(async ([wrong, other]) => {
       const out = []
       for (let i = 0; i < 5; i += 1) {
-        const res = await fetch('/api/profile/password', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: `wrong-pass-${i}`, new_password: 'Another-Pass-5678' }) })
+        const res = await fetch('/api/profile/password', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: wrong, new_password: other }) })
         out.push(res.status)
       }
       return out
-    })
+    }, [WRONG_PASSWORD, OTHER_PASSWORD])
     ok('five wrong passwords were counted (401 each)', statuses.every((s) => s === 401), statuses.join(','))
     const TOO_MANY = 'Too many attempts. Please try again in 15 minutes.'
     await p.fill('#current_password', PASSWORD_0)

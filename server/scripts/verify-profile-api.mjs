@@ -12,6 +12,7 @@ import { spawn } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import bcrypt from 'bcryptjs'
+import { freshPassword } from './lib/testPassword.mjs'
 
 if (process.env.NODE_ENV === 'production') {
   console.error('Refusing to run with NODE_ENV=production.')
@@ -27,7 +28,9 @@ const PORT = 3057
 const BASE = `http://127.0.0.1:${PORT}/api`
 const RUN = String(Date.now()).slice(-7)
 const DOMAIN = 'profile-verify.test'
-const PASSWORD = 'Sample-Pass-1234'
+const PASSWORD = freshPassword()
+const WRONG_PASSWORD = freshPassword()
+const OTHER_PASSWORD = freshPassword()
 const emailFor = (tag) => `${tag.toLowerCase()}-${RUN}@${DOMAIN}`
 
 // The hand-written delete order from routes/profile.js. The guard test fails if the schema has any other
@@ -223,16 +226,16 @@ const run = async () => {
   const C = await seedMerchant('C', { withData: false })
   const sC = (await login(C.email)).cookie
   const wrong = []
-  wrong.push((await api('POST', '/profile/password', { cookie: sC, body: { current_password: 'nope-nope-1', new_password: 'Another-Pass-5678' } })).status)
-  wrong.push((await api('POST', '/profile/password', { cookie: sC, body: { current_password: 'nope-nope-2', new_password: 'Another-Pass-5678' } })).status)
-  wrong.push((await api('POST', '/profile/email/send', { cookie: sC, body: { current_password: 'nope-nope-3', new_email: emailFor('zzz') } })).status)
-  wrong.push((await api('POST', '/profile/email/send', { cookie: sC, body: { current_password: 'nope-nope-4', new_email: emailFor('zzz') } })).status)
-  const wrongDelete = await api('DELETE', '/profile', { cookie: sC, body: { current_password: 'nope-nope-5', confirm_business_name: C.name } })
+  wrong.push((await api('POST', '/profile/password', { cookie: sC, body: { current_password: WRONG_PASSWORD, new_password: OTHER_PASSWORD } })).status)
+  wrong.push((await api('POST', '/profile/password', { cookie: sC, body: { current_password: WRONG_PASSWORD, new_password: OTHER_PASSWORD } })).status)
+  wrong.push((await api('POST', '/profile/email/send', { cookie: sC, body: { current_password: WRONG_PASSWORD, new_email: emailFor('zzz') } })).status)
+  wrong.push((await api('POST', '/profile/email/send', { cookie: sC, body: { current_password: WRONG_PASSWORD, new_email: emailFor('zzz') } })).status)
+  const wrongDelete = await api('DELETE', '/profile', { cookie: sC, body: { current_password: WRONG_PASSWORD, confirm_business_name: C.name } })
   wrong.push(wrongDelete.status)
   check('wrong current_password -> 401 "Incorrect password." on password, email/send and delete', wrong.every((s) => s === 401) && wrongDelete.body?.error === 'Incorrect password.', wrong.join(','))
-  const sixth = await api('POST', '/profile/password', { cookie: sC, body: { current_password: 'nope-nope-6', new_password: 'Another-Pass-5678' } })
+  const sixth = await api('POST', '/profile/password', { cookie: sC, body: { current_password: WRONG_PASSWORD, new_password: OTHER_PASSWORD } })
   check('6th attempt -> 429', sixth.status === 429, String(sixth.status))
-  const correctWhileLimited = await api('POST', '/profile/password', { cookie: sC, body: { current_password: PASSWORD, new_password: 'Another-Pass-5678' } })
+  const correctWhileLimited = await api('POST', '/profile/password', { cookie: sC, body: { current_password: PASSWORD, new_password: OTHER_PASSWORD } })
   check('limited merchant is blocked even with the right password (429)', correctWhileLimited.status === 429)
   const limitedEmail = await api('POST', '/profile/email/send', { cookie: sC, body: { current_password: PASSWORD, new_email: emailFor('zzz') } })
   check('limited merchant: /email/send is 429 too, with the limiter sentence', limitedEmail.status === 429 && limitedEmail.body?.error === 'Too many attempts. Please try again in 15 minutes.', `${limitedEmail.status} ${limitedEmail.text}`)
@@ -240,7 +243,7 @@ const run = async () => {
   const limitedDelete = await api('DELETE', '/profile', { cookie: sC, body: { current_password: PASSWORD, confirm_business_name: C.name } })
   check('limited merchant: DELETE /profile is 429 and nothing is deleted', limitedDelete.status === 429 && (await pool.query('SELECT 1 FROM merchants WHERE id = $1', [C.id])).rowCount === 1)
   check('limiter is per merchant: merchant A is not limited', (await api('GET', '/profile', { cookie: sA })).status === 200 &&
-    (await api('POST', '/profile/password', { cookie: sA, body: { current_password: 'nope-nope-1', new_password: 'Another-Pass-5678' } })).status === 401)
+    (await api('POST', '/profile/password', { cookie: sA, body: { current_password: WRONG_PASSWORD, new_password: OTHER_PASSWORD } })).status === 401)
 
   // 4. Password change (A: s1 = this device, s2 = another device).
   let s1 = await loginA()
@@ -249,7 +252,7 @@ const run = async () => {
   check('password: new equal to current -> 400', same.status === 400)
   const weak = await api('POST', '/profile/password', { cookie: s1, body: { current_password: PASSWORD, new_password: 'short' } })
   check('password: weak new password -> 400 (same rule as sign-up)', weak.status === 400)
-  const NEW_PASSWORD = 'Changed-Pass-9876'
+  const NEW_PASSWORD = freshPassword()
   const changed = await api('POST', '/profile/password', { cookie: s1, body: { current_password: PASSWORD, new_password: NEW_PASSWORD } })
   check('password change -> 200 and re-issues this device\'s cookie', changed.status === 200 && changed.cookie)
   const loginFlags = cookieFlags((await login(B.email)).setCookie)
@@ -283,17 +286,17 @@ const run = async () => {
   check('reset/send: the code goes to the stored email', resetMail?.subject.includes('password reset code') && codeFrom(resetMail))
   check('reset/send: nothing goes to an address from the body', emailsTo(emailFor('attacker')).length === 0 && devEmails().length === before + 1)
   const code = codeFrom(resetMail)
-  check('reset/verify: wrong code -> 400', (await api('POST', '/profile/password/reset/verify', { cookie: s1, body: { code: code === '000000' ? '111111' : '000000', new_password: 'Reset-Pass-4321' } })).status === 400)
+  check('reset/verify: wrong code -> 400', (await api('POST', '/profile/password/reset/verify', { cookie: s1, body: { code: code === '000000' ? '111111' : '000000', new_password: freshPassword() } })).status === 400)
   check('reset/verify: weak password -> 400 and the code is not used up', (await api('POST', '/profile/password/reset/verify', { cookie: s1, body: { code, new_password: 'short' } })).status === 400)
-  const RESET_PASSWORD = 'Reset-Pass-4321'
+  const RESET_PASSWORD = freshPassword()
   const resetDone = await api('POST', '/profile/password/reset/verify', { cookie: s1, body: { code, new_password: RESET_PASSWORD } })
   check('reset/verify: right code -> 200 and this device keeps a session', resetDone.status === 200 && resetDone.cookie)
   check('reset/verify: other-device cookie -> 401', (await api('GET', '/profile', { cookie: o3 })).status === 401)
   s1 = resetDone.cookie
   check('reset/verify: this device\'s new cookie -> 200', (await api('GET', '/profile', { cookie: s1 })).status === 200)
   check('reset/verify: login works with the new password', (await login(A.email, RESET_PASSWORD)).status === 200)
-  check('reset/verify: the code cannot be used twice', (await api('POST', '/profile/password/reset/verify', { cookie: s1, body: { code, new_password: 'Reset-Pass-8888' } })).status === 400)
-  const bCode = await api('POST', '/profile/password/reset/verify', { cookie: sB, body: { code, new_password: 'Reset-Pass-7777' } })
+  check('reset/verify: the code cannot be used twice', (await api('POST', '/profile/password/reset/verify', { cookie: s1, body: { code, new_password: freshPassword() } })).status === 400)
+  const bCode = await api('POST', '/profile/password/reset/verify', { cookie: sB, body: { code, new_password: freshPassword() } })
   check('reset/verify: another merchant cannot use A\'s code', bCode.status === 400)
 
   // 7. Change email.
@@ -404,7 +407,7 @@ const run = async () => {
   const stateOf = async () => (await pool.query('SELECT token_version, password_hash, email FROM merchants WHERE id = $1', [H.id])).rows[0]
   const sH = (await login(H.email)).cookie
   const h0 = await stateOf()
-  const failedPw = await api('POST', '/profile/password', { cookie: sH, body: { current_password: PASSWORD, new_password: 'Never-Applied-1357' } })
+  const failedPw = await api('POST', '/profile/password', { cookie: sH, body: { current_password: PASSWORD, new_password: freshPassword() } })
   const h1 = await stateOf()
   check('commit failure on /password: 500 and NO Set-Cookie header', failedPw.status === 500 && failedPw.setCookie.length === 0, `${failedPw.status} ${failedPw.setCookie.length}`)
   check('commit failure on /password: token_version and password unchanged in the DB', h1.token_version === h0.token_version && h1.password_hash === h0.password_hash)
