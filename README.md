@@ -22,12 +22,15 @@ Full stack rationale, routes, and folder layout: **[ARCHITECTURE.md](ARCHITECTUR
 
 ### 1. Clone and install
 
-This is an npm workspaces monorepo (`client/` + `server/`). Install once from the repo root:
+`client/` is an npm workspace of the repo root; `server/` is a standalone npm project with its own lockfile (Render builds it on its own). Local setup is two installs:
 
 ```bash
 git clone <repository-url>
 cd eventflow
-npm install
+npm ci            # root: client + concurrently
+cd server
+npm ci            # server (includes Playwright for the verify scripts)
+cd ..
 ```
 
 ### 2. Environment files

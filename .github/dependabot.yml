@@ -1,6 +1,6 @@
 version: 2
 updates:
-  # Root lockfile (npm workspaces: also covers client/, which has no lockfile of its own)
+  # Root lockfile: covers client/ (the only workspace) and concurrently. server/ is covered by the /server entry below.
   - package-ecosystem: npm
     directory: /
     schedule:

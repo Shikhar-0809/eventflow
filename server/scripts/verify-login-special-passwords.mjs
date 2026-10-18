@@ -5,7 +5,7 @@
  * Chromium. For each password the proxy compares the request body's password with the expected string and prints
  * only match/length, never the value. The throwaway merchants are deleted at the end.
  *
- * Requires: dev API on :3001 (npm run dev), playwright (root devDependency).
+ * Requires: dev API on :3001 (npm run dev), playwright (server devDependency).
  * Run from server/: node scripts/verify-login-special-passwords.mjs --confirm-host=<dev db host>
  */
 import './lib/guardFirst.mjs'

@@ -2,6 +2,7 @@
 // The real module is bundled with esbuild (it uses extensionless imports and import.meta.env, which plain Node
 // cannot load) and called with different business names: the sign-off must be the merchant's own name, never a
 // hardcoded one (BUGS #071). Sample client data is fictional.
+// Needs the root install (npm ci at the repo root): esbuild is borrowed from client's dependency tree.
 import { readFileSync } from 'fs'
 import { createRequire } from 'module'
 import { dirname, join } from 'path'
