@@ -154,7 +154,7 @@ eventflow/
 │       └── lib/                   # Shared verify helpers
 │
 ├── .gitignore
-├── package.json                   # Root package with workspaces
+├── package.json                   # Root package with workspaces (client only); server is standalone
 ├── vercel.json                    # The ONLY Vercel config (project root = repo root): build, /api rewrite to Render, SPA fallback, security headers, x-proxy-secret transform
 ├── README.md
 ├── ARCHITECTURE.md

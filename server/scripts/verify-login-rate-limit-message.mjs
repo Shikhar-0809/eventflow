@@ -5,7 +5,7 @@
  * Successful logins (BUGS #078): skipSuccessfulRequests means 6+ good logins in a row are never limited, while five
  * failures still block the next attempt. This uses the dev demo merchant's login (the only DB effect is its usage log).
  *
- * Requires: dev API on :3001 (npm run dev), playwright (root devDependency).
+ * Requires: dev API on :3001 (npm run dev), playwright (server devDependency).
  * Run from server/: node scripts/verify-login-rate-limit-message.mjs
  */
 import { spawnSync } from 'node:child_process'

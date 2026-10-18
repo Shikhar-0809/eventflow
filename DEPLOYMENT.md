@@ -62,7 +62,7 @@ Do not proceed past this section until every item is true:
 2. Go to [render.com](https://render.com), sign up, **New > Web Service**, connect your GitHub repo
 3. Configuration:
    - **Root Directory:** `server`
-   - **Build Command:** `npm ci --omit=dev` (changed from `npm install`). It installs exactly what `server/package-lock.json` pins and fails if that file is out of sync with `server/package.json`, so regenerate the lockfile whenever `server/package.json` changes, and keep devDependencies (Playwright) out of the deploy.
+   - **Build Command:** `npm ci --omit=dev` (changed from `npm install`). It installs exactly what `server/package-lock.json` pins and fails if that file is out of sync with `server/package.json`, so regenerate the lockfile whenever `server/package.json` changes, and keep devDependencies (Playwright) out of the deploy. `server/` is not an npm workspace (BUGS #092): local setup is `npm ci` at the repo root, then `npm ci` in `server/`; the root lockfile only feeds Vercel (client + concurrently).
    - **Start Command:** `node index.js`
    - **Instance Type:** Free
 4. Add environment variables in Render's dashboard (Settings → Environment) — **never commit these, set them only in Render's UI**:
