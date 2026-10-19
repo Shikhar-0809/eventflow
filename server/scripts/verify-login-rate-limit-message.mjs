@@ -1,6 +1,8 @@
 /**
- * Login 429 message check: the login screen must show the limiter's own message, and any 429 that has no
- * readable { error } (plain text, HTML, empty) must still say "too many attempts", not "Something went wrong".
+ * Login 429 message check: the login screen must show the limiter's own message. A 429 with no readable { error }
+ * (plain text, HTML, empty; what Render's free tier sends for a hibernated API, BUGS #104) is not a rate limit: the
+ * client retries a login once after ~3 s and then says "The server is waking up. Please try again in a minute."
+ * (BUGS #078 earlier showed "Too many attempts" for it, which misled people).
  * Uses the real production bundle (VITE_API_URL=/api) behind the vercel.json-style local proxy.
  * Successful logins (BUGS #078): skipSuccessfulRequests means 6+ good logins in a row are never limited, while five
  * failures still block the next attempt. This uses the dev demo merchant's login (the only DB effect is its usage log).
@@ -19,7 +21,7 @@ import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAut
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const LIMITER_MESSAGE = 'Too many login attempts. Please try again in 15 minutes.'
-const FALLBACK_MESSAGE = 'Too many attempts. Please wait a few minutes and try again.'
+const WAKING_MESSAGE = 'The server is waking up. Please try again in a minute.'
 const GENERIC_MESSAGE = 'Something went wrong. Please try again.'
 
 const results = []
@@ -34,11 +36,11 @@ let browser
 
 const shownError = async (page) => (await page.locator('p.text-red-700').allInnerTexts()).join(' | ')
 
-const submitLogin = async (page, password = 'wrongpass1') => {
+const submitLogin = async (page, password = 'wrongpass1', waitMs = 1200) => {
   await page.fill('#email', 'nobody@pwcheck.example.test')
   await page.fill('#password', password)
   await page.click('button[type=submit]')
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(waitMs)
 }
 
 try {
@@ -89,23 +91,33 @@ try {
     record('the 6th failure is blocked with the limiter message', sixth.status === 429 && sixthBody?.error === LIMITER_MESSAGE, String(sixth.status))
   }
 
-  // 2. A 429 with no usable JSON body (as a proxy or host could send) still reads as "too many attempts".
+  // 2. A 429 with no usable JSON body (as Render or another host sends) is a "waking up" message after one retry;
+  //    our own limiter JSON keeps its message and is never retried. `calls` is how often the login request was sent.
   const cases = [
-    { label: 'plain-text 429', status: 429, contentType: 'text/plain', body: 'Too Many Requests', expected: FALLBACK_MESSAGE },
-    { label: 'HTML 429', status: 429, contentType: 'text/html', body: '<html><body>429</body></html>', expected: FALLBACK_MESSAGE },
-    { label: 'empty 429', status: 429, contentType: 'text/plain', body: '', expected: FALLBACK_MESSAGE },
-    { label: 'JSON 429 with a non-string error', status: 429, contentType: 'application/json', body: '{"error":{"x":1}}', expected: FALLBACK_MESSAGE },
-    { label: 'JSON 429 keeps its own message', status: 429, contentType: 'application/json', body: '{"error":"Custom limiter text."}', expected: 'Custom limiter text.' },
-    { label: 'HTML 502 stays generic', status: 502, contentType: 'text/html', body: '<html>Bad Gateway</html>', expected: GENERIC_MESSAGE },
+    { label: 'plain-text 429', responses: [{ status: 429, contentType: 'text/plain', body: 'Too Many Requests' }], expected: WAKING_MESSAGE, calls: 2 },
+    { label: 'Render hibernation 429 (header + plain text)', responses: [{ status: 429, contentType: 'text/plain', body: 'Too Many Requests', headers: { 'x-render-routing': 'hibernate-rate-limited' } }], expected: WAKING_MESSAGE, calls: 2 },
+    { label: 'HTML 429', responses: [{ status: 429, contentType: 'text/html', body: '<html><body>429</body></html>' }], expected: WAKING_MESSAGE, calls: 2 },
+    { label: 'empty 429', responses: [{ status: 429, contentType: 'text/plain', body: '' }], expected: WAKING_MESSAGE, calls: 2 },
+    { label: 'JSON 429 with a non-string error', responses: [{ status: 429, contentType: 'application/json', body: '{"error":{"x":1}}' }], expected: WAKING_MESSAGE, calls: 2 },
+    { label: 'JSON 429 keeps its own message (no retry)', responses: [{ status: 429, contentType: 'application/json', body: '{"error":"Custom limiter text."}' }], expected: 'Custom limiter text.', calls: 1 },
+    { label: 'JSON 429 keeps its own message even with another x-render-routing value', responses: [{ status: 429, contentType: 'application/json', body: '{"error":"Custom limiter text."}', headers: { 'x-render-routing': 'no-server' } }], expected: 'Custom limiter text.', calls: 1 },
+    { label: 'a 429 that clears on the retry shows the real result', responses: [{ status: 429, contentType: 'text/plain', body: 'Too Many Requests' }, { status: 401, contentType: 'application/json', body: '{"error":"Incorrect email or password."}' }], expected: 'Incorrect email or password.', calls: 2 },
+    { label: 'HTML 502 stays generic (no retry)', responses: [{ status: 502, contentType: 'text/html', body: '<html>Bad Gateway</html>' }], expected: GENERIC_MESSAGE, calls: 1 },
   ]
-  for (const { label, status, contentType, body, expected } of cases) {
+  for (const { label, responses, expected, calls } of cases) {
     const context = await browser.newContext()
     const page = await context.newPage()
-    await page.route('**/api/auth/login', (route) => route.fulfill({ status, contentType, body }))
+    let seen = 0
+    await page.route('**/api/auth/login', (route) => {
+      const response = responses[Math.min(seen, responses.length - 1)]
+      seen += 1
+      return route.fulfill(response)
+    })
     await page.goto(url, { waitUntil: 'networkidle' })
-    await submitLogin(page)
+    await submitLogin(page, 'wrongpass1', calls > 1 ? 5000 : 1200)
     const shown = await shownError(page)
     record(`${label} shows the right message`, shown === expected, shown)
+    record(`${label}: login request sent ${calls} time(s)`, seen === calls, String(seen))
     await context.close()
   }
 } finally {
