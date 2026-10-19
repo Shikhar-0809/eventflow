@@ -391,13 +391,13 @@ const downloadReportPdf = async (reportWindow, reportData) => {
     let heightLeft = imgHeight
     let position = 0
 
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST')
     heightLeft -= pageHeight
 
     while (heightLeft > 0) {
       position -= pageHeight
       pdf.addPage()
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST')
       heightLeft -= pageHeight
     }
 
