@@ -8,7 +8,8 @@
     "migrate": "node scripts/migrate.mjs",
     "verify:isolation": "node scripts/verify-tenant-isolation.mjs",
     "verify:pricing": "node scripts/verify-booking-pricing.mjs",
-    "verify:analytics": "node scripts/verify-analytics.mjs"
+    "verify:analytics": "node scripts/verify-analytics.mjs",
+    "verify:ratelimit": "node scripts/verify-rate-limit-isolation.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
