@@ -5,6 +5,9 @@
  * Creates a few "ZZZ_TEST" bookings on the seeded demo merchant and deletes them afterwards.
  * Exits 0 only if every check passes.
  */
+// Dev databases only (BUGS #103): --confirm-host=<dev db host> is required and the production host is refused.
+import './lib/guardFirst.mjs'
+import './lib/refuseProductionDatabase.mjs'
 import { chromium } from 'playwright'
 import { VERIFY_API_BASE, getVerifyCookieHeader, openAuthedPlaywrightPage } from './lib/verifyPlaywright.mjs'
 

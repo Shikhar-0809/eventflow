@@ -1,3 +1,6 @@
+// Dev databases only (BUGS #103): --confirm-host=<dev db host> is required and the production host is refused.
+import './lib/guardFirst.mjs'
+import './lib/refuseProductionDatabase.mjs'
 import { resolveVerifyPassword, VERIFY_LOGIN_EMAIL } from './lib/verifyScriptAuth.mjs'
 const BASE = 'http://localhost:3001'
 const PASSWORD = resolveVerifyPassword()

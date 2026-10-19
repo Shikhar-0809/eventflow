@@ -1,3 +1,6 @@
+// Dev databases only (BUGS #103): --confirm-host=<dev db host> is required and the production host is refused.
+import './lib/guardFirst.mjs'
+import './lib/refuseProductionDatabase.mjs'
 import { authFetch, loginVerifySession, readJson } from './lib/verifyScriptAuth.mjs'
 
 const NOTE = 'ZZZ_TEST change log verification note'

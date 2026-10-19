@@ -1,3 +1,5 @@
+// Never for production (BUGS #103): refuses the production host outright, on top of --confirm-host and --merchant-id.
+import './lib/refuseProductionDatabase.mjs'
 import { assertConfirmedDatabaseHost } from './lib/confirmDatabaseHost.mjs'
 
 assertConfirmedDatabaseHost()

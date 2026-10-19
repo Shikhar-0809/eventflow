@@ -5,6 +5,9 @@
  * Requires: frontend on :5173, backend on :3001, playwright (server devDependency).
  * Run from repo root: node server/scripts/verify-prompt13-desktop-responsive.mjs
  */
+// Dev databases only (BUGS #103): --confirm-host=<dev db host> is required and the production host is refused.
+import './lib/guardFirst.mjs'
+import './lib/refuseProductionDatabase.mjs'
 import { chromium } from 'playwright'
 import { openAuthedPlaywrightPage } from './lib/verifyPlaywright.mjs'
 

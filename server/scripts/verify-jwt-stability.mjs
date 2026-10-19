@@ -1,16 +1,19 @@
 /**
  * Verify JWT sessions survive consecutive server restarts when only server/.env supplies secrets.
- * Usage: node scripts/verify-jwt-stability.mjs <cookie-value>
+ * Usage: node scripts/verify-jwt-stability.mjs <cookie-value> --confirm-host=<dev db host>
  * Cookie should be a session JWT created before the first restart (e.g. from POST /api/auth/login).
  */
+// Dev databases only (BUGS #103): --confirm-host=<dev db host> is required and the production host is refused.
+import './lib/guardFirst.mjs'
+import './lib/refuseProductionDatabase.mjs'
 import 'dotenv/config'
 
 const BASE = 'http://localhost:3001'
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || 'eventflow_session'
-const token = process.argv[2]
+const token = process.argv.slice(2).find((arg) => !arg.startsWith('--'))
 
 if (!token) {
-  console.error('Usage: node scripts/verify-jwt-stability.mjs <session-jwt>')
+  console.error('Usage: node scripts/verify-jwt-stability.mjs <session-jwt> --confirm-host=<dev db host>')
   process.exit(1)
 }
 

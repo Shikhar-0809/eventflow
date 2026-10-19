@@ -5,6 +5,8 @@
  * and the listener saw 0 connections. A control run (right host, migrate.mjs) must be seen connecting, which proves
  * the listener would have noticed. The server's own boot (index.js) is not covered: it runs migrations by design.
  *
+ * It also statically checks that every script has a production-host guard (BUGS #103; see the end of this file).
+ *
  * Run from server/: node scripts/verify-confirm-host-guard.mjs
  */
 import net from 'node:net'
@@ -68,6 +70,22 @@ check('migrate.mjs: wrong host -> no connection, so no schema_migrations write i
 // Control: the right host gets past the guard and DOES try to connect.
 const control = await runScript('migrate.mjs', ['--confirm-host=127.0.0.1'])
 check('control: migrate.mjs with the right host attempts a connection (the listener can see one)', control.connected > 0)
+
+// BUGS #103, static (nothing connects): every script file must either refuse the production host outright
+// (import lib/refuseProductionDatabase.mjs, directly or through lib/guardFirst-style imports), or be one of the two
+// scripts that are meant to run against production behind their own explicit confirmation, or touch no database.
+// A new script that is none of these fails here, so a guard cannot be forgotten.
+const INTENTIONAL_PRODUCTION = new Set(['migrate.mjs', 'wipe-for-handoff.mjs'])
+const NO_DATABASE = new Set(['verify-confirm-host-guard.mjs', 'verify-whatsapp-templates.mjs', 'set-dev-merchant-hash.mjs'])
+for (const file of readdirSync(scriptsDir).filter((f) => /\.(mjs|js)$/.test(f) && !/\.local\.mjs$/.test(f))) {
+  if (INTENTIONAL_PRODUCTION.has(file) || NO_DATABASE.has(file)) continue
+  const source = readFileSync(join(scriptsDir, file), 'utf8')
+  check(`${file}: refuses the production host (imports refuseProductionDatabase.mjs)`, /refuseProductionDatabase\.mjs/.test(source))
+}
+for (const file of INTENTIONAL_PRODUCTION) {
+  const source = readFileSync(join(scriptsDir, file), 'utf8')
+  check(`${file}: intentional production script keeps its explicit --confirm-host / --i-really-mean-production confirmation`, /assertConfirmedDatabaseHost\(/.test(source))
+}
 
 listener.close()
 const passed = results.filter(Boolean).length
