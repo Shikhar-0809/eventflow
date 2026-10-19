@@ -18,17 +18,23 @@ Changes to the locked v1 scope get recorded here so the "why" doesn't get lost l
 - **[Resolved]** Bugs #005 (cold reload connection error), #012 (calendar event context switch), and a tab-title nit on the connection error screen — all fixed and verified before Prompt 15. No open bugs entering the Postgres migration.
 - **[Pulled forward from v5+]** Multi-merchant accounts — any tent/catering business can sign up and use EventFlow with fully isolated data. Pulled forward to make EventFlow a product rather than a single merchant's tool. Billing/subscriptions remain out of scope.
 - **[Delivered — Prompts 24–25]** Multi-merchant data isolation, the first half of what was pulled forward above. Prompt 24 added a migration runner, the `merchants` table, `merchant_id` on every business table and composite foreign keys; Prompt 25 made the session carry the merchant and scoped every API route, script and seed to it (a merchant can only ever see their own bookings, inventory, expenses, change log, settings and usage; another merchant's id looks exactly like a nonexistent one), proven by `npm run verify:isolation`. **Why now:** to make EventFlow a product rather than one merchant's tool, and because isolation has to exist before a second real merchant, not after: a data leak between merchants is a Critical bug (BUGS.md). It was enforced in the database as well as in the routes so that a single route bug cannot cross merchants. **Not delivered yet:** real per-merchant accounts and the onboarding flow (Prompt 26, Firebase auth); until then the single env-password login is merchant 1. Billing/subscriptions remain out of scope. DATA_PRIVACY.md was updated for the shared database, but the formal privacy policy and consent flows are still open (see the v5+ section).
+- **[Delivered — 2026-10-15, commits `41b6c98`..`cfbd012`]** Self-service sign-up and per-merchant email + password login (migration `005_merchant_accounts`, `POST /api/auth/signup`, `SignupScreen`), with the merchant's `business_name` shown throughout the app and in WhatsApp sign-offs. Supersedes the "not delivered yet" note two entries above: the single env-password login is gone (`MERCHANT_PASSWORD_HASH` no longer exists) and merchant 1 logs in through the `merchants` table. **Why:** a product needs accounts before a second merchant exists.
+- **[Delivered — 2026-10-15, commit `a1a0103`]** Email verification at sign-up and self-service password reset by emailed code (migration `006_email_otps`; Brevo for delivery; sessions end on reset via `token_version`). Pulled forward from the v1.5 "self-service password reset" bullet and the v5+ "still missing: email verification, password reset" note. **Why:** without it anyone could register any address, and a forgotten password needed the developer. Firebase / phone / Google login (Prompt 26) is still open.
+- **[Delivered — 2026-10-16, commits `0b5db27`, `6a8c2e6`]** Merchant profile: business name and own WhatsApp number, change password / email, log out other devices, recent sign-ins, in-app account deletion (migration `007_merchant_profile`). **Why:** merchants needed to manage their own account without the developer; the merchant's WhatsApp number moved from an env var to the profile.
+- **[Delivered — Postgres + deployment]** The Postgres migration (Prompt 15, `5ed072b`, 2026-06-24) and the Vercel + Render + Neon deployment are done; the v1 scope bullet below that called deployment "deliberately deferred" is superseded. Production holds real merchant data, so `CLAUDE.md` now governs how changes are made. First live deploy: on or before 2026-06-30 (commit `051d8f2` that day fixes the cross-site cookie between Render and Vercel; the exact day is not recorded).
+- **[Pulled forward from v1.5 / v3]** Cancel a booking (status action in `BookingDetail`), search and filter bookings (Records screen), Excel export of records (`xlsx`, not CSV) and a date-range report with print and PDF download (Analytics). The v1.5 and v3 bullets below still list them as deferred; they are delivered.
+- **[Behavior change]** Cancelled bookings no longer count toward revenue, booking counts, peak month or clients in Analytics, matching Reports and the Sidebar/Calendar (BUGS #096); the rule lives in `server/services/bookingStatus.js`. Booking prices and totals are computed on the server (BUGS #062). Analytics numbers in the Sidebar refresh after booking changes (BUGS #097, #098), and report PDFs no longer split a booking card across pages (BUGS #095; mobile PDF size, #094, is deferred).
 
 ---
 
 ## v1 (current build) — locked scope
 
-- Single merchant, password-protected login
+- Single merchant, password-protected login *(superseded: multi-merchant accounts with email + password; see the Scope decisions log)*
 - Calendar view of all bookings
 - Create booking with real-time conflict detection (alert-only, doesn't block — see Scope decisions log)
 - **Edit an existing booking** (added — see Scope decisions log)
 - Booking detail view
-- WhatsApp confirmation + payment reminder (deep link, no API), signed as Bala Ji Tent House
+- WhatsApp confirmation + payment reminder (deep link, no API), signed as Bala Ji Tent House *(now signed with each merchant's own business name)*
 - Manual change log per booking
 - **Business analytics dashboard** — revenue, bookings/month, peak month, total clients (merchant-facing)
 - **Usage tracking** — merchant-facing "Your Activity" summary + internal adoption-proof event log
@@ -39,7 +45,7 @@ Changes to the locked v1 scope get recorded here so the "why" doesn't get lost l
   - Mark items damaged / mark items repaired, with a lightweight audit log (mirrors the existing booking change-log pattern)
   - Attach inventory needs to a booking (e.g. "150 chairs, 20 tables")
   - Per-event-date availability check when creating or editing a booking — alert + explicit "confirm anyway" step if insufficient, never a silent block
-- Deployed on Vercel (frontend) + Render (backend) + Neon/Supabase (Postgres) — **deliberately deferred for now** per the Prompt 15 decision; see `DEPLOYMENT.md`. The app ships as a fully functional local, demo-ready build in the meantime.
+- Deployed on Vercel (frontend) + Render (backend) + Neon (Postgres) — *originally "deliberately deferred" per the Prompt 15 decision; now done and live, see the Scope decisions log and `DEPLOYMENT.md`.*
 
 This is the version validated with the real merchant from the original conversation. Nothing below gets built until v1 is in their hands and being used.
 
@@ -49,11 +55,11 @@ This is the version validated with the real merchant from the original conversat
 
 These are low-effort, high-value additions that don't expand scope conceptually, just depth:
 
-- Cancel an existing booking
-- Search/filter bookings by client name or date range
-- Simple data export button (CSV) in the UI — currently this exists only as a manual script per `DATA_PRIVACY.md`
+- Cancel an existing booking *(done)*
+- Search/filter bookings by client name or date range *(done: Records screen)*
+- Simple data export button (CSV) in the UI — *an Excel export of records exists; a full per-account export is still by request only, per `DATA_PRIVACY.md`*
 - "Mark advance as fully paid" quick action on the detail panel
-- Self-service password reset (currently manual via developer, per `RUNBOOK.md`)
+- Self-service password reset *(done: emailed code, see the Scope decisions log)*
 
 ---
 
@@ -96,9 +102,9 @@ Possible shape, once that discovery happens:
 
 Only relevant if EventFlow moves from "one merchant's tool" to "a product for many merchants." This is a different system, not an incremental feature:
 
-- Multi-tenancy (currently the entire auth model assumes one merchant) — **partly done (Prompts 24–25):** merchants table, merchant-scoped session and routes; **email + password accounts and self-service sign-up now built** (migration `005`, `POST /api/auth/signup`). Still missing: email verification, password reset, Firebase/phone/Google login (Prompt 26)
+- Multi-tenancy — **done (Prompts 24–25):** merchants table, merchant-scoped session and routes; **email + password accounts, self-service sign-up, email verification and password reset are built** (migrations `005`-`007`). Still missing: Firebase/phone/Google login (Prompt 26)
 - Per-merchant data isolation — **done (Prompts 24–25):** enforced in the routes and by composite foreign keys, verified by `npm run verify:isolation`
-- Onboarding flow for new merchants — sign-up screen done (email + password); business profile onboarding and Firebase auth remain (Prompt 26)
+- Onboarding flow for new merchants — sign-up (email + code + password) and the Profile screen are done; guided business-profile onboarding and Firebase auth remain (Prompt 26)
 - Billing/subscription model — **still out of scope**
 - *(Partly done: `DATA_PRIVACY.md` now describes the shared database and the pre-onboarding checklist; the full rewrite below is still open.)* This would also reopen `DATA_PRIVACY.md` for a full rewrite — single-merchant informal trust does not scale to multi-tenant SaaS, and DPDP Act obligations get materially heavier (formal privacy policy, consent flows, possibly a Data Protection Officer depending on scale)
 

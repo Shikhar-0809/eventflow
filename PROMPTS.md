@@ -1,5 +1,7 @@
 # PROMPTS.md — EventFlow
 
+> **Historical build log.** These prompts are the record of how EventFlow was built (Cursor-era, Prompts 0–21) and are kept as written. They do **not** describe the current architecture: for example, Prompt 0 scaffolds a SQLite single-merchant app, while the deployed system is multi-merchant on Neon Postgres with email-verified accounts. For what the system is now, read `ARCHITECTURE.md`, `SECURITY.md`, `CODING_STANDARDS.md` and `CLAUDE.md`; later work (Prompts 22–26) is in `PROMPTS_22-26.md`. Do not run these prompts against the current codebase.
+
 ## How to use this file
 
 Run these prompts in Cursor in the exact order listed. Each prompt builds on the previous one. Before running any prompt, make sure the previous step is working and committed.

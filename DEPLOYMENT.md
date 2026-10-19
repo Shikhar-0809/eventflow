@@ -4,11 +4,11 @@
 
 `ARCHITECTURE.md` and `PROMPTS.md` both reference this file as the source of truth for getting EventFlow off localhost and onto a real, persistent, HTTPS-served deployment. This is that file. Like `SECURITY.md`, treat it as load-bearing — if a step here is skipped or improvised around, the most likely failure mode is silent data loss (an ephemeral filesystem wiping the database) or a broken session (cookie flags misconfigured for the live domain), not a loud error.
 
-This file assumes Prompt 15 in `PROMPTS.md` (the Postgres migration) has been run, or is about to be. **Do not deploy on SQLite.** See the next section for why.
+Production runs on Postgres (Neon): the Postgres migration (git commit `5ed072b`, 2026-06-24) and the first Vercel + Render deploys are done, and the app is live with real merchant data. **Never deploy on SQLite** (it is no longer supported by the code at all). The sections below are both the record of how it was set up and the procedure for rebuilding or changing it.
 
 ---
 
-## Why SQLite can't be the production database
+## Why SQLite can't be the production database (historical rationale; the app now uses Postgres only)
 
 `ARCHITECTURE.md` already states this, repeated here because it's the reason this entire file exists: Render, Railway, and Vercel's free/standard compute tiers use **ephemeral filesystems**. Anything written to local disk — including a SQLite `.db` file — can be silently wiped on every redeploy, every restart, every scale event, or every time the platform recycles the container for maintenance. There is no warning before this happens. The app keeps running; the data is just gone.
 
@@ -24,7 +24,7 @@ For a POC this is the single most common way "it worked yesterday" turns into "a
 |---|---|---|
 | Frontend (React/Vite static build) | **Vercel** | Free tier, automatic HTTPS, trivial GitHub-integration deploys, purpose-built for static/SPA frontends |
 | Backend (Express API) | **Render** | Free tier supports a long-running Node process (Vercel's serverless model doesn't fit an Express app with persistent middleware/sessions as cleanly), automatic HTTPS, easy env var management |
-| Database | **Neon** (or Supabase as an alternative) | Free tier Postgres with persistent storage, works fine for single-merchant POC scale, simple connection string setup |
+| Database | **Neon** (or Supabase as an alternative) | Free tier Postgres with persistent storage, fine at this scale (a handful of small merchants), simple connection string setup |
 
 This matches what `ARCHITECTURE.md`'s tech stack table and `ROADMAP.md`'s v1 scope both already specify — this file is the "how," not a new decision.
 
@@ -34,10 +34,10 @@ This matches what `ARCHITECTURE.md`'s tech stack table and `ROADMAP.md`'s v1 sco
 
 Do not proceed past this section until every item is true:
 
-- [ ] Prompt 15 (Postgres migration) is complete — `server/db/database.js` connects via `pg`, every query uses `$1, $2` placeholders instead of `?`, `seed.js`'s `NODE_ENV === 'production'` guard is intact and tested
+- [ ] `server/db/database.js` connects via `pg`, every query uses `$1, $2` placeholders, and `seed.js`'s `NODE_ENV === 'production'` guard is intact (the Postgres migration, Prompt 15, is done)
 - [ ] `SECURITY.md`'s full pre-deploy security audit checklist has been run and is clean (this should already be true from Prompt 12, but re-run it specifically against Postgres-backed code, since query syntax changed)
-- [ ] A **separate** `JWT_SECRET`, `MERCHANT_PASSWORD_HASH`, and `ADMIN_ACCESS_KEY` have been generated for production — **never reuse the local dev values.** Generate fresh ones using the exact commands in `SECURITY.md`'s "Generating secrets" section.
-- [ ] You have a real, memorable production password chosen for the merchant — generate its hash locally (never paste the plaintext into any chat tool, commit, or file, per `SECURITY.md` and `DATA_PRIVACY.md`)
+- [ ] A **separate** `JWT_SECRET`, `OTP_HMAC_SECRET`, `ADMIN_ACCESS_KEY` and `PROXY_SHARED_SECRET` have been generated for production — **never reuse the local dev values.** Generate fresh ones using the exact commands in `SECURITY.md`'s "Generating secrets" section. `BREVO_API_KEY` and a verified `EMAIL_FROM` sender come from the Brevo dashboard.
+- [ ] Merchants choose their own passwords at sign-up (only the bcrypt hash is stored in `merchants.password_hash`); there is no shared merchant password and `MERCHANT_PASSWORD_HASH` no longer exists. Never paste a real password into any chat tool, commit, or file, per `SECURITY.md` and `DATA_PRIVACY.md`
 - [ ] `.gitignore` confirmed covering `.env` in both `client/` and `server/`, and `git log -p -- '**/.env'` returns nothing (per the pre-push check already done in this build)
 
 ---
@@ -71,11 +71,18 @@ Do not proceed past this section until every item is true:
    PORT=3001
    DATABASE_URL=<the Neon connection string from Step 1, with sslmode=verify-full (not require)>
    JWT_SECRET=<freshly generated production value>
-   MERCHANT_PASSWORD_HASH=<freshly generated production bcrypt hash>
+   OTP_HMAC_SECRET=<freshly generated production value>
    ADMIN_ACCESS_KEY=<freshly generated production value>
+   PROXY_SHARED_SECRET=<generated; the same value is set in Vercel, Step 3>
+   PROXY_LOCK_MODE=enforce
+   BREVO_API_KEY=<from Brevo>
+   EMAIL_FROM=<verified sender address>
+   EMAIL_FROM_NAME=EventFlow
+   APP_URL=<optional, shown in emails>
    CORS_ORIGIN=<your Vercel frontend URL — set this in Step 3, then come back and update this>
    SESSION_COOKIE_NAME=eventflow_session
    ```
+   The server refuses to start without `JWT_SECRET`, `SESSION_COOKIE_NAME` and (in production) `PROXY_SHARED_SECRET`; a missing `BREVO_API_KEY`, `EMAIL_FROM` or `OTP_HMAC_SECRET` only logs a warning at boot, but sign-up and password-reset codes then fail (`EMAIL_FROM_NAME` is also needed and is not in that warning). The server applies pending migrations on boot.
 5. Deploy. Render will build and start the service, and assign a URL like `https://eventflow-api.onrender.com`
 6. Confirm it's alive: `https://eventflow-api.onrender.com/api/health` should return `{"status":"ok"}`
 
@@ -89,7 +96,7 @@ Do not proceed past this section until every item is true:
 2. Configuration:
    - **Root Directory:** `./` (the repo root, not `client`)
    - The build, output and install commands and all routing and headers come from the **root `vercel.json`**, which is the only Vercel config. Vercel does not read a `vercel.json` inside `client/`.
-3. Environment variable for production builds (also in `client/.env.production` in the repo — no Vercel dashboard override needed unless you want to set it explicitly):
+3. Environment variables. `PROXY_SHARED_SECRET` (the same value as on Render) must be set in the Vercel project's settings as a server-side variable, **not** prefixed `VITE_`: the root `vercel.json` copies it into the `x-proxy-secret` header on every `/api` request, and in production Render rejects requests without it (SECURITY.md, "Proxy-only origin lock"). For production builds the API base is also in `client/.env.production` in the repo — no Vercel dashboard override needed unless you want to set it explicitly:
    ```
    VITE_API_URL=/api
    ```
@@ -99,7 +106,7 @@ Do not proceed past this section until every item is true:
 
 ---
 
-## Releasing the multi-merchant work (Prompts 24 + 25): two pushes
+## Releasing the multi-merchant work (Prompts 24 + 25): two pushes (done 2026-10-15; kept as the pattern for any release where code and schema depend on each other)
 
 Take a **fresh restore-point branch of the production database in Neon first** (migrations have no down step). Then ship in two pushes so no running instance ever relies on a `DEFAULT` that is already gone:
 
@@ -108,7 +115,7 @@ Take a **fresh restore-point branch of the production database in Neon first** (
    The new code never relies on `DEFAULT 1`; the old instance still can. Render applies migrations `001` (adopted), `002`, `003` at boot. Verify live: login works (everyone re-logs in once), then calendar, bookings, inventory, records, analytics and settings; in the Render logs `migrate:` shows `baseline adopted`, `known drift ... bookings_status_check`, `applied 002...`, `applied 003...`.
 2. **Push (b): `004` alone**, once (a) is verified live: `git push origin main`. Afterwards create a booking to confirm writes still work.
 
-**If something goes wrong:** RUNBOOK.md, "Release rollback" (rollback SHA, code rollback on Render and Vercel, `004_down`, restore from the Neon restore-point branch).
+**If something goes wrong:** RUNBOOK.md, "Rolling back a release" (revert a specific commit, redeploy on Render and Vercel, the env vars the current code needs, restore from the Neon restore-point branch). The old rollback SHA in the historical section there is unsafe.
 
 ## Step 4 — Verify the live deployment
 
@@ -119,6 +126,8 @@ Run through `SECURITY.md`'s "Pre-deploy additions" checklist and `TESTING.md`'s 
 - [ ] A logged-out session genuinely cannot reach `/api/bookings`, `/api/analytics/summary`, or `/api/usage/admin` on the live backend URL
 - [ ] Create a real booking on the live URL, confirm it persists after manually triggering a Render redeploy (this is the actual proof that the SQLite→Postgres migration solved the problem this file exists to solve)
 - [ ] Confirm `/api/usage/admin` still requires both `requireAuth` and the `x-admin-key` header on the live URL — test with curl, not the browser, since it's intentionally not reachable from the frontend
+- [ ] A direct request to the Render URL (not through Vercel) returns 403 except `/api/health`, and `PROXY_LOCK_MODE` is `enforce`
+- [ ] Sign up with a fresh email on the live URL: the emailed code arrives and the new merchant lands in an empty dashboard (proves the Brevo variables)
 - [ ] Test the full demo flow (login → calendar → new booking with conflict detection → WhatsApp link → analytics → my activity) end-to-end on the deployed URLs, on both a desktop browser and an actual mobile phone browser, per `TESTING.md`
 
 ---
@@ -127,7 +136,7 @@ Run through `SECURITY.md`'s "Pre-deploy additions" checklist and `TESTING.md`'s 
 
 - The production database should **never** be seeded with `seed.js`'s demo data — confirm `NODE_ENV=production` is genuinely set in Render's environment (not just locally), since that's the only thing preventing demo bookings from appearing in front of a real merchant
 - Once the merchant starts entering real client data, follow `DATA_PRIVACY.md` in full — this is no longer a POC sandbox at that point
-- Rotate `JWT_SECRET`, `MERCHANT_PASSWORD_HASH`, and `ADMIN_ACCESS_KEY` to values that have never been used in any dev/local context, if they haven't already been generated fresh per the pre-deployment checklist
+- Rotate `JWT_SECRET`, `OTP_HMAC_SECRET`, `ADMIN_ACCESS_KEY` and `PROXY_SHARED_SECRET` to values that have never been used in any dev/local context, if they haven't already been generated fresh per the pre-deployment checklist
 
 ---
 
@@ -136,7 +145,9 @@ Run through `SECURITY.md`'s "Pre-deploy additions" checklist and `TESTING.md`'s 
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Login works locally but fails on the live URL ("works once, then logs out immediately") | Cookie `secure` flag issue, or `CORS_ORIGIN` mismatch | Confirm `NODE_ENV=production` is actually set on Render; confirm `CORS_ORIGIN` exactly matches the Vercel URL (no trailing slash mismatch) |
-| Bookings disappear after a Render redeploy | Still running on SQLite, not Postgres | Re-confirm Prompt 15 migration is actually deployed — check Render's logs for `better-sqlite3` references; confirm `DATABASE_URL` is set |
+| Bookings disappear after a Render redeploy | `DATABASE_URL` points somewhere other than the Neon database (SQLite is no longer supported, so this cannot be a disk file) | Confirm `DATABASE_URL` on Render and look at the `Target database` lines in the logs; this symptom was the original SQLite-era failure |
+| Every API call returns 403 on the live site | `PROXY_SHARED_SECRET` differs between Vercel and Render, or is missing on Vercel | Set the same value on both and redeploy both (SECURITY.md, "Rotating the secret") |
+| Sign-up or reset code never arrives | Brevo variables missing or the sender is not verified | Check `BREVO_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME` and `OTP_HMAC_SECRET` on Render and the boot warning in the logs |
 | First request after idle period is very slow | Render free-tier cold start | Expected behavior on free tier; not a bug. Hit `/api/health` to warm it up before a demo |
 | CORS errors in browser console on the live frontend | `CORS_ORIGIN` on Render doesn't match the Vercel domain | Update and redeploy backend; remember Step 3's "go back and update" step |
 | `/api/usage/admin` returns data without the admin key | `requireAdminKey` env var not set or not wired | This would be a serious regression — re-run `SECURITY.md`'s admin-key checks (Prompt 9's verification) against the live URL immediately |
@@ -151,4 +162,4 @@ Run through `SECURITY.md`'s "Pre-deploy additions" checklist and `TESTING.md`'s 
 | `SECURITY.md` | Cookie config, CORS config, and the full pre-deploy audit checklist this file builds on |
 | `DATA_PRIVACY.md` | What changes once real client data is in scope, post-deploy |
 | `TESTING.md` | The pre-deploy test pass referenced in Step 4 |
-| `PROMPTS.md` | Prompt 15 (Postgres migration) is the code-level prerequisite this file assumes is done |
+| `PROMPTS.md` | Prompt 15 (Postgres migration) was the code-level prerequisite (done); PROMPTS.md is a historical build log |

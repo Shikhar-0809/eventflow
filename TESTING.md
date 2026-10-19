@@ -9,16 +9,18 @@ Given the timeline, this is **not** asking you to write a full automated test su
 ## Manual test pass — run after every PROMPTS.md milestone
 
 ### The happy path (always test this first)
-- [ ] Can log in with the correct password
+- [ ] Can log in with the correct email and password
 - [ ] Calendar loads and shows seeded bookings
 - [ ] Can create a new booking on a free date
 - [ ] New booking appears on calendar immediately, no refresh needed
 - [ ] Can click a booking and see its detail panel
 - [ ] Can click "Edit" on a booking, change a field, save, and see the change reflected on the calendar and detail panel without a refresh
-- [ ] WhatsApp confirmation button opens WhatsApp with correct, readable text, signed "Bala Ji Tent House"
-- [ ] WhatsApp payment reminder button opens WhatsApp with correct, readable text, signed "Bala Ji Tent House"
+- [ ] WhatsApp confirmation button opens WhatsApp with correct, readable text, signed with the logged-in merchant's business name
+- [ ] WhatsApp payment reminder button opens WhatsApp with correct, readable text, signed with the logged-in merchant's business name
 - [ ] Can log a change note and see it appear with a timestamp
-- [ ] Analytics screen loads and shows correct revenue/booking/peak-month figures matching the seed data
+- [ ] Analytics screen loads and shows correct revenue/booking/peak-month figures matching the seed data (cancelled bookings are not counted; see `verify:analytics` below)
+- [ ] Revenue refresh (BUGS #097): with a monthly target set, create a booking this month and the Sidebar revenue bar rises with no page refresh; cancel it and the bar drops back; edit its total and the bar follows; with the Analytics screen open the cards update without a loading flash; with the API stopped, a booking change still works and the bar keeps its old number
+- [ ] Empty merchant (BUGS #098): on a fresh sign-up, create one booking and delete it; the Sidebar's this-month and pending counts return to 0 and next event shows "—" without a refresh
 - [ ] My Activity screen loads and reflects recent actions (a fresh login, a fresh booking) without needing a manual refresh
 - [ ] Inventory screen loads and shows seeded items with correct Total / In Use Today / Available / Damaged counts
 - [ ] Can add a new inventory item type and see it appear in the grid immediately
@@ -86,9 +88,10 @@ Automated: `node scripts/verify-profile-ui.mjs --confirm-host=<dev db host>` fro
 ### Report PDF (Analytics > Export Report)
 Automated: `node scripts/verify-report-pdf.mjs --confirm-host=<dev db host>` from `server/` (dev database only, read-only; needs `npm run dev` running, so the client on :5173 and the API on :3001). It logs in as the dev demo merchant, generates the report in the real UI for an empty range, a small month, the widest window of up to 12 months and a month with expenses (skipped with a SKIP line if the demo data has none), clicks Download PDF and inspects the file. Downloaded PDFs go to `<tmp>/eventflow-report-pdf` (`REPORT_PDF_DIR` overrides). It checks, per case:
 - [ ] The download succeeds, the report window lists every booking, and the PDF is under 5 MB (BUGS #091: image data compressed, not raw RGB)
-- [ ] The PDF holds one image object reused on every page, and its page count matches the canvas height
+- [ ] The PDF holds one image object reused on every page, and its page count matches the page layout (`window.__reportPdfLayout`, exposed in dev builds only), which covers the report with no gap or overlap
+- [ ] No booking card is cut by a page break, except cards taller than a page (BUGS #095); the output also prints how many cards the old fixed 297 mm cuts would have cut
 - [ ] The PDF's image data is pixel-identical to the canvas html2canvas produced (SHA-256 of the RGB bytes)
-- [ ] A canvas over 16,777,216 px prints a WARN, not a FAIL (iOS Safari limit, BUGS #094; page-break cuts are BUGS #095)
+- [ ] A canvas over 16,777,216 px prints a WARN, not a FAIL (iOS Safari limit, BUGS #094, still open)
 
 ### Booking pricing (server-side totals, BUGS #062)
 Automated: `npm run verify:pricing -- --confirm-host=<dev db host>` from `server/` (dev database only; boots its own API server on port 3010, `PRICING_PORT` overrides). It creates two throwaway merchants (`PRICING-FIXTURE-1` and `-2`, with their own items), drives `POST /bookings` and `PATCH /bookings/:id`, reads what was stored straight from the database, and removes both merchants afterwards (and at the start of the next run if a run crashed). It pauses once for 61 s because of the booking-create rate limit. It checks:
@@ -98,10 +101,17 @@ Automated: `npm run verify:pricing -- --confirm-host=<dev db host>` from `server
 - [ ] `PATCH` recomputes, keeps stored prices when `inventory` is omitted, takes the current rate for a line sent without a price, and a rejected `PATCH` changes nothing
 - [ ] In production the error handler returns the generic message, not the Postgres text
 
-### Rebrand check
-- [ ] Sidebar shows "Bala Ji Tent House", not "Sharma Tent House" or "EventFlow"
-- [ ] Browser tab title reads "EventFlow — Bala Ji Tent House"
-- [ ] Both WhatsApp message templates sign off as "Bala Ji Tent House" — search the codebase for any remaining literal "Sharma Tent House" or a stray "EventFlow" sign-off in `utils/whatsapp.js` and confirm there's none left
+### Analytics: cancelled bookings (BUGS #096)
+Automated: `npm run verify:analytics -- --confirm-host=<dev db host>` from `server/` (dev database only; boots its own API server on port 3011, `ANALYTICS_PORT` overrides). It creates one throwaway merchant (`ANALYTICS-FIXTURE-1`) that starts empty, creates bookings through `POST /bookings`, cancels them through `PATCH /bookings/:id/status`, and removes the merchant afterwards (and at the start of the next run if a run crashed). It checks:
+- [ ] A fresh merchant's summary is all zeros with no peak month and `monthly` is six months of zeros
+- [ ] A confirmed booking this month raises `revenueThisMonth`, `bookingsThisMonth` and `totalClients` by exactly its amount and count
+- [ ] Cancelled bookings (this month and an earlier month) leave summary, monthly and peak month exactly as before, and a client whose only bookings are cancelled does not count; the same bookings do count before they are cancelled
+- [ ] The analytics numbers equal `/api/reports/range` for the same periods
+
+### Branding check (per-merchant name)
+- [ ] Sidebar shows the logged-in merchant's own business name (not a hardcoded one, and not "EventFlow" alone)
+- [ ] Browser tab title reads "<screen> — <business name>" while logged in
+- [ ] Both WhatsApp message templates sign off with that business name — search the codebase for any literal business name or a stray "EventFlow" sign-off in `utils/whatsapp.js` and confirm there is none (an old hardcoded "Sharma Tent House" / "Bala Ji Tent House" would be a bug; Bala Ji Tent House is now just merchant 1)
 
 ### Visual/UX pass
 - [ ] Resize browser to 1280px width (likely recording resolution) — nothing overlaps or overflows
@@ -143,7 +153,7 @@ The `verify-*.mjs` scripts under `server/scripts/` were written against earlier 
 
 ## Worth automating later (not now, but flag for post-POC)
 
-If EventFlow moves past the single-merchant POC stage, these are the first things worth converting to real automated tests (e.g. with Vitest + React Testing Library for frontend, Jest/Supertest for backend):
+EventFlow is past the single-merchant POC stage, so these are the first things worth converting to real automated tests (e.g. with Vitest + React Testing Library for frontend, Jest/Supertest for backend):
 
 - Conflict detection logic (`conflictCheck.js`) — pure function, easy to unit test, high value since it's the core feature
 - Inventory availability calculation (per-date committed quantity vs. usable) — also a pure function once extracted, same value proposition as conflict detection

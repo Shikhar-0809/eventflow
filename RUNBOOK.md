@@ -4,7 +4,48 @@ Operational procedures. Keep each one short and exact. Never paste a connection 
 
 ---
 
-## Release rollback — Prompts 24 + 25 (multi-merchant)
+## Rolling back a release (current procedure)
+
+Rollbacks never rewrite history: no force-push, no `git reset` on `main` (CLAUDE.md). Ask before any push.
+
+### 1. Decide
+
+| Symptom | Do this |
+|---|---|
+| A small bug | Fix forward with a new commit. |
+| A release broke the app, database fine | **Revert the bad commit** (below), or use the dashboards' one-click rollback for speed. |
+| A migration half-applied or the database damaged | Restore from the Neon restore-point branch (section 3). Last resort: data written after the restore point is lost. |
+
+### 2. Revert a specific commit and redeploy
+
+1. Find the commit that introduced the problem: `git log --oneline` (the last known-good deploy is shown in the Render and Vercel dashboards).
+2. `git revert <sha>` (several commits: `git revert <oldest>^..<newest>`). This creates a new commit and keeps history intact. Check it builds: `cd client && npm run build`, and run the relevant `server/scripts/verify-*.mjs` against the dev database.
+3. Push it (after asking). Render and Vercel redeploy from `main`.
+4. **Urgent alternative:** Render dashboard → the API service → *Deploys* → *Rollback* (or *Manual Deploy → Deploy a specific commit*), and Vercel → *Deployments* → promote the last good production deployment. **After a Render rollback, switch auto-deploy back on** (Settings → Build & Deploy → Auto-Deploy: Yes): a rollback turns it off, so later pushes would not deploy. Then make the revert commit in git so `main` matches what is live.
+5. Verify live: `GET /api/health` is ok; log in; calendar, a booking, inventory, analytics load; create and delete a test booking.
+
+**Never roll the code back past `41b6c98`** (before per-merchant accounts), and be careful across `a1a0103` (email codes) and `0b5db27` (profile): reverting code never reverts the schema.
+
+### 3. The database
+
+- Migrations have **no down step** and run on boot. They are additive today (`005` accounts, `006` email codes, `007` profile), so older code from `41b6c98` on simply ignores the extra columns and tables. The only manual undo is `server/db/rollback/004_down.sql` (restores `DEFAULT 1` on `merchant_id`; needed only if code from before multi-merchant scoping were ever redeployed, which section 2 forbids).
+- Before any release that ships a migration, create a fresh **Neon restore-point branch** of production (DEPLOYMENT.md). To restore: stop writes (suspend the Render service), restore from that branch in the Neon console (or point `DATABASE_URL` at it, an env change done in the dashboard and never pasted anywhere), redeploy code that matches that schema, then resume and verify. Tell the merchants which period of entries may need re-entering.
+- Everyone has to log in again after a rollback across a change in the session token (the old and new code reject each other's tokens in some cases).
+
+### 4. Environment variables the current code needs
+
+Names only; values live in the Render and Vercel dashboards (full list and notes: DEPLOYMENT.md, ARCHITECTURE.md).
+
+- **Render, required to boot:** `JWT_SECRET`, `SESSION_COOKIE_NAME`, `PROXY_SHARED_SECRET` (production), plus `DATABASE_URL` and `NODE_ENV=production`.
+- **Render, needed for features:** `BREVO_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME` and `OTP_HMAC_SECRET` (sign-up, password reset, change email, notices), `ADMIN_ACCESS_KEY` (`/api/usage/admin`), `CORS_ORIGIN`, `PROXY_LOCK_MODE=enforce`, optional `APP_URL`.
+- **Vercel:** `PROXY_SHARED_SECRET` (server-side, same value as Render, not `VITE_`-prefixed); `VITE_API_URL` is `/api` from `client/.env.production`.
+- **Not read any more:** `MERCHANT_PASSWORD_HASH` (removed from the code on 2026-10-15; setting or deleting it on Render changes nothing).
+
+---
+
+## HISTORICAL — rollback for the Prompts 24 + 25 release (2026-10-14). Do not follow it today
+
+> **UNSAFE TODAY.** The rollback target below, `126f0a180ac8883164a030bad18f683d5163f0e4`, and any commit before `41b6c98` (2026-10-15, which moved login to per-merchant accounts) authenticates against the `MERCHANT_PASSWORD_HASH` env var and has no email/password logins, so deploying it now locks every merchant out. This section is kept only as a record of how that release was planned; use "Rolling back a release" above.
 
 The release ships in two pushes (see DEPLOYMENT.md, "Releasing the multi-merchant work"):
 **(a)** everything except `004_drop_merchant_defaults`, **(b)** `004` alone.

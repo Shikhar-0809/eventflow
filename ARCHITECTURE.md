@@ -4,11 +4,11 @@
 
 EventFlow is a merchant-facing booking management dashboard for small tent and catering businesses in India. It allows a business owner to manage bookings, detect conflicts, track inventory, track advances, and send WhatsApp communications to clients — all from a single interface.
 
-**Business persona:** Bala Ji Tent House. This is the merchant-facing name shown in the Sidebar, document title, and WhatsApp message sign-off — the tool itself is still called EventFlow internally.
+**Multi-merchant.** Any tent or catering business can sign up (email + password, with an emailed code) and gets its own isolated data. The merchant-facing name is that merchant's own `business_name`: it appears in the Sidebar, the tab title, the calendar greeting, WhatsApp message sign-offs, the Excel export and the printed report (`client/src/App.jsx`, `client/src/utils/whatsapp.js`). The tool itself is called EventFlow. *Previously: a single hardcoded persona, "Bala Ji Tent House"; that business is now merchant 1, the original merchant, whose data predates multi-merchant support.*
 
-**Status: building toward a real, deployed product.** Real merchant data (client names, phone numbers) will be entered. This is no longer throwaway demo code — every file should be written as if it ships. That means: input validation, error handling, basic auth, environment-based config, and no secrets in code.
+**Status: deployed, with real merchant data in production** (frontend on Vercel, API on Render, Postgres on Neon). Every change ships to a real business, so every file is written as if it ships: input validation, error handling, auth, environment-based config, and no secrets in code. `CLAUDE.md` holds the working rules.
 
-Scope is still deliberately small (single merchant, no customer portal, no payment gateway) — but the code quality bar is "product," not "prototype."
+Scope is still deliberately small (no customer portal, no payment gateway, no billing) and the code quality bar is "product," not "prototype." *Previously: "single merchant per deployment"; see the Scope decisions log in `ROADMAP.md`.*
 
 ---
 
@@ -24,12 +24,15 @@ Scope is still deliberately small (single merchant, no customer portal, no payme
 | Database | Postgres via `pg` | Persistent DB for deploy (ephemeral filesystems wipe SQLite). Local and prod both use Postgres via `DATABASE_URL`. |
 | API layer | REST (JSON) | Simple, no GraphQL overhead needed |
 | WhatsApp | `wa.me` deep links | No API key needed, opens WhatsApp with pre-filled text |
-| Auth | Per-merchant email + password (bcrypt), self-service sign-up, JWT session cookie `{ merchant_id }` | The app cannot be left open on the public internet with real client data and no login; each merchant only ever reaches their own rows |
+| Auth | Per-merchant email + password (bcrypt), self-service sign-up with an emailed 6-digit code, JWT session cookie `{ merchant_id, tv }` | The app cannot be left open on the public internet with real client data and no login; each merchant only ever reaches their own rows (SECURITY.md) |
+| Email | Brevo transactional HTTP API (`server/services/email.js`) | Sign-up, password-reset and change-email codes, plus security notice emails. `EMAIL_DEV_LOG=true` logs instead of sending (never in production) |
+| HTTP hardening | `helmet`, `express-rate-limit`, `cors`, proxy-secret check | See SECURITY.md |
 | Validation | `zod` (shared schema, frontend + backend) | One source of truth for what a valid booking — and a valid inventory item — looks like |
 | Charts | `recharts` | Lightweight, composable, good fit for a handful of simple charts — no need for a heavier charting lib at this scale |
 | Records export | SheetJS (`xlsx`) | Client-side `.xlsx` export from the Records screen |
-| Printable reports / PDF | Printable HTML window + jsPDF + html2canvas loaded via CDN | Date-range report from Analytics; PDF download without bundling those libs |
+| Printable reports / PDF | Printable HTML window + `jspdf` + `html2canvas` (npm dependencies, loaded with dynamic `import()` only when a PDF is requested) | Date-range report from Analytics; see "Report PDF pipeline" below. *Previously loaded from a CDN; the production CSP is `script-src 'self'`, so they are bundled.* |
 | Secrets | `.env` (local) / platform env vars (deploy) | Never committed, see SECURITY.md |
+| Schema | Numbered SQL migrations (`server/db/migrations/`), run by `server/db/migrate.js` on boot | See "Data model" |
 
 ### Why Postgres (not SQLite on disk)
 Render/Railway/Vercel free tiers use **ephemeral filesystems** — anything written to disk (including a SQLite `.db` file) can be wiped on every redeploy or restart. EventFlow therefore uses **Postgres via `pg`** everywhere (`DATABASE_URL`). See `DEPLOYMENT.md` for Neon/Supabase + Render + Vercel topology.
@@ -46,7 +49,7 @@ In production the browser uses same-origin `/api` (`client/.env.production`: `VI
 ```
 eventflow/
 ├── client/                        # React frontend (Vite)
-│   ├── index.html                 # HTML shell; title "EventFlow — Bala Ji Tent House"
+│   ├── index.html                 # HTML shell; static title "EventFlow — Bookings and inventory for tent and catering businesses" (App.jsx sets the live tab title per screen and merchant)
 │   ├── package.json
 │   ├── postcss.config.js
 │   ├── tailwind.config.js
@@ -65,6 +68,9 @@ eventflow/
 │       │   ├── CalendarView.jsx           # FullCalendar + search + morning briefing
 │       │   ├── ConfirmDialog.jsx
 │       │   ├── ConflictBanner.jsx         # Inline alert on date clash (non-blocking)
+│       │   ├── AuthCard.jsx, EmailStep.jsx, OtpInput.jsx, OtpVerifyStep.jsx, ResendOtpButton.jsx, SetPasswordForm.jsx
+│       │   │                              # Shared parts of the sign-up and forgot-password flows (email -> code -> password)
+│       │   ├── ForgotPasswordScreen.jsx   # Forgot-password flow (three steps), reached from the login screen
 │       │   ├── DamagedItemsPanel.jsx
 │       │   ├── InventoryItemCard.jsx
 │       │   ├── InventoryView.jsx
@@ -108,18 +114,21 @@ eventflow/
 │           ├── formatCurrency.js
 │           ├── formatRelativeTime.js
 │           ├── profileErrors.js           # handleProfileError: 401 -> login, anything else -> a human sentence
-│           ├── reportPrinter.js           # Printable HTML report (+ PDF via CDN)
+│           ├── reportPrinter.js           # Printable HTML report + PDF download (jspdf/html2canvas, bundled); see "Report PDF pipeline"
 │           ├── sanitize.js
 │           └── whatsapp.js                # wa.me links — signed with the merchant's business name; self-summary goes to profile.whatsapp_phone
 │
 ├── server/                        # Express backend
-│   ├── index.js                   # Express entry: CORS, mounts, initDb+seed, listen
-│   ├── package.json
-│   ├── .env.example               # JWT_SECRET, DATABASE_URL, ADMIN_ACCESS_KEY, PROXY_SHARED_SECRET, …
+│   ├── index.js                   # Express entry: trust proxy, proxy-secret check (production), helmet, CORS, mounts, initDb+seed, listen
+│   ├── package.json               # Standalone npm project with its own lockfile (not a workspace, BUGS #092)
+│   ├── .env.example               # Placeholder keys only (names listed under "Environment variables")
+│   ├── config/
+│   │   └── productionHosts.js     # The one place the production database host is listed; isProductionDbHost / touchesProductionDb
 │   ├── db/
 │   │   ├── database.js            # pg Pool + production-database guard; initDb() runs the migrations
 │   │   ├── migrate.js             # Migration runner: advisory lock, one transaction per file, ids-only output
-│   │   ├── migrations/            # SCHEMA SOURCE OF TRUTH: 001_baseline.sql, 002_multi_merchant.sql, ...
+│   │   ├── migrations/            # SCHEMA SOURCE OF TRUTH: 001_baseline ... 007_merchant_profile (see "Data model")
+│   │   ├── rollback/              # 004_down.sql: manual undo for 004, never run by the runner (RUNBOOK.md)
 │   │   ├── seed.js                # Dev seed orchestrator (production-gated, per merchant)
 │   │   ├── seedMerchants.js       # Merchant ids used by the dev seeds
 │   │   ├── devMerchantSeed.js     # Dev-only second demo merchant "Shree Ganesh Caterers" (Raipur caterer: 6 months of bookings, equipment, damage, expenses)
@@ -130,10 +139,20 @@ eventflow/
 │   ├── middleware/
 │   │   ├── errorHandler.js        # Never returns stack traces or err.message in production
 │   │   ├── rateLimiter.js
-│   │   ├── requireAuth.js
-│   │   ├── requireAdminKey.js
-│   │   ├── trackUsage.js
-│   │   └── validate.js
+│   │   ├── requireAuth.js         # Verifies the session JWT + token_version, sets req.merchantId
+│   │   ├── requireAdminKey.js     # x-admin-key check for /api/usage/admin
+│   │   ├── requireProxySecret.js  # Production only: x-proxy-secret must match (403 otherwise)
+│   │   ├── trackUsage.js          # Writes event_log rows after a successful response
+│   │   └── validate.js            # zod body validation
+│   ├── services/
+│   │   ├── bookingPricing.js      # Server-side booking prices and totals (BUGS #062)
+│   │   ├── bookingStatus.js       # The shared "active booking" rule (cancelled excluded), BUGS #096
+│   │   ├── email.js               # Brevo send + the email bodies
+│   │   ├── otp.js                 # Email codes (HMAC-hashed), cooldowns, daily caps, action tokens
+│   │   ├── session.js             # issueSession / clearSession / bumpTokenVersion
+│   │   └── signInLog.js           # recordSignIn: coarse device label, newest 10 per merchant
+│   ├── utils/
+│   │   └── deviceLabel.js, ids.js (parseId), maskEmail.js
 │   ├── routes/
 │   │   ├── auth.js
 │   │   ├── profile.js             # /api/profile: business details, sign-ins, password, email change, delete account
@@ -150,13 +169,14 @@ eventflow/
 │   │   ├── merchant.schema.js     # signupSchema, loginSchema
 │   │   ├── records.schema.js
 │   │   └── settings.schema.js
-│   └── scripts/                   # Verify/cleanup/wipe helpers
-│       └── lib/                   # Shared verify helpers
+│   └── scripts/                   # verify-*.mjs checks, seed/cleanup/wipe helpers, migrate.mjs
+│       └── lib/                   # Shared helpers: host guards (confirmDatabaseHost, refuseProductionDatabase, guardFirst), merchantArg, verify session/auth, devOtp
 │
 ├── .gitignore
-├── package.json                   # Root package with workspaces (client only); server is standalone
+├── package.json                   # Root package: workspaces = client only; `dev` runs client + server (concurrently). server/ is standalone (BUGS #092)
 ├── vercel.json                    # The ONLY Vercel config (project root = repo root): build, /api rewrite to Render, SPA fallback, security headers, x-proxy-secret transform
 ├── README.md
+├── CLAUDE.md                      # Working rules for Claude Code in this repo
 ├── ARCHITECTURE.md
 ├── CODING_STANDARDS.md
 ├── PROMPTS.md
@@ -168,134 +188,73 @@ eventflow/
 ├── RUNBOOK.md
 └── ROADMAP.md
 ```
+(`HANDOFF.md`, `RELEASE_CHECKLIST.md`, `STATE_REPORT.md` and `PROMPTS_22-26.md` also sit at the root; they are working notes, not specifications.)
 
 ---
 
 ## Data model
 
-**The schema lives in `server/db/migrations/`** (numbered SQL files, each applied once, in order). `initDb()` calls `runMigrations()` (`server/db/migrate.js`) on every boot; applied ids are recorded in `schema_migrations (id, applied_at)`. The runner takes a transaction-scoped advisory lock (safe through Neon's pooled endpoint), runs each file in its own transaction, and throws on failure so the server refuses to start on a half-migrated database. A database that already has the `bookings` table but no `schema_migrations` adopts `001_baseline` without running it, after checking it really is at the baseline: required columns, `ON DELETE CASCADE` on the booking foreign keys, and the CHECK constraints (`booking_inventory_quantity_check`, `booking_expenses_amount_check`, `bookings_status_check`). A missing CHECK that a later migration repairs (today only `bookings_status_check`, repaired by `003`) is reported as known drift and allowed; anything else missing is refused and the server does not start. Run it by hand with `npm run migrate -- --confirm-host=<host>` from `server/` (no seeds; prints migration ids only; production also needs `NODE_ENV=production` and `--i-really-mean-production`). Rules for writing migrations are in `CODING_STANDARDS.md`. Connection: `pg.Pool` with `connectionString: process.env.DATABASE_URL`; SSL when `NODE_ENV === 'production'`.
+**The schema lives in `server/db/migrations/`** (numbered SQL files, each applied once, in order). `initDb()` calls `runMigrations()` (`server/db/migrate.js`) on every boot; applied ids are recorded in `schema_migrations (id, applied_at)`. The runner takes a transaction-scoped advisory lock (safe through Neon's pooled endpoint), runs each file in its own transaction, and throws on failure so the server refuses to start on a half-migrated database. A database that already has the `bookings` table but no `schema_migrations` adopts `001_baseline` without running it, after checking it really is at the baseline: required columns, `ON DELETE CASCADE` on the booking foreign keys, and the CHECK constraints (`booking_inventory_quantity_check`, `booking_expenses_amount_check`, `bookings_status_check`). A missing CHECK that a later migration repairs (today only `bookings_status_check`, repaired by `003`) is reported as known drift and allowed; anything else missing is refused and the server does not start. Run it by hand with `npm run migrate -- --confirm-host=<host>` from `server/` (no seeds; prints migration ids only; production also needs `NODE_ENV=production` and `--i-really-mean-production`). Rules for writing migrations are in `CODING_STANDARDS.md`. Connection: `pg.Pool` in `server/db/database.js` with `connectionString: process.env.DATABASE_URL`; in production `ssl: { rejectUnauthorized: true }`, otherwise no SSL. *Previously: SQLite (`better-sqlite3`) with `?` placeholders and a single `schema.sql`; both are gone.*
 
-**Multi-merchant.** `merchants` (`id`, `business_name`, `owner_name`, `whatsapp_phone`, `city`, `created_at`, plus `email` and `password_hash` from migration `005_merchant_accounts`) is the tenant table. `email` is stored lowercased and is unique case-insensitively (`merchants_email_lower_key` on `lower(email)`); both credential columns are nullable, and a merchant with no `password_hash` cannot log in. Merchant 1 is Bala Ji Tent House (all pre-existing data); in production it has no credentials until the owner sets them (BUGS #068). Dev seeds give merchants 1 (Bala Ji Tent House) and 2 (Shree Ganesh Caterers) demo logins (`db/seedMerchants.js`, never run in production). The two have deliberately different data: merchant 1 is a tent house with chairs, tables, tents and sofas and venues across many cities; merchant 2 is a Raipur caterer with burners, degchi, chafing dishes and buffet counters, plus six months of history, a date clash, damaged stock and expenses. `scripts/delete-test-merchant.mjs` removes a throwaway merchant and its rows (`--confirm-host`, `--merchant-id`, `--expect-name`; it refuses merchant 1 and the demo merchants). Every business table (`bookings`, `change_log`, `booking_inventory`, `inventory_items`, `inventory_damage_log`, `booking_expenses`, `event_log`, `merchant_settings`) has `merchant_id INTEGER NOT NULL REFERENCES merchants(id)`. Child rows are tied to their parent's merchant at the database level by composite foreign keys, so a cross-merchant link is impossible: `(booking_id, merchant_id) → bookings (id, merchant_id)` on `change_log`, `booking_expenses` and `booking_inventory` (`ON DELETE CASCADE`), and `(item_id, merchant_id) → inventory_items (id, merchant_id)` on `booking_inventory` and `inventory_damage_log`. `inventory_items` is unique on `(merchant_id, name)`; `merchant_settings` has `PRIMARY KEY (merchant_id, key)`. Every route scopes its queries to `req.merchantId` (from the JWT); the temporary `DEFAULT 1` is removed by migration `004_drop_merchant_defaults`. `GET /api/usage/admin` is the one cross-merchant read (admin key) and takes an optional `?merchant_id=` filter. See SECURITY.md, "Tenant isolation". The column listings below predate `merchant_id`; read them as having one more column.
+| Migration | What it does |
+|---|---|
+| `001_baseline` | The original single-merchant schema (`bookings`, `change_log`, `event_log`, `inventory_items`, `booking_inventory`, `inventory_damage_log`, `merchant_settings`, `booking_expenses`) |
+| `002_multi_merchant` | Adds `merchants` and `merchant_id` to every business table, per-merchant uniqueness, composite foreign keys, indexes. Merchant 1 ("Bala Ji Tent House") takes all existing rows |
+| `003_bookings_status_check` | Adds `bookings_status_check` where an older database lacked it |
+| `004_drop_merchant_defaults` | Removes the temporary `DEFAULT 1` on `merchant_id` (a forgotten `merchant_id` now fails loudly). Manual undo: `db/rollback/004_down.sql` |
+| `005_merchant_accounts` | `merchants.email`, `merchants.password_hash`, unique index on `lower(email)` |
+| `006_email_otps` | `email_otps` table; `merchants.token_version`, `merchants.password_changed_at` |
+| `007_merchant_profile` | `merchants.whatsapp_phone` CHECK (`^[6-9][0-9]{9}$`); `sign_in_log`; `email_otps.purpose` also allows `reset_password` |
+
+**Multi-merchant.** `merchants` is the tenant table: `id`, `business_name`, `owner_name`, `whatsapp_phone`, `city`, `created_at`, `email`, `password_hash`, `token_version` (default 0), `password_changed_at`. `email` is stored lowercased and is unique case-insensitively (`merchants_email_lower_key` on `lower(email)`); `email` and `password_hash` are nullable, and a merchant with no `password_hash` cannot log in. Self-service sign-up fills `business_name`, `email` and `password_hash` only; `owner_name` and `city` stay empty, and `whatsapp_phone` is set later on the Profile screen. Merchant 1 is Bala Ji Tent House (all pre-existing data); in production the owner set its credentials (BUGS #068) and its login email is a placeholder (BUGS #074). Dev seeds give merchants 1 and 2 (Shree Ganesh Caterers) demo logins (`db/seedMerchants.js`, never run in production): merchant 1 is a tent house with chairs, tables, tents and sofas and venues across many cities; merchant 2 is a Raipur caterer with burners, degchi, chafing dishes and buffet counters, plus six months of history, a date clash, damaged stock and expenses. `scripts/delete-test-merchant.mjs` removes a throwaway merchant and its rows (`--confirm-host`, `--merchant-id`, `--expect-name`; it refuses merchant 1 and the demo merchants).
+
+Every business table (`bookings`, `change_log`, `booking_inventory`, `inventory_items`, `inventory_damage_log`, `booking_expenses`, `event_log`, `merchant_settings`) has `merchant_id INTEGER NOT NULL REFERENCES merchants(id)`. So do `sign_in_log` (`NOT NULL`, same reference) and `email_otps` (nullable: sign-up and reset rows have no merchant yet; `ON DELETE CASCADE`). Child rows are tied to their parent's merchant at the database level by composite foreign keys, so a cross-merchant link is impossible: `(booking_id, merchant_id) → bookings (id, merchant_id)` on `change_log`, `booking_expenses` and `booking_inventory` (`ON DELETE CASCADE`), and `(item_id, merchant_id) → inventory_items (id, merchant_id)` on `booking_inventory` and `inventory_damage_log`. `bookings` and `inventory_items` carry `UNIQUE (id, merchant_id)` for that purpose; `inventory_items` is also unique on `(merchant_id, name)`; `merchant_settings` has `PRIMARY KEY (merchant_id, key)`. Every route scopes its queries to `req.merchantId` (from the signed session token); see SECURITY.md, "Tenant isolation". `GET /api/usage/admin` is the one cross-merchant read (session + admin key) and takes an optional `?merchant_id=` filter. Deleting an account removes every merchant-scoped table by hand in FK-safe order (`DELETE /api/profile`, `server/routes/profile.js`); a new table with a `merchant_id` column must be added there in the same commit (`scripts/verify-profile-api.mjs` fails if one is missing).
+
+Columns below are the current shape (all tables above also have `merchant_id`, not repeated). Dates are stored as text (`YYYY-MM-DD` for `event_date`, the rest are timestamps written by `DEFAULT NOW()` or ISO strings), as in the baseline.
 
 ### `bookings`
 
 ```sql
-CREATE TABLE bookings (
-  id                INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  client_name       TEXT    NOT NULL,
-  phone             TEXT    NOT NULL,
-  event_type        TEXT    NOT NULL,   -- wedding | birthday | corporate | other
-  event_type_custom TEXT,               -- label when event_type = 'other'
-  event_date        TEXT    NOT NULL,   -- ISO date string YYYY-MM-DD
-  guest_count       INTEGER NOT NULL,
-  venue             TEXT,
-  advance           INTEGER DEFAULT 0,  -- amount in INR
-  total             INTEGER DEFAULT 0,
-  subtotal          INTEGER NOT NULL DEFAULT 0,
-  discount          INTEGER NOT NULL DEFAULT 0,
-  grand_total       INTEGER NOT NULL DEFAULT 0,
-  status            TEXT    DEFAULT 'confirmed',
-                    -- CHECK IN ('confirmed','pending','cancelled','completed')
-  notes             TEXT,
-  created_at        TEXT    DEFAULT NOW(),
-  updated_at        TEXT    DEFAULT NOW()
-);
+id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+client_name TEXT NOT NULL, phone TEXT NOT NULL,
+event_type TEXT NOT NULL,            -- wedding | birthday | corporate | other
+event_type_custom TEXT,              -- label when event_type = 'other'
+event_date TEXT NOT NULL,            -- YYYY-MM-DD
+guest_count INTEGER NOT NULL, venue TEXT,
+advance INTEGER DEFAULT 0, total INTEGER DEFAULT 0,          -- INR
+subtotal INTEGER NOT NULL DEFAULT 0, discount INTEGER NOT NULL DEFAULT 0, grand_total INTEGER NOT NULL DEFAULT 0,
+status TEXT DEFAULT 'confirmed',     -- bookings_status_check: confirmed | pending | cancelled | completed (column is nullable)
+notes TEXT, created_at TEXT DEFAULT NOW(), updated_at TEXT DEFAULT NOW()
 ```
 
-### `change_log`
+`total` is what the merchant is owed and what revenue sums; with inventory lines it equals `grand_total` (see "Booking pricing"). Index `(merchant_id, event_date)`.
 
-```sql
-CREATE TABLE change_log (
-  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  booking_id  INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-  change_note TEXT    NOT NULL,
-  logged_at   TEXT    DEFAULT NOW()
-);
-```
+### `change_log`, `booking_expenses`, `booking_inventory`
+- `change_log (id, booking_id, change_note TEXT NOT NULL, logged_at)`: append-only notes per booking.
+- `booking_expenses (id SERIAL, booking_id, label TEXT, amount INTEGER CHECK (amount > 0), created_at TIMESTAMPTZ)`.
+- `booking_inventory (id, booking_id, item_id, quantity INTEGER CHECK (quantity > 0), unit_price, line_total)`: the lines of a booking; `unit_price` is the price actually used (an override or the item's rate at the time).
+
+### Inventory: `inventory_items`, `inventory_damage_log`
+- `inventory_items (id, name, total_quantity, damaged_quantity, unit_price, created_at)`.
+- `inventory_damage_log (id, item_id, change INTEGER, note, logged_at)`: `change` positive = marked damaged, negative = marked repaired. An append-only audit trail rather than silently mutating `damaged_quantity`.
+- "Available" is computed, not stored: `usable = total_quantity - damaged_quantity`; `in_use_today` = quantity on today's non-cancelled bookings; `available = usable - in_use_today` (see "Inventory availability logic").
 
 ### `event_log`
-
-```sql
-CREATE TABLE event_log (
-  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  event_type  TEXT    NOT NULL,
-              -- login | booking_created | booking_edited | booking_viewed |
-              -- whatsapp_confirmation_sent | whatsapp_reminder_sent | change_logged | …
-  metadata    TEXT,   -- optional JSON string; booking_id only — never client_name or phone
-  created_at  TEXT    DEFAULT NOW()
-);
-```
-
-`event_log` is the single source of truth for both the merchant-facing "Your Activity" view and the internal adoption-proof reporting. One table, two consumers — see Usage tracking section below for the distinction. **Never store PII in `metadata`** — see DATA_PRIVACY.md.
-
-### Inventory tables
-
-```sql
-CREATE TABLE inventory_items (
-  id               INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name             TEXT    NOT NULL UNIQUE,
-  total_quantity   INTEGER NOT NULL DEFAULT 0,
-  damaged_quantity INTEGER NOT NULL DEFAULT 0,
-  unit_price       INTEGER NOT NULL DEFAULT 0,
-  created_at       TEXT    DEFAULT NOW()
-);
-
--- "Available right now" is a computed value, not a column:
---   usable   = total_quantity - damaged_quantity
---   in_use_today = SUM(booking_inventory.quantity) for bookings on today's event_date, status != 'cancelled'
---   available = usable - in_use_today
-
-CREATE TABLE booking_inventory (
-  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-  item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
-  quantity    INTEGER NOT NULL CHECK (quantity > 0),
-  unit_price  INTEGER NOT NULL DEFAULT 0,
-  line_total  INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE inventory_damage_log (
-  id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  item_id     INTEGER NOT NULL REFERENCES inventory_items(id),
-  change      INTEGER NOT NULL,   -- positive = marked damaged, negative = marked repaired
-  note        TEXT,
-  logged_at   TEXT DEFAULT NOW()
-);
-```
-
-### Profile tables (migration `007_merchant_profile`)
-`merchants.whatsapp_phone` (nullable, the merchant's own number; CHECK `^[6-9][0-9]{9}$` added in 007; `business_name` and the column itself already existed from 002). `sign_in_log (id, merchant_id → merchants, device_label, created_at)` keeps the newest 10 rows per merchant with a coarse label such as "Chrome on Android"; it never stores an IP address or the user agent. Index `(merchant_id, created_at DESC)`. `email_otps.purpose` now also allows `reset_password` (the in-session reset flow). Both `sign_in_log` and `email_otps` are in the hand-written delete-account list in `routes/profile.js`.
+`event_log (id, event_type TEXT NOT NULL, metadata TEXT, created_at)`. It is the single source of truth for both the merchant-facing "My Activity" view and the internal adoption reporting (see "Analytics vs. Usage tracking"). `metadata` is `{"booking_id": n}` or null, **never client names or phones** (`server/middleware/trackUsage.js` strips everything else; see DATA_PRIVACY.md).
 
 ### `merchant_settings`
+`merchant_settings (merchant_id, key, value, PRIMARY KEY (merchant_id, key))`. The only key today is `monthly_revenue_target` (`server/routes/settings.js`).
 
-```sql
-CREATE TABLE merchant_settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-```
-
-Used for keys such as `monthly_revenue_target`.
-
-### `booking_expenses`
-
-```sql
-CREATE TABLE booking_expenses (
-  id          SERIAL PRIMARY KEY,
-  booking_id  INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
-  label       TEXT    NOT NULL,
-  amount      INTEGER NOT NULL CHECK (amount > 0),
-  created_at  TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-`inventory_damage_log` mirrors `change_log`'s pattern (an append-only audit trail) rather than just mutating `damaged_quantity` silently — useful both for debugging and because it's the kind of thing a merchant might ask about later.
+### Account tables
+- `email_otps (id, email, purpose, merchant_id, code_hash, attempts, expires_at, consumed_at, last_sent_at, created_at)`: emailed codes. `purpose` is `signup`, `reset`, `change_email` or `reset_password` (`email_otps_purpose_check`). Only an HMAC of the code is stored (`server/services/otp.js`). Rows older than 24 hours are deleted on boot.
+- `sign_in_log (id, merchant_id, device_label, created_at)`: the newest 10 sign-ins per merchant with a coarse label such as "Chrome on Android". It never stores an IP address or the user agent. Index `(merchant_id, created_at DESC)`.
+- `schema_migrations (id, applied_at)`: created and used by the runner.
 
 ---
 
 ## API routes
 
-Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorHandler` → `{ error }`.
+Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorHandler` → `{ error }`. Any other `/api/*` path returns `404 { error: 'Not found.' }`. In production every route except `GET /api/health` also needs the `x-proxy-secret` header (403 otherwise; SECURITY.md). Routers are mounted in `server/index.js`: `/api/auth`, `/api/bookings`, `/api/inventory`, `/api/analytics`, `/api/usage`, `/api/settings`, `/api/reports`, `/api/records`, `/api/profile`; each router except `auth` starts with `router.use(requireAuth)`.
 
 | Method | Route | Auth required | Description |
 |---|---|---|---|
@@ -327,14 +286,14 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | POST | `/api/inventory/:id/damage` | Yes | Mark damaged (+) or repaired (−). Clamped so `damaged_quantity` never goes below 0 or above `total_quantity`. Writes `inventory_damage_log` |
 | DELETE | `/api/inventory/:id` | Yes | Delete item (and related rows) |
 | POST | `/api/inventory/check-availability` | Yes | Per-date shortfall check; advisory only |
-| GET | `/api/analytics/summary` | Yes | Revenue this month, bookings this month, peak month, total clients |
-| GET | `/api/analytics/monthly` | Yes | Bookings + revenue by month — feeds the chart |
+| GET | `/api/analytics/summary` | Yes | `revenueThisMonth`, `bookingsThisMonth`, `peakMonth` (last 6 months), `totalClients` (distinct phones). Cancelled bookings are excluded from all four (BUGS #096) |
+| GET | `/api/analytics/monthly` | Yes | The last 6 months, `{ month, bookings, revenue }` each, cancelled excluded; feeds the chart |
 | POST | `/api/usage/log-client-action` | Yes | Log client-side actions (e.g. WhatsApp clicks) into `event_log` |
-| GET | `/api/usage/me` | Yes | Merchant-facing weekly usage summary |
-| GET | `/api/usage/admin` | Yes + `requireAdminKey` | Full event_log feed — not shown in merchant UI |
+| GET | `/api/usage/me?weekOffset=` | Yes | Merchant-facing weekly usage summary for the calling merchant |
+| GET | `/api/usage/admin?merchant_id=&page=&limit=` | Yes + `requireAdminKey` | Cross-merchant `event_log` feed (includes `merchant_id`), paged — not shown in merchant UI |
 | GET | `/api/settings` | Yes | Read `merchant_settings` (e.g. monthly revenue target) |
 | PATCH | `/api/settings` | Yes | Update settings (validated) |
-| GET | `/api/reports/range` | Yes | Date-range report summary + bookings |
+| GET | `/api/reports/range?from=&to=` | Yes | Date-range report: per-booking rows (cancelled included, flagged by `status`) plus a `summary` that counts only non-cancelled bookings. Range limited to 366 days |
 | GET | `/api/records` | Yes | Filtered booking records for the Records screen / Excel export |
 | GET | `/api/profile` | Yes | Masked email, member since, password changed at, business name and WhatsApp phone, summary counts (bookings, upcoming, inventory items, clients) |
 | PATCH | `/api/profile/business` | Yes | `{ business_name, whatsapp_phone? }` |
@@ -345,7 +304,7 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | POST | `/api/profile/email/send`, `/email/verify` | Yes | Change login email: `{ current_password, new_email }` then `{ code }`; the pending address lives in the `email_otps` row |
 | DELETE | `/api/profile` | Yes | `{ current_password, confirm_business_name }`; deletes the account and all its data in one transaction |
 
-All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `POST /api/auth/signup`, `POST /api/auth/login` and `GET /api/health` (no data), plus the OTP routes above. See SECURITY.md for the full auth matrix.
+All **business** routes require `requireAuth`. The only intentional unauthenticated routes are `GET /api/health` (no data), `POST /api/auth/login` and the public sign-up and password-reset routes (`POST /api/auth/signup`, `/signup/send-otp`, `/signup/resend-otp`, `/signup/verify-otp`, `/forgot/send-otp`, `/forgot/resend-otp`, `/forgot/verify-otp`, `/forgot/reset`); those are rate limited and validated. See SECURITY.md for the full auth matrix and the rate limiters.
 
 ---
 
@@ -364,13 +323,16 @@ ADMIN_ACCESS_KEY=          # for GET /api/usage/admin (x-admin-key header)
 PROXY_SHARED_SECRET=       # production only; also set as a server-side (non-VITE_) Vercel env var
 BREVO_API_KEY=            # email codes (Brevo); required for sign-up and password reset
 EMAIL_FROM=                # verified Brevo sender address
-EMAIL_FROM_NAME=EventFlow
+EMAIL_FROM_NAME=EventFlow  # required to send (sendEmail throws without it)
 EMAIL_DEV_LOG=false        # true logs codes instead of sending; ignored when NODE_ENV=production
 OTP_HMAC_SECRET=          # hashes emailed codes; openssl rand -base64 32
 APP_URL=                  # optional, shown in emails
+PROXY_LOCK_MODE=           # production only: 'report' relaxes the proxy-secret check for a staged rollout; anything else enforces
 ```
 
-Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET` in production). `BREVO_API_KEY`, `EMAIL_FROM` and `OTP_HMAC_SECRET` are not required to boot (production logs one warning if missing) but sign-up and password reset fail without them. `MERCHANT_PASSWORD_HASH` no longer exists: logins are per merchant, in the `merchants` table.
+Also read by code: `PGHOST` (only by the production-host guard in `server/config/productionHosts.js`, which checks every host `pg` could connect to). Script-only variables (verify scripts): `ISOLATION_PORT`, `PRICING_PORT`, `ANALYTICS_PORT`, `REPORT_PDF_DIR`, `VERIFY_FRONTEND_URL`.
+
+Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET` in production). `BREVO_API_KEY`, `EMAIL_FROM` and `OTP_HMAC_SECRET` are not required to boot (production logs one warning if missing) but sign-up and password reset fail without them; `EMAIL_FROM_NAME` is also needed to send, yet is not in that boot warning (`server/index.js` vs `server/services/email.js`). `MERCHANT_PASSWORD_HASH` no longer exists: logins are per merchant, in the `merchants` table.
 
 **Client (`client/.env`)**:
 
@@ -386,27 +348,29 @@ Full setup instructions for generating these values are in SECURITY.md.
 
 ## Analytics vs. Usage tracking — two different things, don't conflate them
 
-These were both requested by the panel but they answer different questions and have different audiences. Keep them architecturally separate even though they share the UI pattern (a dashboard with cards/charts).
+These answer different questions and have different audiences. Keep them architecturally separate even though they share the UI pattern (a dashboard with cards/charts).
 
 ### Business analytics — "How is the merchant's business doing"
-**Audience: the merchant.** Pulled entirely from the `bookings` table.
-- Revenue this month vs last month
-- Total bookings this month
-- Peak booking month (last 6 months)
-- Total unique clients
-- Simple bar/line chart: bookings per month
-- Monthly revenue target (`merchant_settings`) and date-range printable report
+**Audience: the merchant.** Pulled entirely from the `bookings` table, always scoped to the merchant (`server/routes/analytics.js`).
+- `revenueThisMonth` and `bookingsThisMonth`: non-cancelled bookings whose `event_date` falls in the current month
+- `peakMonth`: the month with the most bookings in the last 6 months (ties go to the later month)
+- `totalClients`: distinct phone numbers with at least one non-cancelled booking
+- `monthly`: bookings and revenue for each of the last 6 months (zero-filled), the data behind the bar chart
+- The Sidebar's revenue-target bar reads `summary.revenueThisMonth` against the merchant's `monthly_revenue_target` (`merchant_settings`)
+- The date-range printable report is a separate endpoint (`/api/reports/range`) with the same cancelled rule
 
-This answers the merchant's own question — the one named in the very first brainstorm ("zero business visibility").
+**The active-booking rule.** A cancelled booking stays in the records but is never revenue, never a booked event and never a client. The rule lives in one place, `server/services/bookingStatus.js`: `ACTIVE_BOOKING_SQL` (`status IS DISTINCT FROM 'cancelled'`) for SQL and `isActiveBooking` for rows in memory. Analytics uses the SQL fragment, the report uses the function, so they cannot drift (BUGS #096). `status` is nullable, and a NULL status counts as active, matching the client filters (`Sidebar.jsx`, `CalendarView.jsx`). The conflict and inventory queries still write `status != 'cancelled'`, which differs only for NULL-status rows, and the API cannot create those (the column defaults to `'confirmed'`).
+
+**Keeping the numbers fresh in the UI.** The Sidebar and Analytics screen fetch the server-computed numbers when they mount. `bookingStore.analyticsVersion` is bumped by `addBooking`, `updateBooking` and `removeBooking` (called only after the API call succeeded), and the Sidebar (revenue bar, pending-balance badge) and an open Analytics screen refetch when it changes; a failed refetch keeps the last good numbers (BUGS #097). `bookingStore.bookingsLoaded` says whether the store's list has been loaded, so an empty list after load is real (BUGS #098).
 
 ### Usage analytics — "Is the merchant actually using EventFlow, and how"
-**Audience: both.** Pulled from the `event_log` table, populated by a lightweight `trackUsage` middleware that fires on key actions (login, booking created, booking edited, WhatsApp button clicked, change logged).
+**Audience: both.** Pulled from the `event_log` table, populated by the `trackUsage` middleware (`server/middleware/trackUsage.js`), which writes one row after a successful (2xx) response. Event types in the code today: `login`, `signup_verified`, `password_reset`, `password_changed`, `sessions_revoked`, `email_changed`, `booking_viewed`, `booking_created`, `booking_edited`, `booking_status_updated`, `change_logged`, plus `whatsapp_confirmation_sent` and `whatsapp_reminder_sent` from `POST /api/usage/log-client-action`. Metadata is a booking id or nothing.
 
 Two views of the same data:
-- **Merchant-facing (`UsageView.jsx` / `/api/usage/me`)**: a friendly, simple "Your Activity" card — "You've logged 12 bookings this month, sent 9 WhatsApp confirmations." This is good UX (shows the tool is alive and useful) and also nudges continued use.
-- **Internal/panel-facing (`/api/usage/admin`)**: the raw event feed — every login timestamp, every action, unfiltered. This is your **adoption proof** for the panel. Don't expose this route in the merchant-facing UI navigation.
+- **Merchant-facing (`UsageView.jsx` / `GET /api/usage/me`)**: a friendly weekly "My Activity" card for the calling merchant (logins, bookings created and edited, WhatsApp messages sent, days active, last active).
+- **Internal (`GET /api/usage/admin`)**: the raw cross-merchant event feed (session + `x-admin-key`), your adoption proof. It is never called from the merchant UI.
 
-This distinction matters because conflating them tends to produce a dashboard that's either too sparse for the merchant or too cluttered with internal metrics they don't care about. Build two clean views from one shared table instead.
+Two clean views from one shared table, rather than one dashboard that is too sparse for the merchant or too cluttered with internal metrics.
 
 ---
 
@@ -416,11 +380,25 @@ Conflict is defined as: **any two bookings sharing the same `event_date`.**
 
 This is **alert-only, never blocking.** Two bookings on the same date may be entirely fine for this merchant to take on — the app's job is to make sure they notice, not to decide for them.
 
+- Only **non-cancelled** bookings of the same merchant count (`findDateConflict` in `server/routes/bookings.js`)
 - Frontend checks optimistically on date picker change (calls `/api/bookings/check-conflict?date=`)
 - Backend also validates on POST/PATCH, to surface the same alert even if the frontend missed a race condition
 - If conflict found: return `{ conflict: true, booking: { client_name, event_type } }` (or the informational `conflict: { detected, booking }` shape on create/edit responses)
 - Frontend renders `<ConflictBanner>` with the clashing booking's name. The date field gets a red border as a visual flag. **The submit button stays enabled** — the merchant can confirm the booking immediately, no extra confirmation step needed for a date clash specifically (see Inventory availability logic below for why inventory shortfalls get a stricter pattern)
 - When editing a booking, the conflict check passes `excludeId` so a booking never flags a clash against its own pre-existing record
+
+---
+
+## Booking pricing (server-side)
+
+The server, not the browser, decides every derived amount (`server/services/bookingPricing.js`, BUGS #062), inside the same transaction that saves the booking:
+
+- **With inventory lines:** `unit_price` is the value the client sent for that line (a per-line override, even 0), else the item's stored rate; `line_total = quantity × unit_price`; `subtotal` is the sum of line totals; `grand_total = max(0, subtotal − discount)`; `total = grand_total`. Any `line_total`, `subtotal`, `grand_total` or `total` the client sent is ignored.
+- **With no lines:** the merchant's typed `total` is kept and `grand_total` equals it.
+- **Rejected with a 400 and a readable message:** `advance` over the total (once the booking has a price), any amount over 10,000,000, the same item on two lines, and an item that is not the merchant's own (the same message for a foreign and a nonexistent item).
+- A `PATCH` that omits `inventory` keeps the stored lines and their stored prices and re-derives the totals from them.
+
+Proof: `npm run verify:pricing -- --confirm-host=<dev host>` (TESTING.md).
 
 ---
 
@@ -443,27 +421,25 @@ UX, deliberately **stricter than the date-clash alert** because a physical short
 1. While filling the booking form, as the merchant enters quantities needed per item, the frontend calls `/api/inventory/check-availability` and shows an inline `<InventoryWarningBanner>` for any item that's short, with the requested vs. available counts
 2. On submit, if a shortfall still exists, the app does **not** submit immediately — it shows a `<ConfirmDialog>` ("You don't have enough Plastic Chairs for this date — need 150, only 100 available. Confirm this booking anyway?") and only calls the create/edit API if the merchant explicitly confirms
 3. If the merchant cancels the dialog, they stay on the form to adjust quantities or the date
-4. The backend re-checks availability on POST/PATCH regardless (same race-condition-is-advisory-only posture as the date-conflict check — acceptable for a single merchant typing manually, see `BUGS.md`)
+4. The backend re-checks availability on POST/PATCH regardless (same race-condition-is-advisory-only posture as the date-conflict check — acceptable for a small merchant typing manually, see `BUGS.md`)
 
-The Inventory dashboard itself (`InventoryView.jsx`) shows `in_use_today` using **today's date**, not the date of any particular booking being created — it's read as "what's out of the warehouse right now."
+The Inventory dashboard itself (`InventoryView.jsx`) shows `in_use_today` using **today's date**, not the date of any particular booking being created — it's read as "what's out of the warehouse right now." `GET /api/inventory` also returns `booked_this_month` and `availability_ratio` per item (`server/routes/inventory.js`), which feed the low-availability hint (threshold 20%).
+
+**Dates and time zones.** "Today" and "this month" in `inventory.js` and `analytics.js` come from the server's local clock (`new Date()`), and `pending-balances` uses the database's `CURRENT_DATE`; only `GET /api/profile` uses `Asia/Kolkata` explicitly. The repo does not record the time zone Render runs in (no `render.yaml`, no `TZ` variable, no code that sets one), and Neon's default session time zone is UTC (a dev database reports GMT); on a UTC server "today" and the month rollover come 5½ hours late for an Indian merchant. Local development hides this because the developer's machine is on IST. This is BUGS #100; TODO: confirm Render's actual time zone in the dashboard.
 
 ---
 
 ## WhatsApp link generation
 
-No API key. No webhook. Pure deep link. Messages are signed as **Bala Ji Tent House**, not EventFlow — the message is on the merchant's behalf. The merchant's own number for the "Send to My WhatsApp" summary is `whatsapp_phone` from their profile (set on the Profile screen, held in `profileStore`), never an env var; with no number the button is disabled and links to Profile. Client-facing links use the booking's phone.
+No API key. No webhook. Pure deep link. Messages are signed with the **merchant's own business name** (`merchants.business_name`, passed in from `authStore.businessName`), not EventFlow — the message is on the merchant's behalf. *Previously a hardcoded "Bala Ji Tent House".* The merchant's own number for the "Send to My WhatsApp" summary is `whatsapp_phone` from their profile (set on the Profile screen, held in `profileStore`), never an env var; with no number the button is disabled and links to Profile. Client-facing links use the booking's phone.
+
+The shape (see `client/src/utils/whatsapp.js` for the real wording; it sanitizes and length-limits every value it inserts):
 
 ```js
 // utils/whatsapp.js
-export const confirmationMessage = (booking) =>
-  `https://wa.me/91${booking.phone}?text=${encodeURIComponent(
-    `Namaskar ${booking.client_name}! Your booking is confirmed for ${booking.event_date}. Event: ${booking.event_type}, Guests: ${booking.guest_count}. Advance received: ₹${booking.advance}. Thank you! - Bala Ji Tent House`
-  )}`;
-
-export const paymentReminderMessage = (booking) =>
-  `https://wa.me/91${booking.phone}?text=${encodeURIComponent(
-    `Namaskar ${booking.client_name}! This is a reminder that your event is on ${booking.event_date}. Kindly arrange the remaining balance before the event. Thank you! - Bala Ji Tent House`
-  )}`;
+confirmationMessage(booking, businessName)      // https://wa.me/91<client phone>?text=<encoded message>, signed with businessName
+paymentReminderMessage(booking, businessName)   // same, for the balance reminder
+selfSummaryMessage(booking, businessName, merchantPhone)   // "Send to My WhatsApp": goes to the merchant's own number
 ```
 
 Clicking the button opens WhatsApp desktop or mobile with the message pre-filled. Works in a screen recording.
@@ -472,45 +448,55 @@ Clicking the button opens WhatsApp desktop or mobile with the message pre-filled
 
 ## Seeded demo data
 
-10 bookings spread across the current month — mix of weddings, birthdays, corporate events. Statuses varied (confirmed, pending). At least 2 bookings on the same date to demonstrate conflict detection during the demo.
+Dev databases only. `seed()` (`server/db/seed.js`) returns immediately when `NODE_ENV === 'production'`, so the demo data can never reach a real merchant. On a dev database it fills merchant 1 with a month of bookings (mixed event types and statuses, at least one date with two bookings to show conflict detection), a starter inventory (Plastic Chairs, Round Tables, Shamiana Tents, Sofas, with a damaged item and bookings pre-attached to stock), analytics history and a week of recent activity, adds the second demo merchant (`devMerchantSeed.js`), and gives both demo logins that only dev databases have (SECURITY.md). Bookings are seeded only when merchant 1 has none; the other seeds are idempotent. Rules for writing seed data are in `CODING_STANDARDS.md`.
 
-A starter inventory set is seeded alongside bookings: Plastic Chairs, Round Tables, Shamiana Tents, Sofas — realistic quantities, with a couple of bookings pre-attached to inventory and at least one item with a small damaged count so the Damaged section isn't empty on first load. Additional analytics history and Meerut-heavy demo rows come from `analyticsHistorySeed.js` / `demoAnalyticsSeed.js` when not in production.
+---
 
-Seed runs automatically on server start if the table is empty — **gated by `NODE_ENV !== 'production'`**.
+## Report PDF pipeline
+
+Analytics > Export Report opens a new window with the printable report (`openReportWindow` in `client/src/utils/reportPrinter.js`), built from `GET /api/reports/range`. Two actions there:
+
+- **Print** uses the browser's own print. The CSS `page-break-inside: avoid` on `.booking-card` applies here only.
+- **Download PDF** (`downloadReportPdf`): dynamic `import()` of `jspdf` and `html2canvas` (npm dependencies, bundled), one `html2canvas` call on `#report-body` (scale 2, so the canvas is 1520 px wide), one PNG data URL, one `addImage` per page using jsPDF's `'FAST'` option so the image is compressed and stored once (BUGS #091). The page cuts come from `planPdfPages`: the nominal cut is every A4 page height, but when it would land inside a booking card the page ends just above that card, the rest of that page is covered with a white rectangle (the one image continues below the cut) and the next page starts at that card. A card taller than a page is cut at page height. CSS cannot do this, because the PDF is a slice of one canvas, not a laid-out document (BUGS #095). In dev builds the layout is exposed as `window.__reportPdfLayout` for `scripts/verify-report-pdf.mjs`; it is absent from the production bundle.
+- **Known limit:** a long report makes a canvas above iOS Safari's area limit (16,777,216 px), which fails there (BUGS #094, open: mobile PDF is deferred).
 
 ---
 
 ## Key UI decisions
 
 - **Dark sidebar (#0f172a), light main canvas (#f8fafc)** — high contrast, professional feel
-- **Sidebar business name: "Bala Ji Tent House"**, tent icon, white bold text
+- **Sidebar business name: the signed-in merchant's `business_name`**, tent icon, white bold text; the tab title is `<screen> — <business name>` (`App.jsx`)
 - **Calendar event cards**: teal for confirmed, amber for pending, red for cancelled, indigo for completed
 - **`BookingPage` is shared between create and edit** — same form, different title/submit label/initial values
 - **Booking detail** — opens as a fixed overlay modal (not an in-main drawer) on calendar event click; WhatsApp, expenses/profit, status (including complete/cancel), change log, delete
-- **Sidebar views**: Calendar, Inventory, Pending Balances, Records, Analytics, My Activity
+- **Sidebar views**: Calendar, Inventory, Pending Balances, Records, Analytics, My Activity, Profile
 - **Records** — filterable list + SheetJS Excel export (`excelExporter.js`)
-- **Analytics** — charts, monthly revenue target, date-range report via `reportPrinter.js` (print + PDF via jsPDF/html2canvas CDN)
+- **Analytics** — charts, monthly revenue target, date-range report via `reportPrinter.js` (print + PDF, see above)
 - **Inventory dashboard** — cards per item type, low-stock alerts, Damaged/Repair Needed section
-- **No client-side router** — single page; views switch via Zustand `activeView`, overlays/modals for forms and detail
+- **Profile** — business name and WhatsApp number, masked email, change password / email, sign-in list, log out other devices, delete account (`ProfileView.jsx`, `components/profile/`)
+- **No client-side router library.** `App.jsx` reads `window.location.pathname` before the auth gate: `/` is the app, `/privacy` the public privacy policy, any other path a 404 page. Inside the app, views switch via Zustand `activeView`, with overlays/modals for forms and detail. Signed-out users see the login, sign-up or forgot-password screen.
 
 ---
 
-## What is explicitly out of scope for v1
+## What is explicitly out of scope
 
-- Multi-merchant / multi-business support (single merchant per deployment for now)
 - Customer-facing portal
 - Payment gateway integration (UPI links are just `wa.me` text, not real payment collection)
+- Billing / subscriptions
 - True deploy/return tracking for inventory (availability is computed per event date instead — see Inventory availability logic above and `ROADMAP.md` v2)
 - Native mobile app
+- Firebase / phone / Google sign-in (planned as ROADMAP Prompt 26; email + password with emailed codes is what exists)
 
-Business analytics, usage tracking, and inventory tracking, originally deferred, are now in v1 scope per panel feedback and a direct merchant request — see the dedicated sections above. See `ROADMAP.md` for what's still deferred and why.
+*Previously also listed here: "Multi-merchant / multi-business support (single merchant per deployment for now)". That is built and deployed: see "Multi-merchant" under Data model and `ROADMAP.md`'s Scope decisions log.*
+
+Business analytics, usage tracking, and inventory tracking, originally deferred, are in scope per panel feedback and a direct merchant request — see the dedicated sections above. See `ROADMAP.md` for what's still deferred and why.
 
 ## Related documents
 
 | File | Purpose |
 |---|---|
 | `CODING_STANDARDS.md` | Naming, structure, style conventions |
-| `PROMPTS.md` | Sequenced Cursor build prompts |
+| `PROMPTS.md` | Sequenced Cursor build prompts (a historical build log, not current architecture) |
 | `BUGS.md` | Bug tracker + prevention checklist |
 | `SECURITY.md` | Auth model, input validation, audit checklist per milestone |
 | `DEPLOYMENT.md` | How and where this gets deployed, with config per platform |

@@ -1,5 +1,7 @@
 # EventFlow — Handoff Summary
 
+> **Historical, as of 2026-10-13.** This summary predates multi-merchant accounts, email-code sign-up and the profile screen (2026-10-14 to 2026-10-16) and still describes a single-merchant app and `VITE_MERCHANT_PHONE`. For the current system read `CLAUDE.md`, `ARCHITECTURE.md` and `SECURITY.md`.
+
 **Purpose of this file:** paste this into a new chat (along with the project's `.md` docs — `ARCHITECTURE.md`, `CODING_STANDARDS.md`, `SECURITY.md`, `DATA_PRIVACY.md`, `TESTING.md`, `BUGS.md`, `ROADMAP.md`, `PROMPTS.md`, `DEPLOYMENT.md`) to continue this build with full context, without re-explaining everything from scratch.
 
 ---

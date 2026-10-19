@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This file keeps Cursor-generated code consistent across all files in the project, and keeps it at **product quality** — not demo/vibe-coded quality. Real merchant data flows through this app. Every prompt should reference this file. If a Cursor output violates anything below, reject it and re-prompt rather than patching around it.
+This file keeps generated code (Cursor, Claude Code) consistent across all files in the project, and keeps it at **product quality** — not demo/vibe-coded quality. Real merchant data flows through this app. Every prompt should reference this file, and `CLAUDE.md` holds the hard rules (it wins if the two ever disagree). If an output violates anything below, reject it and re-prompt rather than patching around it. The code is the source of truth for the examples here; where an example and the code differ, the code wins.
 
 ## What "product, not vibe-coded" means concretely
 
@@ -37,6 +37,9 @@ This file keeps Cursor-generated code consistent across all files in the project
 | Store files | camelCase `.js` | `bookingStore.js`, `inventoryStore.js`, `settingsStore.js` |
 | Route files | camelCase `.js` | `bookings.js`, `inventory.js` |
 | DB files | camelCase `.js` | `database.js` |
+| Server services and utils | camelCase `.js` | `services/bookingPricing.js`, `utils/ids.js` |
+| Migrations | `NNN_snake_case.sql` | `005_merchant_accounts.sql` (see "Database migrations") |
+| Verify / maintenance scripts | `verify-*.mjs`, kebab-case `.mjs` | `scripts/verify-analytics.mjs` |
 | Schema files | camelCase `.schema.js` | `booking.schema.js`, `inventory.schema.js` |
 
 ---
@@ -142,42 +145,50 @@ Never hand-roll `toLocaleString('en-US')` or manual comma insertion — always t
 
 ## State management (Zustand)
 
-All global booking state lives in `src/store/bookingStore.js`. All inventory state lives in a separate `src/store/inventoryStore.js` — don't conflate the two stores just because both feed into the booking form. No prop drilling beyond one level.
+Each concern has its own store in `src/store/`: `bookingStore.js` (bookings and the booking UI state), `inventoryStore.js`, `settingsStore.js` (monthly revenue target), `profileStore.js` (the merchant's profile), `authStore.js` (session, business name). Don't conflate stores just because several feed into one form. No prop drilling beyond one level. All cached merchant data is dropped on every session change (`clearMerchantData` in `authStore.js`), so a second merchant on the same browser never sees the first one's data; a new store that caches merchant data must be reset there.
 
 ```js
-// bookingStore.js structure
+// bookingStore.js (abridged; see the file for the full panel and modal state)
 export const useBookingStore = create((set, get) => ({
   bookings: [],
+  bookingsLoaded: false,   // true once the full list is in `bookings`: an empty list after load means "no bookings"
+  analyticsVersion: 0,     // bumped by addBooking / updateBooking / removeBooking, which run only after the API call succeeded
   selectedBooking: null,
   isModalOpen: false,
-  modalMode: 'create',        // 'create' | 'edit' — drives BookingPage's title/submit label/API call
+  modalMode: 'create',     // 'create' | 'edit'
   isDetailOpen: false,
+  activeView: 'calendar',
 
-  setBookings: (bookings) => set({ bookings }),
-  addBooking: (booking) => set((state) => ({ bookings: [...state.bookings, booking] })),
-  updateBooking: (booking) => set((state) => ({
-    bookings: state.bookings.map((b) => (b.id === booking.id ? booking : b)),
-  })),
-  setSelectedBooking: (booking) => set({ selectedBooking: booking, isDetailOpen: true }),
-  openModal: (mode = 'create') => set({ isModalOpen: true, modalMode: mode }),
-  closeModal: () => set({ isModalOpen: false, modalMode: 'create' }),
-  closeDetail: () => set({ isDetailOpen: false, selectedBooking: null }),
+  setBookings: (bookings) => set({ bookings, bookingsLoaded: true }),
+  addBooking: (booking) =>
+    set((state) => ({ bookings: [...state.bookings, booking], analyticsVersion: state.analyticsVersion + 1 })),
+  updateBooking: (booking) =>
+    set((state) => ({
+      bookings: state.bookings.map((row) => (row.id === booking.id ? booking : row)),
+      selectedBooking: state.selectedBooking?.id === booking.id ? booking : state.selectedBooking,
+      analyticsVersion: state.analyticsVersion + 1,
+    })),
+  removeBooking: (id) =>
+    set((state) => ({
+      bookings: state.bookings.filter((row) => Number(row.id) !== Number(id)),
+      analyticsVersion: state.analyticsVersion + 1,
+    })),
+  // ...openModal / forceCloseModal / requestCloseModal (guarded close), setSelectedBooking, setActiveView
 }))
 ```
 
+**Refetching server-computed numbers.** Anything that shows a number the server computes (the Sidebar revenue bar and pending-balance badge, the Analytics screen) subscribes to `analyticsVersion` and refetches when it changes; it keeps the last good value if the refetch fails and never blocks the booking action (`Sidebar.jsx`, `AnalyticsView.jsx`, BUGS #097). Bump it only through the three actions above, after the API call has succeeded, never optimistically. Do not recompute from `bookings` before `bookingsLoaded` is true: the store starts as `[]` and would overwrite fetched values with zeros (BUGS #098).
+
 ```js
-// inventoryStore.js structure
+// inventoryStore.js
 export const useInventoryStore = create((set) => ({
   items: [],
   setItems: (items) => set({ items }),
   upsertItem: (item) => set((state) => {
     const exists = state.items.some((i) => i.id === item.id)
-    return {
-      items: exists
-        ? state.items.map((i) => (i.id === item.id ? item : i))
-        : [...state.items, item],
-    }
+    return { items: exists ? state.items.map((i) => (i.id === item.id ? item : i)) : [...state.items, item] }
   }),
+  removeItem: (id) => set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
 }))
 ```
 
@@ -185,37 +196,50 @@ export const useInventoryStore = create((set) => ({
 
 ## Validation (zod) — shared shape
 
-Define the booking shape once, conceptually, and mirror it on both sides. Client validates for UX (instant feedback), server validates because it's the only check that actually matters for security.
+Define the booking shape once, conceptually, and mirror it on both sides. Client validates for UX (instant feedback), server validates because it's the only check that actually matters for security. The two files **mirror** each other; they are not byte-identical (for example the client booking schema adds a cross-field "advance cannot exceed total" check, the server's password length check uses `Buffer` where the client uses `TextEncoder`, and the server inventory schema has the `unit_price` rules the client validates in its modal), so compare behaviour, not text.
 
 ```js
-// schemas/booking.schema.js — same file content on client AND server
+// schemas/booking.schema.js (server shown; the client mirrors it)
 import { z } from 'zod'
 
+// line_total, subtotal, grand_total and (when lines exist) total are accepted but ignored: the server computes them (BUGS #062).
 export const bookingInventoryLineSchema = z.object({
   item_id: z.number().int().positive(),
   quantity: z.number().int().positive().max(10000),
+  unit_price: z.number().int().nonnegative().max(10000000).optional(),   // per-line override
+  line_total: z.number().int().nonnegative().optional(),
 })
 
 export const bookingSchema = z.object({
   client_name: z.string().trim().min(2, 'Name is too short').max(100),
-  phone: z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
+  phone: z.string().trim().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number'),
   event_type: z.enum(['wedding', 'birthday', 'corporate', 'other']),
+  event_type_custom: z.string().trim().max(50).optional(),
   event_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   guest_count: z.number().int().positive().max(10000),
   venue: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(500).optional(),
   advance: z.number().int().nonnegative().max(10000000),
   total: z.number().int().nonnegative().max(10000000),
+  subtotal: z.number().int().nonnegative().optional(),
+  discount: z.number().int().nonnegative().max(10000000).optional(),
+  grand_total: z.number().int().nonnegative().optional(),
   inventory: z.array(bookingInventoryLineSchema).max(50).optional(),
 })
 ```
 
 ```js
-// schemas/inventory.schema.js — same file content on client AND server
+// schemas/inventory.schema.js (server shown)
 import { z } from 'zod'
 
 export const inventoryItemSchema = z.object({
   name: z.string().trim().min(2, 'Item name is too short').max(100),
   total_quantity: z.number().int().nonnegative().max(100000),
+  unit_price: z.number().int().nonnegative().max(10000000).optional().default(0),
+})
+
+export const inventoryPriceUpdateSchema = z.object({
+  unit_price: z.number().int().nonnegative().max(10000000),
 })
 
 export const inventoryQuantityUpdateSchema = z.object({
@@ -231,11 +255,13 @@ export const availabilityCheckSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format'),
   items: z.array(z.object({
     item_id: z.number().int().positive(),
-    quantity: z.number().int().positive().max(10000),
+    quantity: z.number().int().nonnegative().max(10000),
   })),
   excludeBookingId: z.number().int().positive().optional(),
 })
 ```
+
+Account schemas (`merchant.schema.js`: sign-up, login, OTP, reset, profile) follow the same rule. The password rules are in `passwordField` (8+ characters, at most 72 bytes); login deliberately does not re-check strength.
 
 Rule: **the server schema is the source of truth.** If client and server schema ever drift, server wins and client gets updated to match — never the reverse.
 
@@ -243,48 +269,52 @@ Rule: **the server schema is the source of truth.** If client and server schema 
 
 ## API calls (frontend)
 
-All API calls go through a single `api.js` utility — never call `fetch` directly from components. The wrapper handles auth headers, error shape, and timeouts in one place.
+All API calls go through a single `src/utils/api.js` utility — never call `fetch` directly from components. The wrapper handles credentials, error shape and the conflict/retry fields in one place.
 
 ```js
-// src/utils/api.js
-const BASE = import.meta.env.VITE_API_URL
+// src/utils/api.js (abridged)
+const BASE = import.meta.env.VITE_API_URL   // http://localhost:3001/api in dev, /api in production
 
 class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, conflictBooking = null, retryAfter = null) {
     super(message)
-    this.status = status
+    this.status = status                      // 0 means the server could not be reached
+    this.conflictBooking = conflictBooking
+    this.retryAfter = retryAfter              // seconds, on a resend that came too soon
   }
 }
 
 const request = async (path, options = {}) => {
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    credentials: 'include', // sends the httpOnly session cookie
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-  })
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new ApiError(body.error || 'Something went wrong. Please try again.', res.status)
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      credentials: 'include',                 // sends the httpOnly session cookie
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+    })
+  } catch {
+    throw new ApiError('Something went wrong. Please try again.', 0)
   }
-
-  return res.json()
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    // a readable { error } from the server, else a generic sentence (a distinct one for 429)
+    throw new ApiError(/* body.error or fallback */, res.status, body?.conflict ? body.booking : null, /* body.retryAfter */)
+  }
+  return body                                  // a non-object body is also an ApiError
 }
 
 export const api = {
-  login: (password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  login: (email, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   getBookings: () => request('/bookings'),
   createBooking: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
   updateBooking: (id, data) => request(`/bookings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  checkConflict: (date, excludeId) => request(`/bookings/check-conflict?date=${date}${excludeId ? `&excludeId=${excludeId}` : ''}`),
-  logChange: (id, note) => request(`/bookings/${id}/log`, { method: 'PATCH', body: JSON.stringify({ note }) }),
-  getInventory: () => request('/inventory'),
-  addInventoryItem: (data) => request('/inventory', { method: 'POST', body: JSON.stringify(data) }),
-  updateInventoryQuantity: (id, data) => request(`/inventory/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  adjustInventoryDamage: (id, data) => request(`/inventory/${id}/damage`, { method: 'POST', body: JSON.stringify(data) }),
-  checkInventoryAvailability: (data) => request('/inventory/check-availability', { method: 'POST', body: JSON.stringify(data) }),
+  updateBookingStatus: (id, status) => /* PATCH /bookings/:id/status */,
+  getAnalyticsSummary: () => request('/analytics/summary'),
+  // ... one entry per route (sign-up/OTP, profile via profileRequest, inventory, reports, records, usage, settings)
 }
 ```
+
+`profileRequest` wraps the profile routes: a 401 normally means the session is gone, but three routes also answer 401 for a wrong current password, so those check `/auth/me` before the error is called a session expiry (`err.sessionExpired`).
 
 **Every component that calls `api.*` must handle the rejected promise** — minimum requirement is a visible error state, not a silent console error. Pattern:
 
@@ -326,8 +356,12 @@ const handleSubmit = async () => {
   - Date clash on PATCH `/bookings/:id` → `200` with the same optional `conflict` shape
   - Inventory shortfall on POST `/inventory/check-availability` → `200` with `{ sufficient: true }` or `{ sufficient: false, shortfalls: [...] }` — never a 409 or other error status for either case
 - **Validation happens via the zod schema, before any DB call** — use a generic `validate(schema)` middleware so individual routes don't hand-roll checks
-- **Auth happens via `requireAuth` middleware** on every business route — see SECURITY.md for the full model (only `/auth/login` and `/health` are intentionally unauthenticated)
+- **Auth happens via `requireAuth` middleware** on every business route, applied once with `router.use(requireAuth)` at the top of each business router — see SECURITY.md for the full model. The only unauthenticated routes are `GET /api/health`, `POST /api/auth/login` and the public sign-up and password-reset routes (all rate limited and validated; none reveals whether an email has an account, except sign-up's accepted 409, BUGS #073)
 - No business logic in `index.js` — only middleware setup and route mounting
+- **Derived money values are computed on the server** (`services/bookingPricing.js`): never trust a client-sent `total`, `subtotal`, `grand_total` or `line_total` when lines exist
+- **"Not cancelled" means `ACTIVE_BOOKING_SQL` / `isActiveBooking`** from `services/bookingStatus.js` for anything that counts money, bookings or clients (analytics, reports). Do not hand-write the predicate again (BUGS #096)
+- **Sessions and credentials:** `bumpTokenVersion(client, merchantId)` (`services/session.js`) is the only way a logged-in route bumps `merchants.token_version`: bump inside the transaction and call `issueSession` only after COMMIT; never touch `res` inside a transaction. `sign_in_log` and every log line hold no IP address or full user agent
+- **Deleting an account** (`DELETE /api/profile`) lists every merchant-scoped table by hand, children before parents: add any new table with a `merchant_id` column there in the same commit
 - **Never send raw error messages or stack traces to the client in production.** `errorHandler.js` must check `NODE_ENV` and return a generic message in prod, full detail only in dev
 
 ```js
@@ -341,9 +375,9 @@ export const validate = (schema) => (req, res, next) => {
   next()
 }
 
-// Route handler pattern — validation + auth already applied via middleware chain
-// Import pool from '../db/database.js'
-router.post('/', requireAuth, validate(bookingSchema), async (req, res, next) => {
+// Route handler pattern — requireAuth already applied by router.use(requireAuth); validation via the chain
+// Import pool from '../db/database.js'. (Simplified: the real POST /bookings prices the booking and runs in a transaction.)
+router.post('/', validate(bookingSchema), async (req, res, next) => {
   try {
     const { client_name, phone, event_type, event_date, guest_count, venue, advance, total } = req.body
 
@@ -397,7 +431,7 @@ export const errorHandler = (err, req, res, next) => {
 
 **SQL rule: always use parameterized queries (`$1`, `$2`, … placeholders) — never string-concatenate user input into SQL.** `pg`'s `pool.query(sql, params)` / `client.query(sql, params)` already does this correctly in every example above; never replace it with template-literal SQL.
 
-**Multi-table writes (booking + booking_inventory, or item + damage log) must run inside a transaction.** Checkout a client from the pool and use `BEGIN` / `COMMIT` / `ROLLBACK`:
+**Multi-table writes (booking + booking_inventory, or item + damage log) must run inside a transaction.** Checkout a client from the pool and use `BEGIN` / `COMMIT` / `ROLLBACK` (this is how `routes/bookings.js`, `routes/inventory.js` and `routes/profile.js` do it; there is no wrapper helper):
 
 ```js
 const client = await pool.connect()
@@ -409,11 +443,23 @@ try {
   await client.query('ROLLBACK')
   throw err
 } finally {
-  client.release()
+  client.release()   // always, so a failed request cannot leak a connection
 }
 ```
 
 Use this whenever a single logical action touches more than one table, so a booking is never created with half its inventory rows missing if something fails partway through.
+
+---
+
+## Repository and npm setup
+
+The repo is two npm projects, not one workspace tree (BUGS #092):
+
+- **Root `package.json`:** `workspaces` is `["client"]` only, plus `concurrently` for the `dev` script (`npm run dev` runs the client on 5173 and `npm --prefix server run dev` on 3001). Its lockfile feeds Vercel (client + concurrently).
+- **`server/`:** a standalone project with its own `package.json` and `package-lock.json`. Render builds it on its own (Root Directory `server`, `npm ci --omit=dev`), so `server/package-lock.json` must stay in sync with `server/package.json`, and devDependencies (Playwright) never ship.
+- **Local setup is two installs:** `npm ci` at the repo root, then `npm ci` inside `server/`. After changing a server dependency, regenerate `server/package-lock.json` (a root Dependabot update does not touch it).
+- **Vercel** builds with the root `vercel.json` (`cd client && npm install && npm run build`); see DEPLOYMENT.md.
+- A new dependency needs a reason and is asked about first (CLAUDE.md).
 
 ---
 
@@ -427,9 +473,12 @@ The schema's source of truth is `server/db/migrations/`. Never run ad-hoc `ALTER
 - Find constraints by what they link (catalog lookup in a `DO` block) when their auto-generated names might differ between databases; give new constraints explicit names.
 - A new tenant-owned table needs `merchant_id` and composite foreign keys to its parents (see ARCHITECTURE.md, Data model).
 - Migrations and the runner print migration ids only, never row data; error output uses the message, not the Postgres `detail` (it can contain values).
-- Run them with `npm run migrate -- --confirm-host=<host>`; the server also runs them on boot, so a deploy migrates production.
+- Run them with `npm run migrate -- --confirm-host=<host>`; the server also runs them on boot, so a deploy migrates production. A release that ships a migration the new code and the old schema depend on goes out in two pushes (DEPLOYMENT.md).
+- Queries use `pg` placeholders (`$1`, `$2`, ...), never `?` (that was the SQLite era).
 
 ## Seed data rules
+
+Seed data is for dev databases only: `seed()` does nothing when `NODE_ENV === 'production'`, and seed scripts import `scripts/lib/refuseProductionDatabase.mjs`. Every seed row sets `merchant_id` explicitly.
 
 - Minimum 10 bookings in the seed
 - Spread across current month — not all clustered in one week
@@ -447,14 +496,14 @@ The schema's source of truth is `server/db/migrations/`. Never run ad-hoc `ALTER
 
 ## WhatsApp links
 
-Always use `https://wa.me/91${phone}` format (Indian numbers). Always `encodeURIComponent` the message. Never hardcode a phone number. Messages sign off as **"Bala Ji Tent House"**, not "EventFlow" — see `ARCHITECTURE.md`'s WhatsApp link generation section for the exact templates.
+Always use `https://wa.me/91${phone}` format (Indian numbers). Always `encodeURIComponent` the message. Never hardcode a phone number. Messages sign off with the **merchant's own business name** (`businessName` from `authStore`, passed into the helpers in `utils/whatsapp.js`), not "EventFlow" and not a hardcoded name. The merchant's own number comes from their profile (`whatsapp_phone`), never an env var. See `ARCHITECTURE.md`'s WhatsApp link generation section.
 
 ---
 
 ## Git hygiene
 
 - Commit after each major screen is working
-- Commit message format: `feat: add conflict detection UI` / `fix: date picker reset on modal close` / `security: add rate limiting to login`
+- One logical change per commit. Commit message format: `feat: add conflict detection UI` / `fix: date picker reset on modal close` / `security: add rate limiting to login` / `docs:` / `chore:` / `test:`. Never push without asking, never rewrite history (CLAUDE.md)
 - `.env` is gitignored — use `.env.example` with placeholder values, **never real secrets**
 - `node_modules` is gitignored
 - Local DB artifacts (e.g. leftover `*.db` files) are gitignored — the app uses Postgres via `DATABASE_URL`; seed runs on server start when not production
@@ -471,7 +520,7 @@ Run through this before marking any PROMPTS.md milestone "done." Takes 5 minutes
 - [ ] Every `api.*` call site has a `catch`/error state — no silent failures
 - [ ] No `console.log` of sensitive data (phone numbers, session tokens)
 - [ ] No hardcoded URLs — `localhost:3001` should only ever come from `import.meta.env.VITE_API_URL`
-- [ ] Every protected route has `requireAuth` in its middleware chain — including inventory routes
+- [ ] Every protected route is behind `requireAuth` (`router.use(requireAuth)` in its router) and every query is scoped to `req.merchantId` — including inventory routes; `npm run verify:isolation -- --confirm-host=<dev host>` passes
 - [ ] Every new dependency added is actually used (no leftover installs bloating the bundle)
 - [ ] New component follows the 8-step structure order defined above
 - [ ] Tailwind classes match the palette table — no off-palette hex colors introduced ad hoc

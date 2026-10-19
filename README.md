@@ -1,8 +1,8 @@
 # EventFlow
 
-EventFlow is a merchant-facing booking management dashboard for small tent and catering businesses in India. It gives a business owner one place to manage bookings, catch date conflicts, track advances, send WhatsApp messages to clients, review business analytics, and see recent activity — without pen and paper or scattered spreadsheets.
+EventFlow is a booking and inventory dashboard for small tent and catering businesses in India. A business owner gets one place to manage bookings, catch date conflicts, track advances and stock, send WhatsApp messages to clients, review business analytics, and see recent activity — without pen and paper or scattered spreadsheets.
 
-This repo is a **single-merchant proof of concept**, not a multi-tenant SaaS product. Auth is deliberately simple: one password, one session, one business. See [SECURITY.md — Threat model for v1](SECURITY.md#threat-model-for-v1--be-explicit-about-what-this-defends-against) for what that model is meant to defend against (and what is explicitly out of scope).
+It is a **multi-merchant product, deployed with real merchant data**. Any business can sign up (email + password, with an emailed 6-digit code) and gets its own isolated data; every API route is scoped to the logged-in merchant. See [SECURITY.md](SECURITY.md) for the auth model, tenant isolation and what the threat model covers, and [CLAUDE.md](CLAUDE.md) for the working rules (read it before changing anything: production holds real client data).
 
 ---
 
@@ -10,11 +10,12 @@ This repo is a **single-merchant proof of concept**, not a multi-tenant SaaS pro
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | React 18, Vite, Tailwind CSS v3, Zustand, FullCalendar, Recharts, SheetJS |
-| Backend | Node.js, Express, Postgres via `pg` |
-| Auth & validation | JWT session cookie, bcrypt, Zod |
+| Frontend | React 18, Vite, Tailwind CSS v3, Zustand, FullCalendar, Recharts, SheetJS, jsPDF + html2canvas (PDF reports) |
+| Backend | Node.js 22, Express, Postgres via `pg` (Neon) |
+| Auth & validation | JWT session cookie, bcrypt, emailed codes (Brevo), Zod |
+| Hosting | Vercel (frontend, `/api` proxied), Render (API), Neon (database) |
 
-Full stack rationale, routes, and folder layout: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+Full stack rationale, routes, data model and folder layout: **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
@@ -22,7 +23,7 @@ Full stack rationale, routes, and folder layout: **[ARCHITECTURE.md](ARCHITECTUR
 
 ### 1. Clone and install
 
-`client/` is an npm workspace of the repo root; `server/` is a standalone npm project with its own lockfile (Render builds it on its own). Local setup is two installs:
+`client/` is an npm workspace of the repo root; `server/` is a standalone npm project with its own lockfile (Render builds it on its own, BUGS #092). Local setup is two installs:
 
 ```bash
 git clone <repository-url>
@@ -42,47 +43,29 @@ cp client/.env.example client/.env
 cp server/.env.example server/.env
 ```
 
-**Client** (`client/.env`):
+**Client** (`client/.env`): `VITE_API_URL` (already `http://localhost:3001/api` in the example).
 
-- `VITE_API_URL` — already set to `http://localhost:3001/api` in `.env.example`
+**Server** (`server/.env`), names only; the full list with notes is in [ARCHITECTURE.md](ARCHITECTURE.md#environment-variables):
 
-**Server** (`server/.env`):
+- `NODE_ENV=development`, `PORT=3001`, `CORS_ORIGIN=http://localhost:5173`, `SESSION_COOKIE_NAME=eventflow_session`
+- `DATABASE_URL` — Postgres connection string. **Point it at a Neon dev branch, never the production database**: the server and every script refuse the production host when `NODE_ENV` is not `production` (`server/config/productionHosts.js`).
+- `JWT_SECRET`, `OTP_HMAC_SECRET`, `ADMIN_ACCESS_KEY` — generated below
+- `EMAIL_DEV_LOG=true` — prints sign-up and reset codes in the server console instead of sending email, so you do not need Brevo locally
+- Production only: `PROXY_SHARED_SECRET`, `PROXY_LOCK_MODE`, `BREVO_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME`, `APP_URL` (see [DEPLOYMENT.md](DEPLOYMENT.md))
 
-- `NODE_ENV=development`
-- `PORT=3001`
-- `DATABASE_URL` — Postgres connection string (required)
-- `CORS_ORIGIN=http://localhost:5173`
-- `SESSION_COOKIE_NAME=eventflow_session`
-- Generate the secrets below and paste into the matching keys
+There is no shared merchant password and no `MERCHANT_PASSWORD_HASH`: each merchant sets their own password at sign-up and only the bcrypt hash is stored in the database.
 
 ### 3. Generate server secrets (one-time per environment)
 
 Run these locally. Use **placeholders** in docs and chat; only put generated values in your local `server/.env`.
 
-**`JWT_SECRET`** — long random string:
-
 ```bash
-openssl rand -base64 32
+openssl rand -base64 32   # JWT_SECRET
+openssl rand -base64 32   # OTP_HMAC_SECRET (a different value)
+openssl rand -base64 24   # ADMIN_ACCESS_KEY, for the internal /api/usage/admin route
 ```
 
-**`MERCHANT_PASSWORD_HASH`** — bcrypt hash of your chosen login password. Run from `server/` so `bcryptjs` resolves:
-
-```bash
-cd server
-node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('your-chosen-password', 10))"
-```
-
-Copy the printed hash into `MERCHANT_PASSWORD_HASH` in `server/.env`. Do **not** store the plaintext password in `.env`, git, or commit messages.
-
-**PowerShell gotcha:** bcrypt hashes contain `$` characters. When setting `MERCHANT_PASSWORD_HASH` in PowerShell (inline env or file edits that go through shell expansion), wrap the value in **single quotes** — otherwise `$` is treated as a variable and the hash is corrupted. See [BUGS.md #002](BUGS.md) for details.
-
-**`ADMIN_ACCESS_KEY`** — for the internal `/api/usage/admin` route (same random pattern as `JWT_SECRET`):
-
-```bash
-openssl rand -base64 24
-```
-
-More detail on auth, cookies, and rate limits: **[SECURITY.md](SECURITY.md)**.
+More detail on auth, cookies, rate limits and the proxy lock: **[SECURITY.md](SECURITY.md)**.
 
 ---
 
@@ -96,10 +79,12 @@ npm run dev
 
 This uses `concurrently` to start both apps:
 
-- **Frontend:** http://localhost:5173  
+- **Frontend:** http://localhost:5173
 - **Backend:** http://localhost:3001 (`GET /api/health` → `{ "status": "ok" }`)
 
-On first dev startup, the server seeds demo bookings when the database is empty (`NODE_ENV=development` only). Historical months are filled in for analytics demos; production skips all seeding.
+On startup the server applies any pending database migrations (`server/db/migrations/`). On a dev database it then seeds fictional demo data (two demo merchants with populated dashboards; see `server/db/seedMerchants.js` for their demo logins, which exist on dev databases only). Production skips all seeding. To try the sign-up flow locally, use `EMAIL_DEV_LOG=true` and read the code from the server console.
+
+Verify scripts (`server/scripts/verify-*.mjs`, `npm run verify:isolation`, `verify:pricing`, `verify:analytics`) are for dev databases only and need `--confirm-host=<dev host>`; see [TESTING.md](TESTING.md).
 
 ---
 
@@ -107,14 +92,17 @@ On first dev startup, the server seeds demo bookings when the database is empty 
 
 | Document | What's in it |
 |----------|----------------|
+| [CLAUDE.md](CLAUDE.md) | Working rules and current status (read first) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System overview, tech stack, folder structure, API routes, data model, env var names |
-| [SECURITY.md](SECURITY.md) | Threat model, auth model, secrets setup, rate limits, session cookie rules |
+| [SECURITY.md](SECURITY.md) | Threat model, auth model, tenant isolation, secrets setup, rate limits, session cookie rules |
 | [DATA_PRIVACY.md](DATA_PRIVACY.md) | How client PII is handled, merchant transparency, DPDP-oriented guidance |
-| [CODING_STANDARDS.md](CODING_STANDARDS.md) | Component conventions, validation rules, Tailwind palette, product-quality bar |
+| [CODING_STANDARDS.md](CODING_STANDARDS.md) | Component conventions, validation rules, SQL and store patterns, Tailwind palette |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Vercel + Render + Neon setup, env vars, release process |
+| [RUNBOOK.md](RUNBOOK.md) | What to do when something breaks (rollback, restore) |
 | [BUGS.md](BUGS.md) | Known issues tracker with severity and fix notes |
-| [TESTING.md](TESTING.md) | Manual test checklists and Playwright verification scripts |
-| [ROADMAP.md](ROADMAP.md) | v1 scope lock and deferred features (what not to build yet) |
-| [PROMPTS.md](PROMPTS.md) | Sequenced Cursor build prompts for reproducing the project milestone by milestone |
+| [TESTING.md](TESTING.md) | Manual test checklists and verification scripts |
+| [ROADMAP.md](ROADMAP.md) | Scope decisions log and deferred features (what not to build yet) |
+| [PROMPTS.md](PROMPTS.md) | Historical build log of the original Cursor prompts (not the current architecture) |
 
 ---
 
