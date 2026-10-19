@@ -12,6 +12,7 @@ const ACCOUNT_DELETED_NOTICE = 'Your account has been deleted.'
 const clearMerchantData = () => {
   useBookingStore.setState({
     bookings: [],
+    bookingsLoaded: false,
     selectedBooking: null,
     isModalOpen: false,
     isDetailOpen: false,

@@ -53,7 +53,10 @@ export const useBookingStore = create((set, get) => ({
   // numbers (Sidebar revenue bar and badge, Analytics) refetch when it changes; see BUGS #097.
   analyticsVersion: 0,
 
-  setBookings: (bookings) => set({ bookings }),
+  // True once the full list has been loaded into `bookings` (so an empty array means "no bookings", not "not loaded yet").
+  bookingsLoaded: false,
+
+  setBookings: (bookings) => set({ bookings, bookingsLoaded: true }),
   addBooking: (booking) =>
     set((state) => ({ bookings: [...state.bookings, booking], analyticsVersion: state.analyticsVersion + 1 })),
   updateBooking: (booking) =>
@@ -132,7 +135,7 @@ export const useBookingStore = create((set, get) => ({
 
   loadBookings: async () => {
     const bookings = await api.getBookings()
-    set({ bookings })
+    set({ bookings, bookingsLoaded: true })
     return bookings
   },
 }))

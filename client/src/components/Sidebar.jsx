@@ -42,7 +42,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   const [logoutError, setLogoutError] = useState(null)
   const [pendingBalanceCount, setPendingBalanceCount] = useState(null)
   const { logout, businessName } = useAuthStore()
-  const { activeView, setActiveView, bookings, analyticsVersion } = useBookingStore()
+  const { activeView, setActiveView, bookings, bookingsLoaded, analyticsVersion } = useBookingStore()
   const { monthlyRevenueTarget, loadSettings } = useSettingsStore()
 
   const navButtonClass = (view) =>
@@ -50,16 +50,18 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
       ? 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-teal-600 text-white font-medium transition-all duration-200'
       : 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all duration-200'
 
-  const fetchStats = async () => {
-    setIsLoading(true)
-    setError(null)
+  const fetchStats = async ({ quiet = false } = {}) => {
+    if (!quiet) {
+      setIsLoading(true)
+      setError(null)
+    }
     try {
       const bookings = await api.getBookings()
       setStats(computeStats(bookings))
     } catch (err) {
-      setError(err.message)
+      if (!quiet) setError(err.message)
     } finally {
-      setIsLoading(false)
+      if (!quiet) setIsLoading(false)
     }
   }
 
@@ -96,6 +98,8 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
     if (analyticsVersion === 0) return
     loadRevenue({ keepOnError: true })
     loadPendingBalanceCount()
+    // The store list is only loaded once the Calendar has opened; until then the stats are refetched here instead.
+    if (!useBookingStore.getState().bookingsLoaded) fetchStats({ quiet: true })
   }, [analyticsVersion, loadRevenue, loadPendingBalanceCount])
 
   useEffect(() => {
@@ -105,10 +109,12 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   }, [activeView, loadSettings])
 
   useEffect(() => {
-    if (bookings.length > 0) {
+    // Wait for the store list to be loaded: before that it is just [] and would overwrite the fetched stats with zeros.
+    // Once loaded, an empty list is real (e.g. the last booking was deleted) and shows 0 / 0 / no upcoming event.
+    if (bookingsLoaded) {
       setStats(computeStats(bookings))
     }
-  }, [bookings])
+  }, [bookings, bookingsLoaded])
 
   const navigate = (view) => {
     setActiveView(view)
