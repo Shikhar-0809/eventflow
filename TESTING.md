@@ -83,6 +83,13 @@ Automated: `node scripts/verify-profile-ui.mjs --confirm-host=<dev db host>` fro
 - [ ] `/privacy` covers recent sign-ins, security notice emails, immediate permanent deletion and the stored WhatsApp number
 - [ ] Layout: every card and modal at 375px and 1280px, nothing sideways (the content column is only offset by the sidebar from the `md` breakpoint up)
 
+### Report PDF (Analytics > Export Report)
+Automated: `node scripts/verify-report-pdf.mjs --confirm-host=<dev db host>` from `server/` (dev database only, read-only; needs `npm run dev` running, so the client on :5173 and the API on :3001). It logs in as the dev demo merchant, generates the report in the real UI for an empty range, a small month, the widest window of up to 12 months and a month with expenses (skipped with a SKIP line if the demo data has none), clicks Download PDF and inspects the file. Downloaded PDFs go to `<tmp>/eventflow-report-pdf` (`REPORT_PDF_DIR` overrides). It checks, per case:
+- [ ] The download succeeds, the report window lists every booking, and the PDF is under 5 MB (BUGS #091: image data compressed, not raw RGB)
+- [ ] The PDF holds one image object reused on every page, and its page count matches the canvas height
+- [ ] The PDF's image data is pixel-identical to the canvas html2canvas produced (SHA-256 of the RGB bytes)
+- [ ] A canvas over 16,777,216 px prints a WARN, not a FAIL (iOS Safari limit, BUGS #094; page-break cuts are BUGS #095)
+
 ### Rebrand check
 - [ ] Sidebar shows "Bala Ji Tent House", not "Sharma Tent House" or "EventFlow"
 - [ ] Browser tab title reads "EventFlow — Bala Ji Tent House"
