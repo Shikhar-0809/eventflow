@@ -112,6 +112,7 @@ eventflow/
 │           ├── dateHelpers.js
 │           ├── excelExporter.js           # SheetJS .xlsx export
 │           ├── formatCurrency.js
+│           ├── merchantTime.js            # The merchant's business calendar on the client (same Asia/Kolkata rules as the server)
 │           ├── formatRelativeTime.js
 │           ├── profileErrors.js           # handleProfileError: 401 -> login, anything else -> a human sentence
 │           ├── reportPrinter.js           # Printable HTML report + PDF download (jspdf/html2canvas, bundled); see "Report PDF pipeline"
@@ -147,6 +148,7 @@ eventflow/
 │   ├── services/
 │   │   ├── bookingPricing.js      # Server-side booking prices and totals (BUGS #062)
 │   │   ├── bookingStatus.js       # The shared "active booking" rule (cancelled excluded), BUGS #096
+│   │   ├── merchantTime.js        # The merchant's business calendar (Asia/Kolkata): today / month / week ranges, BUGS #100
 │   │   ├── email.js               # Brevo send + the email bodies
 │   │   ├── otp.js                 # Email codes (HMAC-hashed), cooldowns, daily caps, action tokens
 │   │   ├── session.js             # issueSession / clearSession / bumpTokenVersion
@@ -330,7 +332,7 @@ APP_URL=                  # optional, shown in emails
 PROXY_LOCK_MODE=           # production only: 'report' relaxes the proxy-secret check for a staged rollout; anything else enforces
 ```
 
-Also read by code: `PGHOST` (only by the production-host guard in `server/config/productionHosts.js`, which checks every host `pg` could connect to). Script-only variables (verify scripts): `ISOLATION_PORT`, `PRICING_PORT`, `ANALYTICS_PORT`, `REPORT_PDF_DIR`, `VERIFY_FRONTEND_URL`.
+Also read by code: `PGHOST` (only by the production-host guard in `server/config/productionHosts.js`, which checks every host `pg` could connect to). Test-only, honoured only when `NODE_ENV` is `development` or `test`: `MERCHANT_NOW_OVERRIDE` (pins "now" for `verify:timezone`; the server warns loudly at boot if it is set). Script-only variables (verify scripts): `ISOLATION_PORT`, `PRICING_PORT`, `ANALYTICS_PORT`, `RATELIMIT_PORT`, `TIMEZONE_PORT`, `REPORT_PDF_DIR`, `VERIFY_FRONTEND_URL`.
 
 Required at boot: `JWT_SECRET`, `SESSION_COOKIE_NAME` (plus `PROXY_SHARED_SECRET` in production). `BREVO_API_KEY`, `EMAIL_FROM` and `OTP_HMAC_SECRET` are not required to boot (production logs one warning if missing) but sign-up and password reset fail without them; `EMAIL_FROM_NAME` is also needed to send, yet is not in that boot warning (`server/index.js` vs `server/services/email.js`). `MERCHANT_PASSWORD_HASH` no longer exists: logins are per merchant, in the `merchants` table.
 
@@ -425,7 +427,7 @@ UX, deliberately **stricter than the date-clash alert** because a physical short
 
 The Inventory dashboard itself (`InventoryView.jsx`) shows `in_use_today` using **today's date**, not the date of any particular booking being created — it's read as "what's out of the warehouse right now." `GET /api/inventory` also returns `booked_this_month` and `availability_ratio` per item (`server/routes/inventory.js`), which feed the low-availability hint (threshold 20%).
 
-**Dates and time zones.** "Today" and "this month" in `inventory.js` and `analytics.js` come from the server's local clock (`new Date()`), and `pending-balances` uses the database's `CURRENT_DATE`; only `GET /api/profile` uses `Asia/Kolkata` explicitly. The repo does not record the time zone Render runs in (no `render.yaml`, no `TZ` variable, no code that sets one), and Neon's default session time zone is UTC (a dev database reports GMT); on a UTC server "today" and the month rollover come 5½ hours late for an Indian merchant. Local development hides this because the developer's machine is on IST. This is BUGS #100; TODO: confirm Render's actual time zone in the dashboard.
+**Dates and time zones (BUGS #100).** "Today", "this month" and "this week" are the merchant's calendar in `Asia/Kolkata`, from one helper: `server/services/merchantTime.js` (`MERCHANT_TZ`, `todayISO`, `monthRange`, `lastMonths`, `weekRange`, `startOfDayInstant`, each taking an injectable `now`) and its client twin `client/src/utils/merchantTime.js`. The code does not depend on the time zone of the Render service, the Neon session or the browser; the resulting dates are passed to SQL as `$n` parameters, and no `CURRENT_DATE`, `NOW()::date` or server-local `Date` math is used for business days. Two kinds of values are handled differently: a **calendar date** (`bookings.event_date`, text `YYYY-MM-DD`) is compared with the ISO date strings the helper returns (analytics, inventory `in_use_today` and `booked_this_month`, pending balances, the profile's upcoming count); a **timestamp** (`event_log.created_at`) is compared with the UTC instants of the IST midnights that bound the week (`weekRange`), and "days active" buckets timestamps into IST days with `AT TIME ZONE` (`routes/usage.js`). Instants that are not business days (OTP expiry, `updated_at`, session times) stay `NOW()` / `new Date()`. For tests only, `MERCHANT_NOW_OVERRIDE` (an ISO instant) pins "now", and only when `NODE_ENV` is exactly `development` or `test` (an allowlist: unset, misspelled or `production` never pins it); the server logs a loud warning at boot whenever the variable is set at all, saying whether it is honoured or ignored (`nowOverrideWarning`, `server/index.js`). Proof: `npm run verify:timezone` (TESTING.md). Still on local time by design: dev seed scripts, which build dates relative to the developer's machine.
 
 ---
 

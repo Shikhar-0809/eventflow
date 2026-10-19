@@ -10,6 +10,7 @@ import {
   inventoryQuantityUpdateSchema,
 } from '../schemas/inventory.schema.js'
 import { parseId } from '../utils/ids.js'
+import { monthRange, todayISO } from '../services/merchantTime.js'
 
 const router = Router()
 
@@ -22,20 +23,10 @@ const ITEM_COLUMNS = 'id, name, total_quantity, damaged_quantity, unit_price, cr
 
 const REORDER_THRESHOLD = 0.2
 
-const todayDate = () => {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  const d = String(now.getDate()).padStart(2, '0')
-  return `${y}-${m}-${d}`
-}
+// "Today" and "this month" are the merchant's (Asia/Kolkata) day and month, not the server's (BUGS #100).
+const todayDate = () => todayISO()
 
-const currentMonthPrefix = () => {
-  const now = new Date()
-  const y = now.getFullYear()
-  const m = String(now.getMonth() + 1).padStart(2, '0')
-  return `${y}-${m}`
-}
+const currentMonthPrefix = () => monthRange().month
 
 const bookedThisMonthForItem = async (merchantId, itemId, monthPrefix = currentMonthPrefix()) => {
   const { rows } = await pool.query(

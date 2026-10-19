@@ -6,6 +6,7 @@ import { bookingCreateRateLimiter } from '../middleware/rateLimiter.js'
 import { trackUsage } from '../middleware/trackUsage.js'
 import { bookingSchema, bookingStatusSchema, changeLogSchema, expenseSchema } from '../schemas/booking.schema.js'
 import { parseId } from '../utils/ids.js'
+import { todayISO } from '../services/merchantTime.js'
 import { BookingInputError, INVALID_ITEMS_MESSAGE, loadItemRates, priceBooking } from '../services/bookingPricing.js'
 
 const router = Router()
@@ -282,14 +283,15 @@ router.get('/pending-balances', async (req, res, next) => {
          id, client_name, phone, event_type, event_date, venue,
          guest_count, status, advance, total,
          (total - advance) AS pending_balance,
-         (event_date::date - CURRENT_DATE) AS days_until_event
+         (event_date::date - $2::date) AS days_until_event
        FROM bookings
        WHERE merchant_id = $1
          AND status IN ('confirmed', 'pending')
          AND (total - advance) > 0
-         AND event_date::date >= CURRENT_DATE
+         AND event_date::date >= $2::date
        ORDER BY event_date ASC`,
-      [req.merchantId],
+      // $2 is the merchant's (Asia/Kolkata) today, not the database's CURRENT_DATE (BUGS #100).
+      [req.merchantId, todayISO()],
     )
 
     const bookings = rows.map((row) => ({

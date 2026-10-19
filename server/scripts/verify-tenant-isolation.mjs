@@ -147,16 +147,20 @@ const call = async (cookie, method, path, { body, headers } = {}) => {
 
 // ---------------------------------------------------------------- oracles (same rules as the routes, scoped in SQL)
 
-const pad = (n) => String(n).padStart(2, '0')
-const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const monthStart = (y, mIdx) => `${y}-${pad(mIdx + 1)}-01`
-const nextMonthStart = (y, mIdx) => (mIdx === 11 ? `${y + 1}-01-01` : monthStart(y, mIdx + 1))
-const weekWindow = () => {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const back = today.getDay() === 0 ? 6 : today.getDay() - 1
-  const monday = new Date(today); monday.setDate(today.getDate() - back)
-  const next = new Date(monday); next.setDate(monday.getDate() + 7)
-  return [`${ymd(monday)} 00:00:00`, `${ymd(next)} 00:00:00`]
+// The merchant's business day is Asia/Kolkata, computed here in plain SQL (an oracle independent of the server's own
+// helper, services/merchantTime.js; BUGS #100): today, the month, the six-month window and the Monday-Sunday week.
+// Week bounds are IST midnights written with an explicit +05:30 so no session time zone is involved.
+const istCalendar = async () => {
+  const [r] = await q(`
+    SELECT to_char(d, 'YYYY-MM-DD') AS today,
+           to_char(d, 'YYYY-MM') AS month,
+           to_char(date_trunc('month', d), 'YYYY-MM-DD') AS cur_start,
+           to_char(date_trunc('month', d) + interval '1 month', 'YYYY-MM-DD') AS cur_end,
+           to_char(date_trunc('month', d) - interval '5 months', 'YYYY-MM-DD') AS six_start,
+           to_char(date_trunc('week', d), 'YYYY-MM-DD') || ' 00:00:00+05:30' AS week_start,
+           to_char(date_trunc('week', d) + interval '7 days', 'YYYY-MM-DD') || ' 00:00:00+05:30' AS week_end
+      FROM (SELECT (NOW() AT TIME ZONE 'Asia/Kolkata')::date AS d) t`)
+  return r
 }
 
 // ================================================================ main
@@ -276,13 +280,13 @@ try {
 
   // ---- lists and aggregates: hard failures
   console.log('\n-- lists and aggregates contain only the merchant\'s own data (compared with a per-merchant SQL oracle)')
-  const now = new Date()
-  const monthPrefix = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`
-  const curStart = monthStart(now.getFullYear(), now.getMonth())
-  const curEnd = nextMonthStart(now.getFullYear(), now.getMonth())
-  const six = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-  const sixStart = monthStart(six.getFullYear(), six.getMonth())
-  const [weekStart, weekEnd] = weekWindow()
+  const ist = await istCalendar()
+  const monthPrefix = ist.month
+  const curStart = ist.cur_start
+  const curEnd = ist.cur_end
+  const sixStart = ist.six_start
+  const weekStart = ist.week_start
+  const weekEnd = ist.week_end
   const scanned = []
 
   for (const [m, other, label] of [[ME.A, ME.B, 'A'], [ME.B, ME.A, 'B']]) {
@@ -291,7 +295,7 @@ try {
     const bookings = await get('/bookings')
     check(bookings.status === 200 && sameList(sortedIds(bookings.body ?? []), m.ids.bookings), `${label} GET /bookings = exactly its ${m.ids.bookings.length} bookings`)
 
-    const pendingOracle = sortedIds(await q(`SELECT id FROM bookings WHERE merchant_id = $1 AND status IN ('confirmed','pending') AND (total - advance) > 0 AND event_date::date >= CURRENT_DATE`, [m.id]))
+    const pendingOracle = sortedIds(await q(`SELECT id FROM bookings WHERE merchant_id = $1 AND status IN ('confirmed','pending') AND (total - advance) > 0 AND event_date::date >= $2::date`, [m.id, ist.today]))
     const pending = await get('/bookings/pending-balances')
     check(pending.status === 200 && sameList(sortedIds(pending.body ?? []), pendingOracle), `${label} GET /bookings/pending-balances = its own ${pendingOracle.length}`)
 
@@ -301,7 +305,7 @@ try {
        WHERE bi.merchant_id = $1 AND b.status != 'cancelled' AND b.event_date LIKE $2 GROUP BY bi.item_id`, [m.id, `${monthPrefix}%`])).map((r) => [Number(r.item_id), r.n]))
     const inUseOracle = new Map((await q(
       `SELECT bi.item_id, SUM(bi.quantity)::int AS n FROM booking_inventory bi JOIN bookings b ON b.id = bi.booking_id AND b.merchant_id = bi.merchant_id
-       WHERE bi.merchant_id = $1 AND b.status != 'cancelled' AND b.event_date = $2 GROUP BY bi.item_id`, [m.id, ymd(now)])).map((r) => [Number(r.item_id), r.n]))
+       WHERE bi.merchant_id = $1 AND b.status != 'cancelled' AND b.event_date = $2 GROUP BY bi.item_id`, [m.id, ist.today])).map((r) => [Number(r.item_id), r.n]))
     const invOk = inventory.status === 200 && sameList(sortedIds(inventory.body ?? []), m.ids.items)
       && (inventory.body ?? []).every((it) => it.booked_this_month === (bookedOracle.get(it.id) ?? 0) && it.in_use_today === (inUseOracle.get(it.id) ?? 0))
     check(invOk, `${label} GET /inventory = exactly its ${m.ids.items.length} items, with booked_this_month and in_use_today from its own bookings only`)
@@ -318,18 +322,18 @@ try {
       `SELECT COALESCE(SUM(total) FILTER (WHERE event_date >= $2 AND event_date < $3), 0)::int AS revenue,
               COUNT(*) FILTER (WHERE event_date >= $2 AND event_date < $3)::int AS month_bookings,
               COUNT(DISTINCT phone)::int AS clients
-       FROM bookings WHERE merchant_id = $1`, [m.id, curStart, curEnd])
+       FROM bookings WHERE merchant_id = $1 AND status IS DISTINCT FROM 'cancelled'`, [m.id, curStart, curEnd])
     check(summary.status === 200 && summary.body.revenueThisMonth === sOracle.revenue && summary.body.bookingsThisMonth === sOracle.month_bookings && summary.body.totalClients === sOracle.clients,
       `${label} GET /analytics/summary matches its own data`, `totalClients=${summary.body?.totalClients} oracle=${sOracle.clients}`)
 
     const monthly = await get('/analytics/monthly')
-    const [mOracle] = await q(`SELECT COUNT(*)::int AS n, COALESCE(SUM(total), 0)::int AS revenue FROM bookings WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3`, [m.id, sixStart, curEnd])
+    const [mOracle] = await q(`SELECT COUNT(*)::int AS n, COALESCE(SUM(total), 0)::int AS revenue FROM bookings WHERE merchant_id = $1 AND status IS DISTINCT FROM 'cancelled' AND event_date >= $2 AND event_date < $3`, [m.id, sixStart, curEnd])
     const mSum = (monthly.body ?? []).reduce((acc, r) => ({ n: acc.n + r.bookings, revenue: acc.revenue + r.revenue }), { n: 0, revenue: 0 })
     check(monthly.status === 200 && mSum.n === mOracle.n && mSum.revenue === mOracle.revenue, `${label} GET /analytics/monthly matches its own data`)
 
     const me = await get('/usage/me')
     const count = async (types) => (await q(`SELECT COUNT(*)::int AS n FROM event_log WHERE merchant_id = $1 AND event_type = ANY($2) AND created_at::timestamptz >= $3::timestamptz AND created_at::timestamptz < $4::timestamptz`, [m.id, types, weekStart, weekEnd]))[0].n
-    const [days] = await q(`SELECT COUNT(DISTINCT (created_at::timestamptz)::date)::int AS n FROM event_log WHERE merchant_id = $1 AND created_at::timestamptz >= $2::timestamptz AND created_at::timestamptz < $3::timestamptz`, [m.id, weekStart, weekEnd])
+    const [days] = await q(`SELECT COUNT(DISTINCT (created_at::timestamptz AT TIME ZONE 'Asia/Kolkata')::date)::int AS n FROM event_log WHERE merchant_id = $1 AND created_at::timestamptz >= $2::timestamptz AND created_at::timestamptz < $3::timestamptz`, [m.id, weekStart, weekEnd])
     const [last] = await q('SELECT MAX(created_at::timestamptz) AS t FROM event_log WHERE merchant_id = $1', [m.id])
     const meOk = me.status === 200
       && me.body.loginsThisWeek === await count(['login'])

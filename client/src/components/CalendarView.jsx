@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getDaysUntilEvent } from '../utils/dateHelpers'
+import { merchantHour, todayISO, weekRangeISO } from '../utils/merchantTime'
 
 const STATUS_COLORS = {
   confirmed: '#0f766e',
@@ -30,31 +31,19 @@ const eventTypeLabel = (booking) =>
     ? booking.event_type_custom
     : formatEventType(booking.event_type)
 
-const pad = (n) => String(n).padStart(2, '0')
-
 const getGreeting = (businessName) => {
-  const hour = new Date().getHours()
+  const hour = merchantHour()
   const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'
   return businessName ? `Good ${timeOfDay}, ${businessName}!` : `Good ${timeOfDay}!`
 }
 
-const getMondaySundayWeek = () => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dayOfWeek = today.getDay()
-  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - daysFromMonday)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  const format = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-  return { weekStart: format(monday), weekEnd: format(sunday) }
-}
+// The merchant's (Asia/Kolkata) Monday-Sunday week, the same as the server's (BUGS #100).
+const getMondaySundayWeek = () => weekRangeISO()
 
 const buildBriefingLines = (bookings) => {
   if (!Array.isArray(bookings) || bookings.length === 0) return []
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = todayISO()
   const { weekStart, weekEnd } = getMondaySundayWeek()
   const active = bookings.filter((booking) => booking.status !== 'cancelled')
   const lines = []

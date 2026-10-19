@@ -5,6 +5,7 @@ import { useBookingStore } from '../store/bookingStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
+import { currentMonthKey, todayISO } from '../utils/merchantTime'
 
 const formatEventDate = (dateStr) => {
   if (!dateStr || dateStr === '—') return '—'
@@ -13,15 +14,11 @@ const formatEventDate = (dateStr) => {
 }
 
 const computeStats = (bookings) => {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-  const today = `${year}-${String(month + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  // The merchant's (Asia/Kolkata) day and month, the same as the server's (BUGS #100).
+  const today = todayISO()
+  const monthKey = currentMonthKey()
 
-  const thisMonth = bookings.filter((b) => {
-    const d = new Date(`${b.event_date}T00:00:00`)
-    return d.getFullYear() === year && d.getMonth() === month && b.status !== 'cancelled'
-  }).length
+  const thisMonth = bookings.filter((b) => String(b.event_date).slice(0, 7) === monthKey && b.status !== 'cancelled').length
 
   const pendingAdvances = bookings.filter((b) => b.status === 'pending').length
 

@@ -28,6 +28,7 @@ import {
 } from '../services/otp.js'
 import { bumpTokenVersion, clearSession, issueSession } from '../services/session.js'
 import { maskEmail } from '../utils/maskEmail.js'
+import { todayISO } from '../services/merchantTime.js'
 
 const BCRYPT_COST = 10
 const CHANGE_EMAIL_DAILY_LIMIT = 3
@@ -67,18 +68,18 @@ const sendRetryAfter = (err, res) => {
 }
 
 const getProfile = async (merchantId) => {
-  // event_date is stored as YYYY-MM-DD text, so "today" is the Indian calendar date, compared as text.
+  // event_date is stored as YYYY-MM-DD text, so "today" is the merchant's calendar date (services/merchantTime.js), compared as text.
   const { rows } = await pool.query(
     `SELECT m.email, m.created_at, m.password_changed_at, m.business_name, m.whatsapp_phone,
             (SELECT COUNT(*)::int FROM bookings b WHERE b.merchant_id = m.id) AS bookings,
             (SELECT COUNT(*)::int FROM bookings b
               WHERE b.merchant_id = m.id AND b.status IN ('confirmed', 'pending')
-                AND b.event_date >= to_char(NOW() AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD')) AS upcoming,
+                AND b.event_date >= $2) AS upcoming,
             (SELECT COUNT(*)::int FROM inventory_items i WHERE i.merchant_id = m.id) AS inventory_items,
             (SELECT COUNT(DISTINCT b.phone)::int FROM bookings b WHERE b.merchant_id = m.id) AS clients
        FROM merchants m
       WHERE m.id = $1`,
-    [merchantId],
+    [merchantId, todayISO()],
   )
   const row = rows[0]
   return {

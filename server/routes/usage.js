@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/requireAuth.js'
 import { requireAdminKey } from '../middleware/requireAdminKey.js'
 import { validate } from '../middleware/validate.js'
 import { parseId } from '../utils/ids.js'
+import { MERCHANT_TZ, formatDayMonth, merchantNow, weekRange } from '../services/merchantTime.js'
 
 const router = Router()
 
@@ -13,43 +14,15 @@ const clientActionSchema = z.object({
   booking_id: z.number().int().positive(),
 })
 
-const pad = (n) => String(n).padStart(2, '0')
-
-const formatDate = (date) => {
-  const y = date.getFullYear()
-  const m = pad(date.getMonth() + 1)
-  const d = pad(date.getDate())
-  return `${y}-${m}-${d}`
-}
-
-const formatDayMonth = (date) =>
-  date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-
-/** ISO week: Monday 00:00:00 through Sunday end; weekOffset 0 = current week. */
+// The week windows are the merchant's (Asia/Kolkata) Monday-Sunday weeks (services/merchantTime.js, BUGS #100). event_log.created_at
+// is a timestamp, so the window is a pair of UTC instants (the IST midnights that bound the week) and "days active" buckets
+// the timestamps into IST days with AT TIME ZONE; neither depends on the server or database time zone.
 const getWeekWindow = (weekOffset = 0) => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const dayOfWeek = today.getDay()
-  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
-
-  const monday = new Date(today)
-  monday.setDate(today.getDate() - daysFromMonday - weekOffset * 7)
-
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-
-  const nextMonday = new Date(monday)
-  nextMonday.setDate(monday.getDate() + 7)
-
-  const weekStartDate = formatDate(monday)
-  const weekEndDate = formatDate(sunday)
-
+  const { startDate, endDate, startInstant, endInstantExclusive } = weekRange(merchantNow(), weekOffset)
   return {
-    weekStart: `${weekStartDate} 00:00:00`,
-    weekEndExclusive: `${formatDate(nextMonday)} 00:00:00`,
-    weekStartDate,
-    weekEndDate,
-    weekLabel: `${formatDayMonth(monday)} – ${formatDayMonth(sunday)} ${sunday.getFullYear()}`,
+    weekStart: startInstant.toISOString(),
+    weekEndExclusive: endInstantExclusive.toISOString(),
+    weekLabel: `${formatDayMonth(startDate)} – ${formatDayMonth(endDate)} ${endDate.slice(0, 4)}`,
   }
 }
 
@@ -118,12 +91,12 @@ router.get('/me', async (req, res, next) => {
         [merchantId, weekStart, weekEndExclusive],
       ),
       pool.query(
-        `SELECT COUNT(DISTINCT (created_at::timestamptz)::date)::int AS count
+        `SELECT COUNT(DISTINCT (created_at::timestamptz AT TIME ZONE $4::text)::date)::int AS count
          FROM event_log
          WHERE merchant_id = $1
          AND created_at::timestamptz >= $2::timestamptz
          AND created_at::timestamptz < $3::timestamptz`,
-        [merchantId, weekStart, weekEndExclusive],
+        [merchantId, weekStart, weekEndExclusive, MERCHANT_TZ],
       ),
       pool.query('SELECT MAX(created_at::timestamptz) AS last_active FROM event_log WHERE merchant_id = $1', [
         merchantId,

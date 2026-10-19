@@ -2,44 +2,21 @@ import { Router } from 'express'
 import { pool } from '../db/database.js'
 import { requireAuth } from '../middleware/requireAuth.js'
 import { ACTIVE_BOOKING_SQL } from '../services/bookingStatus.js'
+import { lastMonths, merchantNow, monthRange } from '../services/merchantTime.js'
 
 const router = Router()
 
-const pad = (n) => String(n).padStart(2, '0')
-
-const monthKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}`
-
-const monthStart = (year, monthIndex) => `${year}-${pad(monthIndex + 1)}-01`
-
-const nextMonthStart = (year, monthIndex) => {
-  if (monthIndex === 11) return `${year + 1}-01-01`
-  return `${year}-${pad(monthIndex + 2)}-01`
-}
-
-const lastSixMonthKeys = () => {
-  const now = new Date()
-  const keys = []
-  for (let i = 5; i >= 0; i -= 1) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    keys.push(monthKey(d))
-  }
-  return keys
-}
+// "This month" and the six-month window are the merchant's (Asia/Kolkata) calendar months, from services/merchantTime.js
+// (BUGS #100), passed to SQL as parameters; event_date is a calendar date (text), so these are plain date strings.
 
 router.use(requireAuth)
 
 router.get('/summary', async (req, res, next) => {
   try {
     const merchantId = req.merchantId
-    const now = new Date()
-    const year = now.getFullYear()
-    const monthIndex = now.getMonth()
-    const currentStart = monthStart(year, monthIndex)
-    const currentEnd = nextMonthStart(year, monthIndex)
-
-    const sixMonthsAgo = new Date(year, monthIndex - 5, 1)
-    const sixMonthStart = monthStart(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth())
-    const windowEnd = currentEnd
+    const now = merchantNow()
+    const { start: currentStart, end: currentEnd } = monthRange(now)
+    const { start: sixMonthStart, end: windowEnd } = lastMonths(now, 6)
 
     const { rows: revenueRows } = await pool.query(
       `SELECT COALESCE(SUM(total), 0) AS revenue FROM bookings
@@ -87,10 +64,7 @@ router.get('/summary', async (req, res, next) => {
 
 router.get('/monthly', async (req, res, next) => {
   try {
-    const now = new Date()
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-    const sixMonthStart = monthStart(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth())
-    const windowEnd = nextMonthStart(now.getFullYear(), now.getMonth())
+    const { keys, start: sixMonthStart, end: windowEnd } = lastMonths(merchantNow(), 6)
 
     const { rows } = await pool.query(
       `SELECT TO_CHAR(event_date::date, 'YYYY-MM') AS month,
@@ -105,7 +79,7 @@ router.get('/monthly', async (req, res, next) => {
 
     const byMonth = Object.fromEntries(rows.map((r) => [r.month, r]))
 
-    const monthly = lastSixMonthKeys().map((month) => ({
+    const monthly = keys.map((month) => ({
       month,
       bookings: Number(byMonth[month]?.bookings ?? 0),
       revenue: Number(byMonth[month]?.revenue ?? 0),

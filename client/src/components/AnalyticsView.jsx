@@ -11,6 +11,7 @@ import {
 import { FileText, Loader2, X } from 'lucide-react'
 import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
+import { monthStartISO, todayISO } from '../utils/merchantTime'
 import { openReportWindow } from '../utils/reportPrinter'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
@@ -18,17 +19,10 @@ import { useSettingsStore } from '../store/settingsStore'
 
 const MAX_MONTHLY_TARGET = 100000000
 
-const pad = (n) => String(n).padStart(2, '0')
+// The report's default range uses the merchant's (Asia/Kolkata) month and day (BUGS #100).
+const firstDayOfCurrentMonth = () => monthStartISO()
 
-const firstDayOfCurrentMonth = () => {
-  const today = new Date()
-  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`
-}
-
-const todayDateString = () => {
-  const today = new Date()
-  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
-}
+const todayDateString = () => todayISO()
 
 const formatMonthLabel = (yyyyMm) => {
   const [year, month] = yyyyMm.split('-')

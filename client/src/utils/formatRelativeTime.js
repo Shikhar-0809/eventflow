@@ -1,3 +1,5 @@
+import { daysBetweenISO, todayISO } from './merchantTime.js'
+
 const parseSqliteDatetime = (value) => {
   if (!value) return null
   const date = new Date(value.replace(' ', 'T'))
@@ -28,10 +30,8 @@ export const daysUsingEventFlow = (firstActivityAt) => {
   const first = parseSqliteDatetime(firstActivityAt)
   if (!first) return null
 
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const today = startOfDay(new Date())
-  const firstDay = startOfDay(first)
-  const diffDays = Math.floor((today - firstDay) / 86400000) + 1
+  // Counted in the merchant's (Asia/Kolkata) days, like the server's business days (BUGS #100).
+  const diffDays = daysBetweenISO(todayISO(first), todayISO()) + 1
 
   return diffDays >= 1 ? diffDays : null
 }

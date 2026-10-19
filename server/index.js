@@ -15,6 +15,7 @@ import reportsRouter from './routes/reports.js'
 import recordsRouter from './routes/records.js'
 import profileRouter from './routes/profile.js'
 import { deleteOldOtps } from './services/otp.js'
+import { nowOverrideWarning } from './services/merchantTime.js'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requireProxySecret } from './middleware/requireProxySecret.js'
 
@@ -42,6 +43,14 @@ for (const key of REQUIRED_ENV) {
 
 if (process.env.NODE_ENV !== 'production') {
   console.log(`JWT_SECRET loaded: ${Boolean(process.env.JWT_SECRET)}`)
+}
+
+// A test-only variable that pins the business clock (services/merchantTime.js). Loud whenever it is set at all.
+const overrideWarning = nowOverrideWarning()
+if (overrideWarning) {
+  console.warn('!'.repeat(100))
+  console.warn(overrideWarning)
+  console.warn('!'.repeat(100))
 }
 
 const app = express()
