@@ -742,7 +742,9 @@ export const BookingPageContent = () => {
         forceCloseModal()
         return
       }
-      if (err.status === 400) {
+      // 400: the server's validation sentence. 429: either our limiter's own text or "The server is waking up" (BUGS #104);
+      // both are written for the merchant, so show them instead of the generic line.
+      if (err.status === 400 || err.status === 429) {
         setFormError(err.message)
         return
       }
