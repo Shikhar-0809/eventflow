@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/database.js'
 import { requireAuth } from '../middleware/requireAuth.js'
+import { isActiveBooking } from '../services/bookingStatus.js'
 
 const router = Router()
 
@@ -103,7 +104,7 @@ router.get('/range', async (req, res, next) => {
       }
     })
 
-    const activeBookings = bookings.filter((booking) => booking.status !== 'cancelled')
+    const activeBookings = bookings.filter(isActiveBooking)
     const totalRevenue = activeBookings.reduce((sum, booking) => sum + booking.total, 0)
     const totalAdvanceCollected = activeBookings.reduce((sum, booking) => sum + booking.advance, 0)
     const totalExpenses = activeBookings.reduce((sum, booking) => sum + booking.total_expenses, 0)

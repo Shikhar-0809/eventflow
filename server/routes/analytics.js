@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool } from '../db/database.js'
 import { requireAuth } from '../middleware/requireAuth.js'
+import { ACTIVE_BOOKING_SQL } from '../services/bookingStatus.js'
 
 const router = Router()
 
@@ -42,14 +43,14 @@ router.get('/summary', async (req, res, next) => {
 
     const { rows: revenueRows } = await pool.query(
       `SELECT COALESCE(SUM(total), 0) AS revenue FROM bookings
-       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3`,
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3 AND ${ACTIVE_BOOKING_SQL}`,
       [merchantId, currentStart, currentEnd],
     )
     const revenueThisMonth = Number(revenueRows[0].revenue)
 
     const { rows: bookingsRows } = await pool.query(
       `SELECT COUNT(*) AS count FROM bookings
-       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3`,
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3 AND ${ACTIVE_BOOKING_SQL}`,
       [merchantId, currentStart, currentEnd],
     )
     const bookingsThisMonth = Number(bookingsRows[0].count)
@@ -57,7 +58,7 @@ router.get('/summary', async (req, res, next) => {
     const { rows: peakRows } = await pool.query(
       `SELECT TO_CHAR(event_date::date, 'YYYY-MM') AS month, COUNT(*) AS count
        FROM bookings
-       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3 AND ${ACTIVE_BOOKING_SQL}
        GROUP BY month
        ORDER BY count DESC, month DESC
        LIMIT 1`,
@@ -66,7 +67,7 @@ router.get('/summary', async (req, res, next) => {
     const peakRow = peakRows[0]
 
     const { rows: clientRows } = await pool.query(
-      'SELECT COUNT(DISTINCT phone) AS total FROM bookings WHERE merchant_id = $1',
+      `SELECT COUNT(DISTINCT phone) AS total FROM bookings WHERE merchant_id = $1 AND ${ACTIVE_BOOKING_SQL}`,
       [merchantId],
     )
     const totalClients = Number(clientRows[0].total)
@@ -96,7 +97,7 @@ router.get('/monthly', async (req, res, next) => {
               COUNT(*) AS bookings,
               COALESCE(SUM(total), 0) AS revenue
        FROM bookings
-       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3
+       WHERE merchant_id = $1 AND event_date >= $2 AND event_date < $3 AND ${ACTIVE_BOOKING_SQL}
        GROUP BY month
        ORDER BY month ASC`,
       [req.merchantId, sixMonthStart, windowEnd],
