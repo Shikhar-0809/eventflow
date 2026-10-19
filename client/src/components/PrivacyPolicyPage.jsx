@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { ArrowLeft, CalendarDays } from 'lucide-react'
 
 export const PRIVACY_POLICY_PATH = '/privacy'
-const LAST_UPDATED = '16 October 2026'
+const LAST_UPDATED = '19 October 2026'
 
 const CONTACT_EMAIL = 'eventflow.support@gmail.com'
 
@@ -147,7 +147,7 @@ export const PrivacyPolicyPage = () => {
             <p>
               Like any web service, our servers see the network address (IP address) of each request. We use
               it briefly, in the server&apos;s memory, to slow down repeated login attempts, and we do not save it
-              in the EventFlow database (not even in the sign-in list above). Our hosting providers (section 7) may keep their own standard technical
+              in the EventFlow database (not even in the sign-in list above). Our service providers (section 7) may keep their own standard technical
               logs under their own policies.
             </p>
           </Section>
@@ -169,7 +169,7 @@ export const PrivacyPolicyPage = () => {
               calendar, bookings, inventory, balances, records and reports), to show the merchant summaries of
               their own business and activity, to keep accounts secure, and to understand whether the service
               is working. We do not sell data, we do not use it for advertising, and we do not share it with
-              anyone other than the providers that host the service (section 7).
+              anyone other than the providers that host the service and send its emails (section 7).
             </p>
             <p>
               When a merchant taps a WhatsApp button, the app opens WhatsApp on their own device with a
@@ -195,8 +195,17 @@ export const PrivacyPolicyPage = () => {
                 'Vercel serves the web app and passes requests on to our server',
                 'Render runs the EventFlow server (the API)',
                 'Neon hosts the Postgres database where the data in section 3 is stored',
+                'Brevo, an email delivery service, sends the emails described in section 3.5',
               ]}
             />
+            <p>
+              Brevo receives only what it needs to deliver an email: the recipient&apos;s email address (the address
+              on the merchant&apos;s account, or the new address when a merchant changes it) and the content of the
+              message, which is a one-time code for signing up, resetting a password or changing the email address,
+              or a security notice. We use it so that merchants can verify their email address and are told when
+              something security-related happens on their account. Brevo does not receive bookings, client names or
+              phone numbers, or passwords, and may keep its own delivery records under its own policy.
+            </p>
           </Section>
 
           <Section id="cookies" title="8. Cookies">
