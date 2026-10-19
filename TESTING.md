@@ -90,6 +90,14 @@ Automated: `node scripts/verify-report-pdf.mjs --confirm-host=<dev db host>` fro
 - [ ] The PDF's image data is pixel-identical to the canvas html2canvas produced (SHA-256 of the RGB bytes)
 - [ ] A canvas over 16,777,216 px prints a WARN, not a FAIL (iOS Safari limit, BUGS #094; page-break cuts are BUGS #095)
 
+### Booking pricing (server-side totals, BUGS #062)
+Automated: `npm run verify:pricing -- --confirm-host=<dev db host>` from `server/` (dev database only; boots its own API server on port 3010, `PRICING_PORT` overrides). It creates two throwaway merchants (`PRICING-FIXTURE-1` and `-2`, with their own items), drives `POST /bookings` and `PATCH /bookings/:id`, reads what was stored straight from the database, and removes both merchants afterwards (and at the start of the next run if a run crashed). It pauses once for 61 s because of the booking-create rate limit. It checks:
+- [ ] With lines, stored `line_total`, `subtotal`, `grand_total` and `total` equal the hand-computed values whatever the client sent (junk, huge, or omitted); an omitted `unit_price` uses the item's stored rate; a sent `unit_price` (override, even 0) and a `discount` are kept; a discount over the subtotal clamps the total to 0
+- [ ] Bookings with no lines keep the typed total, with `grand_total` set equal to it
+- [ ] 400 with a readable message and nothing stored for: advance over the computed (or typed) total, a `unit_price` over int4 or over 10,000,000 (never a 500), a computed line total or subtotal over 10,000,000, the same item on two lines, a foreign or nonexistent item, negative or non-integer amounts
+- [ ] `PATCH` recomputes, keeps stored prices when `inventory` is omitted, takes the current rate for a line sent without a price, and a rejected `PATCH` changes nothing
+- [ ] In production the error handler returns the generic message, not the Postgres text
+
 ### Rebrand check
 - [ ] Sidebar shows "Bala Ji Tent House", not "Sharma Tent House" or "EventFlow"
 - [ ] Browser tab title reads "EventFlow — Bala Ji Tent House"
