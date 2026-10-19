@@ -313,8 +313,8 @@ Global: `Cache-Control: no-store` on `/api/*`. ETag disabled. Errors → `errorH
 | GET | `/api/bookings/check-conflict?date=YYYY-MM-DD&excludeId=` | Yes | Returns conflicting booking if any. `excludeId` optional when editing |
 | GET | `/api/bookings/pending-balances` | Yes | Outstanding balances (confirmed/pending, balance > 0, upcoming) |
 | GET | `/api/bookings/:id` | Yes | Single booking + change_log + inventory + expenses |
-| POST | `/api/bookings` | Yes | Create booking (conflict + inventory checks are alert-only, never block) |
-| PATCH | `/api/bookings/:id` | Yes | Edit booking — same validation as create; conflict/inventory checks exclude own rows |
+| POST | `/api/bookings` | Yes | Create booking (conflict + inventory checks are alert-only, never block). The server prices it (BUGS #062): with lines, `line_total`, `subtotal`, `grand_total` and `total` are computed from quantity x `unit_price` (the sent override, else the item's stored rate) and `discount`, and client-sent values for them are ignored. 400 for `advance` over total, amounts over 10,000,000, a repeated item, or a foreign item |
+| PATCH | `/api/bookings/:id` | Yes | Edit booking — same validation and server-side pricing as create; conflict/inventory checks exclude own rows. Omitting `inventory` keeps the stored lines and re-prices them at their stored prices |
 | PATCH | `/api/bookings/:id/log` | Yes | Append a change log entry |
 | POST | `/api/bookings/:id/expenses` | Yes | Add a per-booking expense |
 | DELETE | `/api/bookings/:id/expenses/:expenseId` | Yes | Delete an expense |

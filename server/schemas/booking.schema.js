@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
+// line_total, subtotal, grand_total and (when lines exist) total are accepted but ignored: the server computes them (BUGS #062).
 export const bookingInventoryLineSchema = z.object({
   item_id: z.number().int().positive(),
   quantity: z.number().int().positive().max(10000),
-  unit_price: z.number().int().nonnegative().optional(),
+  unit_price: z.number().int().nonnegative().max(10000000).optional(),
   line_total: z.number().int().nonnegative().optional(),
 })
 

@@ -3,7 +3,7 @@ import { z } from 'zod'
 export const bookingInventoryLineSchema = z.object({
   item_id: z.number().int().positive(),
   quantity: z.number().int().positive().max(10000),
-  unit_price: z.number().int().nonnegative().optional(),
+  unit_price: z.number().int().nonnegative().max(10000000).optional(),
   line_total: z.number().int().nonnegative().optional(),
 })
 

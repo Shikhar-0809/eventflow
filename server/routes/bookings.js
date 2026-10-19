@@ -5,7 +5,8 @@ import { validate } from '../middleware/validate.js'
 import { bookingCreateRateLimiter } from '../middleware/rateLimiter.js'
 import { trackUsage } from '../middleware/trackUsage.js'
 import { bookingSchema, bookingStatusSchema, changeLogSchema, expenseSchema } from '../schemas/booking.schema.js'
-import { MAX_INT4, parseId } from '../utils/ids.js'
+import { parseId } from '../utils/ids.js'
+import { BookingInputError, INVALID_ITEMS_MESSAGE, loadItemRates, priceBooking } from '../services/bookingPricing.js'
 
 const router = Router()
 
@@ -18,7 +19,6 @@ const BOOKING_COLUMNS = `id, client_name, phone, event_type, event_type_custom, 
   advance, total, subtotal, discount, grand_total, status, notes, created_at, updated_at`
 const CHANGE_LOG_COLUMNS = 'id, booking_id, change_note, logged_at'
 
-const INVALID_ITEMS_MESSAGE = 'One or more inventory items are invalid.'
 const findDateConflict = async (merchantId, eventDate, excludeId = null) => {
   if (excludeId != null) {
     const { rows } = await pool.query(
@@ -55,17 +55,19 @@ const withOptionalConflict = (booking, clashRow) => {
   }
 }
 
-// True only if every referenced item exists AND belongs to this merchant.
-const inventoryLinesBelongToMerchant = async (merchantId, inventoryLines) => {
-  const ids = [...new Set((inventoryLines ?? []).map((line) => line.item_id))]
-  if (ids.length === 0) return true
-  if (ids.some((id) => !Number.isInteger(id) || id <= 0 || id > MAX_INT4)) return false
-
-  const { rows } = await pool.query(
-    'SELECT id FROM inventory_items WHERE merchant_id = $1 AND id = ANY($2::int[])',
-    [merchantId, ids],
-  )
-  return rows.length === ids.length
+// Prices a booking inside the save transaction (BUGS #062): the item rates come from the same query that proves the
+// items belong to this merchant. When a PATCH does not send `inventory`, the booking's stored lines are re-priced as they are.
+const priceForSave = async (client, merchantId, fields, inventoryLines, existingBookingId = null) => {
+  let lines = inventoryLines
+  if (lines === undefined && existingBookingId !== null) {
+    const { rows } = await client.query(
+      'SELECT item_id, quantity, unit_price FROM booking_inventory WHERE booking_id = $1 AND merchant_id = $2',
+      [existingBookingId, merchantId],
+    )
+    lines = rows.map((row) => ({ item_id: Number(row.item_id), quantity: Number(row.quantity), unit_price: Number(row.unit_price) }))
+  }
+  const rates = await loadItemRates(client, merchantId, lines ?? [])
+  return priceBooking(fields, lines ?? [], rates)
 }
 
 const replaceBookingInventory = async (client, merchantId, bookingId, inventoryLines = []) => {
@@ -79,8 +81,8 @@ const replaceBookingInventory = async (client, merchantId, bookingId, inventoryL
         bookingId,
         line.item_id,
         line.quantity,
-        line.unit_price ?? 0,
-        line.line_total ?? 0,
+        line.unit_price,
+        line.line_total,
       ],
     )
   }
@@ -107,15 +109,13 @@ const createBooking = async (merchantId, fields, inventoryLines) => {
     guest_count,
     venue,
     advance,
-    total,
-    subtotal,
-    discount,
-    grand_total,
     notes,
   } = fields
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    const { totals, lines } = await priceForSave(client, merchantId, fields, inventoryLines)
+    const { total, subtotal, discount, grand_total } = totals
 
     const { rows: insertRows } = await client.query(
       `INSERT INTO bookings (
@@ -133,16 +133,16 @@ const createBooking = async (merchantId, fields, inventoryLines) => {
         venue ?? null,
         advance,
         total,
-        subtotal ?? 0,
-        discount ?? 0,
-        grand_total ?? 0,
+        subtotal,
+        discount,
+        grand_total,
         notes?.trim() || null,
       ],
     )
     const bookingId = insertRows[0].id
 
-    if (inventoryLines?.length) {
-      await replaceBookingInventory(client, merchantId, bookingId, inventoryLines)
+    if (lines.length) {
+      await replaceBookingInventory(client, merchantId, bookingId, lines)
     }
 
     const { rows: bookingRows } = await client.query(
@@ -169,10 +169,6 @@ const updateBooking = async (merchantId, id, fields, inventoryLines) => {
     guest_count,
     venue,
     advance,
-    total,
-    subtotal,
-    discount,
-    grand_total,
     notes,
   } = fields
   const updatedAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -180,6 +176,8 @@ const updateBooking = async (merchantId, id, fields, inventoryLines) => {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
+    const { totals, lines } = await priceForSave(client, merchantId, fields, inventoryLines, id)
+    const { total, subtotal, discount, grand_total } = totals
 
     const { rowCount } = await client.query(
       `UPDATE bookings
@@ -197,9 +195,9 @@ const updateBooking = async (merchantId, id, fields, inventoryLines) => {
         venue ?? null,
         advance,
         total,
-        subtotal ?? 0,
-        discount ?? 0,
-        grand_total ?? 0,
+        subtotal,
+        discount,
+        grand_total,
         notes?.trim() || null,
         updatedAt,
         id,
@@ -213,7 +211,7 @@ const updateBooking = async (merchantId, id, fields, inventoryLines) => {
     }
 
     if (inventoryLines !== undefined) {
-      await replaceBookingInventory(client, merchantId, id, inventoryLines)
+      await replaceBookingInventory(client, merchantId, id, lines)
     }
 
     const { rows: bookingRows } = await client.query(
@@ -230,8 +228,12 @@ const updateBooking = async (merchantId, id, fields, inventoryLines) => {
   }
 }
 
+// BookingInputError carries a merchant-readable message (bad items, advance over total, amounts too large).
 // A foreign key violation while saving booking lines means an item vanished or is not this merchant's.
 const handleBookingWriteError = (err, res, next) => {
+  if (err instanceof BookingInputError) {
+    return res.status(400).json({ error: err.message })
+  }
   if (err.code === '23503') {
     return res.status(400).json({ error: INVALID_ITEMS_MESSAGE })
   }
@@ -382,9 +384,6 @@ router.post('/', bookingCreateRateLimiter, validate(bookingSchema), trackUsage('
     const merchantId = req.merchantId
     const { inventory, ...fields } = req.body
     if (rejectMissingEventTypeCustom(fields, res)) return
-    if (!(await inventoryLinesBelongToMerchant(merchantId, inventory))) {
-      return res.status(400).json({ error: INVALID_ITEMS_MESSAGE })
-    }
     const clash = await findDateConflict(merchantId, fields.event_date)
     const newBooking = await createBooking(merchantId, fields, inventory)
     res.locals.usageMetadata = { booking_id: Number(newBooking.id) }
@@ -549,9 +548,6 @@ router.patch('/:id', validate(bookingSchema), trackUsage('booking_edited'), asyn
 
     const { inventory, ...fields } = req.body
     if (rejectMissingEventTypeCustom(fields, res)) return
-    if (!(await inventoryLinesBelongToMerchant(merchantId, inventory))) {
-      return res.status(400).json({ error: INVALID_ITEMS_MESSAGE })
-    }
     const clash = await findDateConflict(merchantId, fields.event_date, id)
     const updated = await updateBooking(merchantId, id, fields, inventory)
     if (!updated) {
