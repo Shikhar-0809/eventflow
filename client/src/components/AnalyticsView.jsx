@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -13,6 +13,7 @@ import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { openReportWindow } from '../utils/reportPrinter'
 import { useAuthStore } from '../store/authStore'
+import { useBookingStore } from '../store/bookingStore'
 import { useSettingsStore } from '../store/settingsStore'
 
 const MAX_MONTHLY_TARGET = 100000000
@@ -130,9 +131,11 @@ export const AnalyticsView = () => {
     }
   }, [setMonthlyRevenueTarget])
 
-  const fetchAnalytics = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
+  const fetchAnalytics = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) {
+      setIsLoading(true)
+      setError(null)
+    }
     try {
       const [summaryData, monthlyData] = await Promise.all([
         api.getAnalyticsSummary(),
@@ -145,9 +148,10 @@ export const AnalyticsView = () => {
         useAuthStore.setState({ isAuthenticated: false, isLoading: false })
         return
       }
-      setError(err.message)
+      // A quiet refetch (after a booking change) keeps the numbers already on screen.
+      if (!quiet) setError(err.message)
     } finally {
-      setIsLoading(false)
+      if (!quiet) setIsLoading(false)
     }
   }, [])
 
@@ -155,6 +159,15 @@ export const AnalyticsView = () => {
     fetchAnalytics()
     fetchSettings()
   }, [fetchAnalytics, fetchSettings])
+
+  // A booking was created, edited, cancelled, completed or deleted while this screen is open (BUGS #097).
+  const analyticsVersion = useBookingStore((state) => state.analyticsVersion)
+  const seenVersion = useRef(analyticsVersion)
+  useEffect(() => {
+    if (seenVersion.current === analyticsVersion) return
+    seenVersion.current = analyticsVersion
+    fetchAnalytics({ quiet: true })
+  }, [analyticsVersion, fetchAnalytics])
 
   const handleSaveTarget = async (e) => {
     e.preventDefault()

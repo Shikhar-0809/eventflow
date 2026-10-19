@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Tent, Calendar, Package, TableProperties, BarChart2, Activity, IndianRupee, UserCircle } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { useBookingStore } from '../store/bookingStore'
@@ -42,7 +42,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
   const [logoutError, setLogoutError] = useState(null)
   const [pendingBalanceCount, setPendingBalanceCount] = useState(null)
   const { logout, businessName } = useAuthStore()
-  const { activeView, setActiveView, bookings } = useBookingStore()
+  const { activeView, setActiveView, bookings, analyticsVersion } = useBookingStore()
   const { monthlyRevenueTarget, loadSettings } = useSettingsStore()
 
   const navButtonClass = (view) =>
@@ -63,30 +63,40 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
     }
   }
 
+  // Both numbers come from the server. A failed refetch keeps the last good value (the badge and bar just stay as they were).
+  const loadRevenue = useCallback(async ({ keepOnError = false } = {}) => {
+    try {
+      const summary = await api.getAnalyticsSummary()
+      setRevenueThisMonth(Number(summary.revenueThisMonth) || 0)
+    } catch {
+      if (!keepOnError) setRevenueThisMonth(null)
+    }
+  }, [])
+
+  const loadPendingBalanceCount = useCallback(async () => {
+    try {
+      const data = await api.getPendingBalances()
+      if (Array.isArray(data)) {
+        setPendingBalanceCount(data.length)
+      }
+    } catch {
+      // Silent fail — badge hidden on error, or left as it was on a refetch
+    }
+  }, [])
+
   useEffect(() => {
     fetchStats()
     loadSettings()
-    const loadRevenue = async () => {
-      try {
-        const summary = await api.getAnalyticsSummary()
-        setRevenueThisMonth(Number(summary.revenueThisMonth) || 0)
-      } catch {
-        setRevenueThisMonth(null)
-      }
-    }
     loadRevenue()
-    const loadPendingBalanceCount = async () => {
-      try {
-        const data = await api.getPendingBalances()
-        if (Array.isArray(data)) {
-          setPendingBalanceCount(data.length)
-        }
-      } catch {
-        // Silent fail — badge hidden on error
-      }
-    }
     loadPendingBalanceCount()
-  }, [loadSettings])
+  }, [loadSettings, loadRevenue, loadPendingBalanceCount])
+
+  // A booking was created, edited, cancelled, completed or deleted: refresh the server-computed numbers (BUGS #097).
+  useEffect(() => {
+    if (analyticsVersion === 0) return
+    loadRevenue({ keepOnError: true })
+    loadPendingBalanceCount()
+  }, [analyticsVersion, loadRevenue, loadPendingBalanceCount])
 
   useEffect(() => {
     if (activeView === 'analytics') {

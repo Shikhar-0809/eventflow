@@ -49,17 +49,24 @@ export const useBookingStore = create((set, get) => ({
 
   postSaveConflictNotice: null,
 
+  // Bumped after every booking create, edit, status change or delete has succeeded. Views that show server-computed
+  // numbers (Sidebar revenue bar and badge, Analytics) refetch when it changes; see BUGS #097.
+  analyticsVersion: 0,
+
   setBookings: (bookings) => set({ bookings }),
-  addBooking: (booking) => set((state) => ({ bookings: [...state.bookings, booking] })),
+  addBooking: (booking) =>
+    set((state) => ({ bookings: [...state.bookings, booking], analyticsVersion: state.analyticsVersion + 1 })),
   updateBooking: (booking) =>
     set((state) => ({
       bookings: state.bookings.map((row) => (row.id === booking.id ? booking : row)),
       selectedBooking:
         state.selectedBooking?.id === booking.id ? booking : state.selectedBooking,
+      analyticsVersion: state.analyticsVersion + 1,
     })),
   removeBooking: (id) =>
     set((state) => ({
       bookings: state.bookings.filter((row) => Number(row.id) !== Number(id)),
+      analyticsVersion: state.analyticsVersion + 1,
     })),
   setPostSaveConflictNotice: (postSaveConflictNotice) => set({ postSaveConflictNotice }),
   clearPostSaveConflictNotice: () => set({ postSaveConflictNotice: null }),
