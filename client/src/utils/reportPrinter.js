@@ -354,6 +354,34 @@ const buildReportHtml = (reportData) => {
 </html>`
 }
 
+// Decide where each PDF page starts and ends along the tall report image (all values in mm).
+// A page nominally takes pageHeight; if that cut would land inside a card, it ends padMm above the card instead.
+// A card taller than a page cannot be kept whole: it is cut at the page height as before and counted in `oversized`.
+export const planPdfPages = (imgHeight, pageHeight, cards, padMm = 0) => {
+  const pages = []
+  const oversizedCards = new Set()
+  let start = 0
+  while (start < imgHeight - 0.01) {
+    let end = Math.min(start + pageHeight, imgHeight)
+    if (end < imgHeight) {
+      const hit = cards.find((card) => card.top < end && card.bottom > end)
+      if (hit) {
+        const cutAt = hit.top - padMm
+        if (cutAt > start + 0.5) {
+          end = cutAt
+        } else {
+          oversizedCards.add(hit)
+        }
+      }
+    }
+    pages.push({ startMm: start, endMm: end })
+    start = end
+  }
+  return { pages, oversized: oversizedCards.size }
+}
+
+const CARD_BREAK_PAD_CSS_PX = 6
+
 const downloadReportPdf = async (reportWindow, reportData) => {
   const doc = reportWindow.document
   const btn = doc.getElementById('download-btn')
@@ -388,18 +416,29 @@ const downloadReportPdf = async (reportWindow, reportData) => {
     const imgWidth = pageWidth
     const imgHeight = (canvas.height * imgWidth) / canvas.width
 
-    let heightLeft = imgHeight
-    let position = 0
+    // The report is one tall canvas. Cut it into A4 pages, but never through a booking card: when the nominal cut
+    // would land inside a card, the page ends just above that card instead (BUGS #095).
+    const reportTop = reportEl.getBoundingClientRect().top
+    const mmPerCssPx = imgWidth / reportEl.getBoundingClientRect().width
+    const cardsMm = [...reportEl.querySelectorAll('.booking-card')].map((card) => {
+      const rect = card.getBoundingClientRect()
+      return { top: (rect.top - reportTop) * mmPerCssPx, bottom: (rect.bottom - reportTop) * mmPerCssPx }
+    })
+    const layout = planPdfPages(imgHeight, pageHeight, cardsMm, CARD_BREAK_PAD_CSS_PX * mmPerCssPx)
+    // Test hook: read by scripts/verify-report-pdf.mjs (against the dev client) to count cards that cross a page break.
+    // Dev only, so it is not in the production bundle.
+    if (import.meta.env.DEV) reportWindow.__reportPdfLayout = layout
 
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST')
-    heightLeft -= pageHeight
-
-    while (heightLeft > 0) {
-      position -= pageHeight
-      pdf.addPage()
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight, undefined, 'FAST')
-      heightLeft -= pageHeight
-    }
+    layout.pages.forEach((slice, index) => {
+      if (index > 0) pdf.addPage()
+      pdf.addImage(imgData, 'PNG', 0, -slice.startMm, imgWidth, imgHeight, undefined, 'FAST')
+      // The image continues below the cut; blank it so the next page's first card is not shown twice.
+      const used = slice.endMm - slice.startMm
+      if (used < pageHeight) {
+        pdf.setFillColor(255, 255, 255)
+        pdf.rect(0, used, pageWidth, pageHeight - used, 'F')
+      }
+    })
 
     pdf.save(`EventFlow-Report-${reportData.from}-to-${reportData.to}.pdf`)
   } catch {
