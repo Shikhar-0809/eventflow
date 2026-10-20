@@ -1,10 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App.jsx'
+import Root from './Root.jsx'
+import { installLinkInterception } from './utils/router'
 import './index.css'
+
+installLinkInterception()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <Root />
   </StrictMode>,
 )

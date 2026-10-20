@@ -98,13 +98,13 @@ export const ForgotPasswordScreen = ({ onShowLogin, onDone }) => {
 
       <p className="mt-6 text-center text-sm text-slate-500">
         Remembered it?{' '}
-        <button
-          type="button"
+        <a
+          href="/login"
           onClick={onShowLogin}
           className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
         >
           Back to log in
-        </button>
+        </a>
       </p>
     </AuthCard>
   )

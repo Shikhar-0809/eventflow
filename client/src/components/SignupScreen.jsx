@@ -69,13 +69,13 @@ export const SignupScreen = ({ onShowLogin }) => {
           errorExtra={(err) =>
             err.status === 409 && (
               <p className="text-sm text-slate-500">
-                <button
-                  type="button"
+                <a
+                  href="/login"
                   onClick={onShowLogin}
                   className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
                 >
                   Log in instead
-                </button>
+                </a>
               </p>
             )
           }
@@ -111,13 +111,13 @@ export const SignupScreen = ({ onShowLogin }) => {
 
       <p className="mt-6 text-center text-sm text-slate-500">
         Already have an account?{' '}
-        <button
-          type="button"
+        <a
+          href="/login"
           onClick={onShowLogin}
           className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
         >
           Log in
-        </button>
+        </a>
       </p>
     </AuthCard>
   )

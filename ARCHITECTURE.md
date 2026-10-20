@@ -57,8 +57,9 @@ eventflow/
 │   ├── .env.example               # VITE_API_URL
 │   ├── .env.production            # VITE_API_URL=/api
 │   └── src/
-│       ├── App.jsx                # Auth gate, view switcher, mobile shell
-│       ├── main.jsx
+│       ├── Root.jsx               # Route decision above the app: public screens, or the lazy-loaded App at /app
+│       ├── App.jsx                # The logged-in app only (/app): checkAuth, view switcher, mobile shell
+│       ├── main.jsx               # Installs link interception, renders Root
 │       ├── index.css              # Tailwind directives + FullCalendar overrides + keyframes
 │       ├── components/
 │       │   ├── AddInventoryItemModal.jsx
@@ -92,8 +93,8 @@ eventflow/
 │       │   ├── RecordsView.jsx            # Filterable records + Excel export
 │       │   ├── SignupScreen.jsx           # Business name, email, password, confirm; validates on blur
 │       │   ├── PasswordInput.jsx          # Password field with show/hide toggle (login, sign-up)
-│       │   ├── PrivacyPolicyPage.jsx      # Public policy at /privacy, rendered by App.jsx before the auth gate
-│       │   ├── NotFoundPage.jsx           # Any path other than / and /privacy (rendered by App.jsx before the auth gate)
+│       │   ├── PrivacyPolicyPage.jsx      # Public policy at /privacy, rendered by Root.jsx (no API call)
+│       │   ├── NotFoundPage.jsx           # Any path that is not a known route (rendered by Root.jsx)
 │       │   ├── ScreenBoundary.jsx         # Suspense + error boundary for lazy screens (Loading..., "Couldn't load this screen")
 │       │   ├── Sidebar.jsx
 │       │   └── UsageView.jsx
@@ -114,6 +115,8 @@ eventflow/
 │           ├── formatCurrency.js
 │           ├── merchantTime.js            # The merchant's business calendar on the client (same Asia/Kolkata rules as the server)
 │           ├── formatRelativeTime.js
+│           ├── router.js                  # Path switch: matchRoute, navigate (pushState), useLocation, safeNext, link interception
+│           ├── signedInHint.js            # localStorage "ef:signedIn" UI hint (set on login / me, cleared on logout / 401 / deletion)
 │           ├── profileErrors.js           # handleProfileError: 401 -> login, anything else -> a human sentence
 │           ├── reportPrinter.js           # Printable HTML report + PDF download (jspdf/html2canvas, bundled); see "Report PDF pipeline"
 │           ├── sanitize.js
@@ -476,7 +479,13 @@ Analytics > Export Report opens a new window with the printable report (`openRep
 - **Analytics** — charts, monthly revenue target, date-range report via `reportPrinter.js` (print + PDF, see above)
 - **Inventory dashboard** — cards per item type, low-stock alerts, Damaged/Repair Needed section
 - **Profile** — business name and WhatsApp number, masked email, change password / email, sign-in list, log out other devices, delete account (`ProfileView.jsx`, `components/profile/`)
-- **No client-side router library.** `App.jsx` reads `window.location.pathname` before the auth gate: `/` is the app, `/privacy` the public privacy policy, any other path a 404 page. Inside the app, views switch via Zustand `activeView`, with overlays/modals for forms and detail. Signed-out users see the login, sign-up or forgot-password screen.
+- **No client-side router library.** `client/src/utils/router.js` is a small path switch (`history.pushState`, one `popstate` listener, and a document click handler that turns same-origin links to known paths into in-place navigation), and `client/src/Root.jsx` (rendered by `main.jsx`) picks the screen **above** `App`, so there are no full page reloads between routes and Zustand state (such as `loginNotice`) survives navigation. Routes (a trailing slash is fine, `vercel.json` already sends every non-`/api` path to `index.html`):
+  - `/app`: the logged-in app. `Root` lazy-loads `App.jsx`, which runs `checkAuth()` (skipped when the store already knows the session, e.g. right after login); with no session it goes to `/login?next=/app`. This is the only route that calls the API on load.
+  - `/login`, `/signup`, `/forgot-password`: the auth screens as real URLs; they call the API only on submit. After login or sign-up, the app goes to `?next=` only if it starts with `/` and not `//` (or `/\`), and is not itself an auth screen; otherwise `/app` (`safeNext`).
+  - `/privacy`: the public policy, no API call; its "Back to sign in" link goes to `/login`.
+  - `/`: the landing page is not built yet, so it redirects to `/app` (keeps old bookmarks working).
+  - anything else: the 404 page.
+  Logout, expired sessions and account deletion `navigate('/login', { replace: true })` from `authStore`, so the existing notices ("Your account has been deleted.", the password-reset banner) still show. Because FullCalendar, recharts, jsPDF, html2canvas and xlsx are only reachable from `App.jsx`, the public routes never download them. The `ef:signedIn` hint (`signedInHint.js`, DIRECTIONS.md 3.3) is maintained for the future landing page; nothing reads it yet. Inside the app, views switch via Zustand `activeView`, with overlays/modals for forms and detail.
 
 ---
 

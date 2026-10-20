@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../utils/api'
+import { navigate } from '../utils/router'
+import { clearSignedInHint, setSignedInHint } from '../utils/signedInHint'
 import { useBookingStore } from './bookingStore'
 import { useInventoryStore } from './inventoryStore'
 import { useProfileStore } from './profileStore'
@@ -50,6 +52,7 @@ export const useAuthStore = create((set) => ({
     set({ isLoading: true })
     try {
       const me = await api.getMe()
+      setSignedInHint()
       set({
         isAuthenticated: true,
         businessName: me.merchant?.business_name ?? null,
@@ -60,6 +63,7 @@ export const useAuthStore = create((set) => ({
       if (isConnectionFailure(err)) {
         set({ connectionError: true, isLoading: false })
       } else {
+        clearSignedInHint()
         clearMerchantData()
         set({ isAuthenticated: false, businessName: null, isLoading: false, connectionError: false })
       }
@@ -70,35 +74,55 @@ export const useAuthStore = create((set) => ({
     await api.login(email, password)
     clearMerchantData()
     const me = await api.getMe()
-    set({ isAuthenticated: true, businessName: me.merchant?.business_name ?? null, connectionError: false, loginNotice: null })
+    setSignedInHint()
+    set({
+      isAuthenticated: true,
+      businessName: me.merchant?.business_name ?? null,
+      isLoading: false,
+      connectionError: false,
+      loginNotice: null,
+    })
   },
 
   signup: async (data) => {
     await api.signup(data)
     clearMerchantData()
     const me = await api.getMe()
-    set({ isAuthenticated: true, businessName: me.merchant?.business_name ?? null, connectionError: false, loginNotice: null })
+    setSignedInHint()
+    set({
+      isAuthenticated: true,
+      businessName: me.merchant?.business_name ?? null,
+      isLoading: false,
+      connectionError: false,
+      loginNotice: null,
+    })
   },
 
   logout: async () => {
     try {
       await api.logout()
     } finally {
+      clearSignedInHint()
       clearMerchantData()
       set({ isAuthenticated: false, businessName: null })
+      navigate('/login', { replace: true })
     }
   },
 
   // A call found the session dead (another device signed this one out, or it expired): back to login.
   expireSession: () => {
+    clearSignedInHint()
     clearMerchantData()
     set({ isAuthenticated: false, businessName: null, isLoading: false })
+    navigate('/login', { replace: true })
   },
 
   // The account was just deleted (the server already cleared the cookie): drop every cached store, show the notice.
   accountDeleted: () => {
+    clearSignedInHint()
     clearMerchantData()
     set({ isAuthenticated: false, businessName: null, isLoading: false, loginNotice: ACCOUNT_DELETED_NOTICE })
+    navigate('/login', { replace: true })
   },
 
   setBusinessName: (businessName) => set({ businessName }),

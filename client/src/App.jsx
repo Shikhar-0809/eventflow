@@ -1,16 +1,12 @@
 import { lazy, useEffect, useState } from 'react'
 import { Menu, RefreshCw } from 'lucide-react'
 import { useAuthStore } from './store/authStore'
-import { LoginScreen } from './components/LoginScreen'
-import { SignupScreen } from './components/SignupScreen'
-import { PrivacyPolicyPage, PRIVACY_POLICY_PATH } from './components/PrivacyPolicyPage'
-import { NotFoundPage } from './components/NotFoundPage'
 import { Sidebar } from './components/Sidebar'
 import { CalendarView } from './components/CalendarView'
 import { ScreenBoundary } from './components/ScreenBoundary'
 import { useBookingStore } from './store/bookingStore'
 import { useProfileStore } from './store/profileStore'
-import { maskEmail } from './utils/maskEmail'
+import { navigate } from './utils/router'
 import { handleProfileError } from './utils/profileErrors'
 
 // Everything except the first screen (the calendar) loads on demand, so the first page load stays small.
@@ -23,7 +19,6 @@ const RecordsView = lazyNamed(() => import('./components/RecordsView'), 'Records
 const PendingBalancesView = lazyNamed(() => import('./components/PendingBalancesView'), 'PendingBalancesView')
 const BookingPage = lazyNamed(() => import('./components/BookingPage'), 'BookingPage')
 const BookingDetail = lazyNamed(() => import('./components/BookingDetail'), 'BookingDetail')
-const ForgotPasswordScreen = lazyNamed(() => import('./components/ForgotPasswordScreen'), 'ForgotPasswordScreen')
 const ProfileView = lazyNamed(() => import('./components/ProfileView'), 'ProfileView')
 
 // Tab title per screen: "<screen> — <business name>". Names match the sidebar.
@@ -37,56 +32,35 @@ const VIEW_TITLES = {
   profile: 'Profile',
 }
 
-// The app lives at "/" and the public privacy policy at "/privacy" (a trailing slash is fine). Any other
-// path is a 404. Both are decided before the auth gate: they render without needing a login or the API.
-const getRoute = () => {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  if (path === '/') return 'app'
-  return path === PRIVACY_POLICY_PATH ? 'privacy' : 'not-found'
-}
-
 export default function App() {
-  const route = getRoute()
-  const { isAuthenticated, isLoading, connectionError, businessName, checkAuth, loginNotice: storeNotice, clearLoginNotice } = useAuthStore()
+  const { isAuthenticated, isLoading, connectionError, businessName, checkAuth } = useAuthStore()
   const loadProfile = useProfileStore((state) => state.loadProfile)
   const { activeView } = useBookingStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [authScreen, setAuthScreen] = useState('login')
-  // One-off green message and email prefill on the login screen (after a password reset).
-  const [loginNotice, setLoginNotice] = useState(null)
-  const [loginEmail, setLoginEmail] = useState('')
 
+  // Arriving from the login screen the session is already known; a fresh load (or refresh) asks the server.
   useEffect(() => {
-    checkAuth()
+    if (!useAuthStore.getState().isAuthenticated) checkAuth()
   }, [checkAuth])
 
-  // After signing up and logging out, return to the login screen, not the sign-up form.
+  // No session (never had one, expired, or another device signed this one out): the login screen, then back here.
   useEffect(() => {
-    if (isAuthenticated) setAuthScreen('login')
-  }, [isAuthenticated])
+    if (!isLoading && !connectionError && !isAuthenticated) navigate('/login?next=/app', { replace: true })
+  }, [isLoading, connectionError, isAuthenticated])
 
   // The merchant's own WhatsApp number (and business details) come from their profile, fetched once per login.
   useEffect(() => {
-    if (route !== 'app' || !isAuthenticated) return
+    if (!isAuthenticated) return
     loadProfile().catch((err) => handleProfileError(err))
-  }, [route, isAuthenticated, loadProfile])
+  }, [isAuthenticated, loadProfile])
 
   useEffect(() => {
-    if (route !== 'app') return
-    if (connectionError) {
+    if (connectionError || !isAuthenticated) {
       document.title = 'EventFlow'
       return
     }
-    if (!isAuthenticated) {
-      const authTitles = { signup: 'Create account — EventFlow', forgot: 'Reset password — EventFlow' }
-      document.title = authTitles[authScreen] ?? 'Sign in — EventFlow'
-      return
-    }
     document.title = `${VIEW_TITLES[activeView] ?? 'EventFlow'} — ${businessName || 'EventFlow'}`
-  }, [isAuthenticated, connectionError, businessName, route, authScreen, activeView])
-
-  if (route === 'privacy') return <PrivacyPolicyPage />
-  if (route === 'not-found') return <NotFoundPage />
+  }, [isAuthenticated, connectionError, businessName, activeView])
 
   if (isLoading) {
     return (
@@ -114,46 +88,8 @@ export default function App() {
     )
   }
 
-  if (!isAuthenticated) {
-    const clearLoginHint = () => {
-      setLoginNotice(null)
-      setLoginEmail('')
-      clearLoginNotice()
-    }
-    const showLogin = () => {
-      clearLoginHint()
-      setAuthScreen('login')
-    }
-    if (authScreen === 'signup') return <SignupScreen onShowLogin={showLogin} />
-    if (authScreen === 'forgot') {
-      return (
-        <ScreenBoundary>
-          <ForgotPasswordScreen
-            onShowLogin={showLogin}
-            onDone={(email) => {
-              setLoginNotice(`Password updated for ${maskEmail(email)}. Log in with that email.`)
-              setLoginEmail(email)
-              setAuthScreen('login')
-            }}
-          />
-        </ScreenBoundary>
-      )
-    }
-    return (
-      <LoginScreen
-        notice={storeNotice ?? loginNotice}
-        initialEmail={loginEmail}
-        onShowSignup={() => {
-          clearLoginHint()
-          setAuthScreen('signup')
-        }}
-        onShowForgot={() => {
-          clearLoginHint()
-          setAuthScreen('forgot')
-        }}
-      />
-    )
-  }
+  // The effect above is already sending a logged-out visitor to /login.
+  if (!isAuthenticated) return null
 
   return (
     <>

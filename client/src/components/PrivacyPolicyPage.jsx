@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { ArrowLeft, CalendarDays } from 'lucide-react'
 
-export const PRIVACY_POLICY_PATH = '/privacy'
 const LAST_UPDATED = '19 October 2026'
 
 const CONTACT_EMAIL = 'eventflow.support@gmail.com'
@@ -37,7 +36,7 @@ export const PrivacyPolicyPage = () => {
     <div className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="max-w-3xl mx-auto">
         <a
-          href="/"
+          href="/login"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-600 hover:text-teal-700 transition-all duration-200 mb-4"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />

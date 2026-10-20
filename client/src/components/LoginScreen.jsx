@@ -9,7 +9,7 @@ const inputClass = (hasError) =>
     hasError ? 'border-red-400' : 'border-slate-200'
   }`
 
-export const LoginScreen = ({ onShowSignup, onShowForgot, notice = null, initialEmail = '' }) => {
+export const LoginScreen = ({ onLeave, notice = null, initialEmail = '' }) => {
   const [email, setEmail] = useState(initialEmail)
   const [password, setPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -117,13 +117,13 @@ export const LoginScreen = ({ onShowSignup, onShowForgot, notice = null, initial
           </div>
 
           <p className="text-right text-sm">
-            <button
-              type="button"
-              onClick={onShowForgot}
+            <a
+              href="/forgot-password"
+              onClick={onLeave}
               className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
             >
               Forgot password?
-            </button>
+            </a>
           </p>
 
           {error && (
@@ -147,13 +147,13 @@ export const LoginScreen = ({ onShowSignup, onShowForgot, notice = null, initial
 
         <p className="mt-6 text-center text-sm text-slate-500">
           Don&apos;t have an account?{' '}
-          <button
-            type="button"
-            onClick={onShowSignup}
+          <a
+            href="/signup"
+            onClick={onLeave}
             className="font-medium text-teal-600 hover:text-teal-700 transition-all duration-200"
           >
             Sign up
-          </button>
+          </a>
         </p>
 
         <p className="mt-6 text-center text-sm text-slate-500">

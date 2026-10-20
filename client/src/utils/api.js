@@ -1,3 +1,5 @@
+import { clearSignedInHint } from './signedInHint'
+
 const BASE = import.meta.env.VITE_API_URL
 
 // A 429 that is not ours: our rate limiters always answer with JSON that has an `error` string, so a 429 without one
@@ -58,6 +60,8 @@ const request = async (path, options = {}, alreadyRetried = false) => {
     }
     throw new ApiError(WAKING_MESSAGE, 429)
   }
+
+  if (res.status === 401) clearSignedInHint()
 
   if (!res.ok) {
     const fallback = 'Something went wrong. Please try again.'
