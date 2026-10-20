@@ -286,7 +286,7 @@ export const PrivacyPolicyPage = () => {
           </Section>
         </main>
 
-        <p className="text-center text-xs text-slate-400 mt-4">EventFlow</p>
+        <p className="text-center text-xs text-slate-500 mt-4">EventFlow</p>
       </div>
     </div>
   )

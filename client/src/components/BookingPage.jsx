@@ -801,7 +801,7 @@ export const BookingPageContent = () => {
       <h3 className="text-slate-800 font-bold text-base mb-4">Quote Summary</h3>
 
       {billLines.length === 0 ? (
-        <p className="text-slate-400 text-sm text-center py-4">
+        <p className="text-slate-500 text-sm text-center py-4">
           Add inventory items above to generate a quote
         </p>
       ) : (
@@ -813,7 +813,7 @@ export const BookingPageContent = () => {
             >
               <div>
                 <p className="text-sm text-slate-700">{line.name}</p>
-                <p className="text-xs text-slate-400">× {line.quantity}</p>
+                <p className="text-xs text-slate-500">× {line.quantity}</p>
               </div>
               <div className="text-right shrink-0">
                 {editingPriceItemId === line.item_id ? (
@@ -1110,7 +1110,7 @@ export const BookingPageContent = () => {
                       ) : (
                         <span />
                       )}
-                      <span className="text-xs text-slate-400 shrink-0">
+                      <span className="text-xs text-slate-500 shrink-0">
                         {MAX_EVENT_TYPE_CUSTOM_LENGTH - form.event_type_custom.length} characters left
                       </span>
                     </div>
@@ -1236,7 +1236,7 @@ export const BookingPageContent = () => {
                             onBlur={() => handleQuantityBlur(item.id)}
                             className="w-20 px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                           />
-                          <span className="text-xs text-slate-400 shrink-0 w-20 text-right">
+                          <span className="text-xs text-slate-500 shrink-0 w-20 text-right">
                             {available} available
                           </span>
                         </div>

@@ -124,7 +124,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-slate-800 truncate">{item.name}</h3>
             {unitPrice > 0 && (
-              <p className="text-xs text-slate-400 mt-0.5">{formatCurrency(unitPrice)} per unit</p>
+              <p className="text-xs text-slate-500 mt-0.5">{formatCurrency(unitPrice)} per unit</p>
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -247,7 +247,7 @@ export const InventoryItemCard = ({ item, onUpdated }) => {
                     {formatCurrency(unitPrice)} per event
                   </span>
                 ) : (
-                  <span className="text-sm text-slate-400">No rate set</span>
+                  <span className="text-sm text-slate-500">No rate set</span>
                 )}
                 <button
                   type="button"

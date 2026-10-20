@@ -178,7 +178,7 @@ export const PendingBalancesView = () => {
                   <Send className="w-4 h-4" />
                   Send All Reminders
                 </button>
-                <p className="mt-1.5 text-xs text-slate-400 text-center">
+                <p className="mt-1.5 text-xs text-slate-500 text-center">
                   Opens one WhatsApp tab per client. Allow pop-ups if prompted.
                 </p>
               </div>

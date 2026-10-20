@@ -74,7 +74,7 @@ const getEventCountdownDisplay = (eventDate, bookingStatus) => {
   }
   return {
     label,
-    className: 'text-sm text-slate-400 bg-slate-50',
+    className: 'text-sm text-slate-500 bg-slate-50',
     showClock: false,
   }
 }
@@ -101,7 +101,7 @@ const formatLogTimestamp = (loggedAt) => {
 
 const DetailField = ({ label, value }) => (
   <div>
-    <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+    <p className="text-xs text-slate-500 mb-0.5">{label}</p>
     <p className="text-sm font-bold text-slate-800">{value}</p>
   </div>
 )
@@ -553,13 +553,13 @@ export const BookingDetail = () => {
               </div>
             )}
             {status === 'completed' && (
-              <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400">
+              <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-500">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 Event completed
               </p>
             )}
             {status === 'cancelled' && (
-              <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-400">
+              <p className="mt-3 inline-flex items-center gap-1.5 text-sm text-slate-500">
                 <XCircle className="w-4 h-4 shrink-0" />
                 Booking cancelled
               </p>
@@ -607,7 +607,7 @@ export const BookingDetail = () => {
                 <h3 className="text-sm font-semibold text-slate-800">Bill Summary</h3>
 
                 {pricedLines.length === 0 ? (
-                  <p className="text-sm text-slate-400">No inventory attached to this booking.</p>
+                  <p className="text-sm text-slate-500">No inventory attached to this booking.</p>
                 ) : (
                   <ul className="space-y-2 border-b border-slate-100 pb-3">
                     {pricedLines.map((line) => (
@@ -617,7 +617,7 @@ export const BookingDetail = () => {
                       >
                         <div>
                           <p className="text-slate-700">{line.name}</p>
-                          <p className="text-xs text-slate-400">× {line.quantity}</p>
+                          <p className="text-xs text-slate-500">× {line.quantity}</p>
                         </div>
                         <div className="text-right shrink-0">
                           {(line.unit_price ?? 0) > 0 && (
@@ -671,7 +671,7 @@ export const BookingDetail = () => {
             {!inventoryReady ? (
               <InventoryUsedSkeleton />
             ) : inventoryLines.length === 0 ? (
-              <p className="text-sm text-slate-400">No inventory attached to this booking.</p>
+              <p className="text-sm text-slate-500">No inventory attached to this booking.</p>
             ) : (
               <ul className="space-y-2">
                 {inventoryLines.map((line) => (
@@ -697,7 +697,7 @@ export const BookingDetail = () => {
             ) : (
               <>
                 {safeExpenses.length === 0 ? (
-                  <p className="text-sm text-slate-400 mb-3">No expenses logged.</p>
+                  <p className="text-sm text-slate-500 mb-3">No expenses logged.</p>
                 ) : (
                   <ul className="space-y-2 mb-3">
                     {safeExpenses.map((entry) => (
@@ -838,11 +838,11 @@ export const BookingDetail = () => {
             <h3 className="text-sm font-semibold text-slate-800 mb-3">Change Log</h3>
             <div className="space-y-3 mb-4">
               {safeChangeLog.length === 0 ? (
-                <p className="text-sm text-slate-400">No changes logged yet.</p>
+                <p className="text-sm text-slate-500">No changes logged yet.</p>
               ) : (
                 safeChangeLog.map((entry) => (
                   <div key={entry.id} className="text-sm text-slate-600">
-                    <p className="text-xs text-slate-400 mb-0.5">{formatLogTimestamp(entry.logged_at)}</p>
+                    <p className="text-xs text-slate-500 mb-0.5">{formatLogTimestamp(entry.logged_at)}</p>
                     <p>{entry.change_note}</p>
                   </div>
                 ))
@@ -863,7 +863,7 @@ export const BookingDetail = () => {
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all duration-200 resize-none"
               />
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-slate-500">
                   {charsRemaining} characters left
                 </span>
                 <button
