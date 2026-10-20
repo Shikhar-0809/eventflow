@@ -1,6 +1,6 @@
 # EventFlow design research
 
-Research for the public landing page at `/` and the redesign of the logged-in app. No code was changed. This file covers the skills used, what the current client looks like, reference teardowns, the anti-"AI look" checklist and the principles we follow instead. The directions, tokens and landing plan are in `DIRECTIONS.md`.
+Research for the public landing page at `/` and the redesign of the logged-in app. No code was changed. This file covers the skills used, what the current client looks like, reference teardowns, the anti-"AI look" checklist and the principles we follow instead. The spec (chosen direction: **After Hours, fully dark**), tokens and landing plan are in `DIRECTIONS.md`.
 
 Date: 20 October 2026.
 
@@ -15,7 +15,7 @@ Date: 20 October 2026.
 | `design-skills:accessibility-audit` | Yes | WCAG 2.2 AA targets (4.5:1 text, 3:1 non-text and focus), keyboard checklist (Tab order, Escape, focus return, focus not hidden), modal requirements (trap and restore focus), landmarks and skip link. Used to audit the current dialogs (section 2). |
 | `design-skills:design-systems` | Yes | Three-tier tokens (reference, semantic, component), naming by purpose not appearance, the "same purpose = same pattern" test (applied to the two amber meanings and the two red meanings, see `DIRECTIONS.md`). |
 | `design-skills:ux-writing` | Yes | Copy rules for the landing draft: verb-first buttons, one name per action across the flow, sentence-length targets (8 to 14 words), plain language, errors that say what to do. |
-| `ui-ux-pro-max` | **No** | Not installed in this environment. Per your instruction I did not install it or any other third-party skill. Say the word if you want it added before the build phase. |
+| `ui-ux-pro-max` (nextlevelbuilder, MIT, commit `56ea9cf`, 15 Oct 2026) | Fetched after your go-ahead | Not in the claude.ai skills catalog, so it was cloned from GitHub into an isolated folder, its scripts read first (no network, shell or eval calls; writes only with `--persist`, which was not used), then run in Python isolated mode. **Used:** its rules for interactive hero demos (visible pause, pause when off-screen, static final state, no autoplay under reduced motion), its dark-mode checks (tonal variants not inverted colors, borders visible in dark, measure the backdrop against the real background, equal state contrast), focus outline `2px solid` with `2px` offset, and an error-summary pattern for the booking form. **Rejected:** its generated design system (Inter with Playfair Display, a light mint and orange palette, GSAP scroll reveals) and its booking palette (light blue and green), because they ignored the dark brief, our semantic colors and the anti-template checklist. Its "dark mode" style entry recommends pure black and neon glow, which section 6 bans. |
 | `design-skills:design-elevation`, `design-critique`, `ux-strategy` | Yes, not used | Available, but they overlap with the five above for a research-only pass. `design-critique` is worth running against the first built screens. |
 
 ---
@@ -61,7 +61,7 @@ Repo inspected at the current `main` (shallow clone). Findings that shape every 
 **Smaller things.**
 - The favicon is the ⛺ emoji (`index.html`), and the logo mark is a stock `CalendarDays` icon in a teal square. Both read as placeholders.
 - `CODING_STANDARDS.md` mandates `transition-all duration-200` on interactive elements. `transition-all` also animates layout properties, which the motion rules below forbid.
-- `ROADMAP.md` records a "unit grid" (BookMyShow-style) inventory picker. I could not find it in `BookingPage.jsx`; the form uses quantity inputs. Docs and code disagree here, so I have not claimed the grid anywhere in the landing copy.
+- `ROADMAP.md` records a "unit grid" (BookMyShow-style) inventory picker. I could not find it in `BookingPage.jsx`; the form uses quantity inputs. You confirmed quantity inputs are current (20 October 2026), so ROADMAP.md's line is stale.
 
 ---
 
@@ -216,7 +216,7 @@ URLs: https://cal.com, https://github.com/calcom/cal.com (`packages/ui/component
 - **Screenshots:** the booking widget itself in the hero (time zone, month grid, durations), built as markup.
 - **Micro-interactions:** *Verified (source):* buttons have a 10px radius and **do not scale**. State is shown with layered shadows: primary rest has a soft drop shadow plus a faint inner top highlight; hover deepens it; **press switches to an inset shadow** so the button looks pushed in; focus-visible draws a 1px white plus 2px dark ring as a shadow. Primary transitions shadow and transform over **100ms**, secondary over **200ms**.
 - **Hand-crafted signals:** the press-in effect; a custom typeface; the product as hero.
-- **Borrow:** the **inset press** as an alternative to scaling on dense app buttons, and the product widget as the hero.
+- **Borrow:** the product widget as the hero, and state shown without layout movement. (The inset-shadow press was considered; After Hours uses no shadows, so it presses with a small scale instead, as Blade does.)
 - **Don't copy:** release badges and the testimonial wall.
 
 ### 4.13 Mercury (also checked)

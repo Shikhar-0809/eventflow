@@ -1,77 +1,102 @@
 # EventFlow design directions
 
-Three directions for the landing page and the logged-in app, the landing section plan, the routing proposal, optional tooling, a recommendation and open questions. Research and sources are in `RESEARCH.md`. Nothing here has been built.
+The design spec for the public landing page and the logged-in app. **Chosen direction: After Hours, with a fully dark app** (decided 20 October 2026). Research and sources are in `RESEARCH.md`. Nothing here has been built yet.
 
 Contents:
-1. Shared foundations (all directions)
-2. Direction A: Ledger (recommended)
-3. Direction B: After Hours
-4. Direction C: Shamiana
-5. Routing: how `/` coexists with the app
-6. Landing page plan, section by section
-7. Screenshots and demo loops from seeded data only
-8. Engineering constraints: responsive, performance, accessibility, scope
-9. Optional tooling, with benefit and cost
-10. Recommendation
-11. Open questions
+0. Decisions
+1. Shared foundations
+2. After Hours: the spec
+3. Routing: how `/` coexists with the app
+4. Landing page plan, section by section
+5. Screenshots and demo loops from seeded data only
+6. Engineering constraints: responsive, performance, accessibility, scope
+7. Optional tooling, with benefit and cost
+8. Build order
+9. Follow-ups
+- Appendix A: Ledger (not chosen; its light palette is the seed for a future light theme)
+- Appendix B: Shamiana (not chosen)
 
-All contrast ratios below were computed with the WCAG 2.x relative-luminance formula (script in the session scratchpad, not committed). "AA" means 4.5:1 for text; non-text (borders, focus rings, icons) needs 3:1.
+Every contrast ratio below was computed with the WCAG 2.x relative-luminance formula. "AA" means 4.5:1 for normal text; non-text elements (input borders, focus rings, icons, chart marks) need 3:1.
+
+---
+
+## 0. Decisions (20 October 2026)
+
+| # | Question | Decision | Where it lands |
+|---|---|---|---|
+| | Direction | **After Hours, full dark**: the landing and the whole app are dark | Section 2 |
+| 1 | Can the page say "free"? | Yes, plainly | Hero line, FAQ |
+| 2 | CTA naming | **"Create free account" everywhere** (nav, hero, how it works, final CTA). One action, one name; "Log in" stays for existing accounts | Section 4 |
+| 3 | Cancelled bookings | Grey with strikethrough. Red now means only clash and errors | 1.1, 2.3 |
+| 4 | Business name in screenshots | Fictional: **Shree Ganesh Caterers** (already a dev seed merchant) | Section 5 |
+| 5 | Dark mode | The app is dark throughout, not only its chrome | 2.3, 2.6 |
+| 6 | Logged-in merchant at `/` | Landing shows **"Open dashboard"**, no redirect | 3.3 |
+| 7 | Mention phones? | **Stay silent.** No phone FAQ, no "on your phone" copy. The page itself is still fully responsive | Section 4 |
+| 8 | Language | English only for now. No Hindi or Hinglish anywhere, no "coming soon" | Section 4 |
+| 9 | Transform/opacity only? | Color, background and border cross-fades over 150ms are fine (paint only). Movement and size changes still use transform/opacity only | 1.5 |
+| 10 | Ledger sidebar | Not applicable now: in After Hours the sidebar is dark. If a light theme is added later, revisit then | 2.6 |
+| 11 | Inspect live sites for timings | Not needed. Values below are final until we adjust in the browser | Section 1.5, 2.5 |
+| 12 | Inventory picker | **Quantity inputs** (what the code has). ROADMAP.md's "unit grid" entry is stale and should be corrected in a separate docs commit | Section 4.6 |
+| 13 | `ui-ux-pro-max` | Fetched, reviewed and used in this research (see `RESEARCH.md` section 1). For a permanent install, see section 9 | Section 9 |
+
+Two adjustments I made while writing this spec, flagged so you can push back:
+- **Press feedback.** The first draft of After Hours had no scaling at all. Your brief's example asked for a press scale, so every button now presses to `scale(0.98)`, and the landing's primary CTA grows to `scale(1.02)` on hover. Hover inside the app is still a color change only.
+- **Danger and WhatsApp buttons.** On dark surfaces, white text on red-700 or green-700 leaves the button edge too faint against dialogs (2.27:1 and 2.93:1). Both now use a lighter fill with dark text (6.62:1 and 6.54:1), which keeps the edge visible (5.31:1 and 6.45:1). Each keeps its icon and label, so red delete and green WhatsApp never depend on hue alone.
 
 ---
 
 ## 1. Shared foundations
 
-These hold whichever direction you pick, so the landing page and the app read as one product.
+### 1.1 Semantic color meaning
 
-### 1.1 Semantic color meaning (kept from today, tightened)
-
-| Meaning | Today | Proposal | Why |
+| Meaning | Before | Now | Why |
 |---|---|---|---|
-| Confirmed booking | teal | teal (unchanged) | Existing meaning. |
-| Date clash | red | red (unchanged) | Existing meaning. |
-| Inventory shortfall | amber | amber (unchanged) | Existing meaning. |
-| Pending advance | amber | amber, but **always a filled status badge**, never a banner | Same color as shortfall today. Different shape keeps "status" and "warning" apart. |
-| Completed | indigo `#6366f1` | indigo-600 `#4F46E5` | Current hex fails AA with white text (4.47:1); indigo-600 is 6.29:1. |
-| Cancelled | red `#dc2626` | **neutral grey with strikethrough** | Today red means clash, error and cancelled. Freeing red for clash and errors makes a red thing on the calendar always mean "look at this". Needs your OK (open question 3). |
-| WhatsApp action | green-600 + white (3.30:1, fails) | green-700 `#15803D` + white (5.02:1) | Fixes a current AA failure. |
+| Confirmed booking | teal | teal | Existing meaning. |
+| Date clash | red | red | Existing meaning. |
+| Inventory shortfall | amber | amber | Existing meaning. |
+| Pending advance | amber | amber, but **always a status badge**, never a banner | Same hue as shortfall; different shape keeps "status" and "warning" apart. |
+| Completed | indigo | indigo | Dark-surface values in 2.3. |
+| Cancelled | red | **grey with strikethrough** | Decision 3. Red on the calendar now always means "look at this". |
+| Errors | red | red (lighter tint on dark) | |
+| WhatsApp action | green with white text | green-500 with dark text | Passes on dark surfaces (see section 0). |
 
-Rule for every direction: **color never carries meaning alone.** Clash banners carry an alert icon and the word "clash"; shortfall banners carry a package icon and the counts; statuses carry their label text.
+Rule: **color never carries meaning alone.** Clash banners have an alert icon and the word "clash"; shortfall banners have a package icon and the counts; statuses carry their label text; cancelled has strikethrough and the word.
 
 ### 1.2 Breakpoints
 
-Tailwind's defaults already line up with the requested widths: base (375), `md` 768, `xl` 1280, `2xl` 1536. Design and test at exactly those four widths. `sm` 640 and `lg` 1024 stay available for in-between fixes.
+Tailwind's defaults line up with the requested widths: base (375), `md` 768, `xl` 1280, `2xl` 1536. Design and test at exactly those four. `sm` 640 and `lg` 1024 stay for in-between fixes.
 
 ### 1.3 Type sizing rule
 
-- **Landing:** fluid sizes with `clamp()`, interpolating from 375px to 1440px viewports (scales per direction below).
-- **App:** fixed sizes. A dense working screen should not change size as the window changes; fluid type there just causes reflow. The app uses the `sm`, `base`, `lg`, `xl`, `2xl` steps at their 375px values, with `base` at 15 or 16px depending on direction.
+- **Landing:** fluid `clamp()` sizes from a 375px viewport to 1440px (scale in 2.2).
+- **App:** fixed sizes. A working screen should not resize as the window changes.
 
 ### 1.4 Spacing
 
-Keep Tailwind's 4px scale (it already matches Blade's 2/4/8/12/16/20/24/32/40/48 rhythm closely). Add three layout tokens:
+Keep Tailwind's 4px scale. Add three layout tokens:
 
 | Token | Value | Use |
 |---|---|---|
-| `section` | `clamp(4rem, 2.592rem + 6.009vw, 8rem)` (64 to 128px) | Vertical gap between landing sections |
-| `block` | `clamp(2rem, 1.648rem + 1.502vw, 3rem)` (32 to 48px) | Gap between a section heading and its content |
+| `section` | `clamp(4rem, 2.592rem + 6.009vw, 8rem)` (64 to 128px) | Gap between landing sections |
+| `block` | `clamp(2rem, 1.648rem + 1.502vw, 3rem)` (32 to 48px) | Section heading to content |
 | `gutter` | `clamp(1rem, 0.648rem + 1.502vw, 2rem)` (16 to 32px) | Page side padding |
 
 Content max width 72rem (1152px); prose max 65ch.
 
-### 1.5 Motion base (every direction inherits, each adds its flavor)
+### 1.5 Motion base
 
 **Durations**
 
 | Token | ms | Use |
 |---|---|---|
-| `press` | 100 | Button and card press feedback |
-| `hover` | 150 | Hover color or shadow change |
+| `press` | 100 | Button and card press |
+| `hover` | 150 | Hover background, border or color change |
 | `state` | 180 | Toggles, tab indicator, banner appearing |
 | `enter` | 240 | Dialog and popover in |
-| `exit` | 160 | Dialog and popover out (exit faster than enter) |
+| `exit` | 160 | Dialog and popover out (exit is faster than enter) |
 | `sheet-in` | 280 | Drawer (`BookingDetail`) and booking sheet in |
 | `sheet-out` | 200 | Drawer and sheet out |
-| `hero` | 600 total | The one orchestrated landing moment, played once |
+| `hero` | about 900 total | The one orchestrated landing moment, played once |
 
 **Easings**
 
@@ -83,196 +108,52 @@ Content max width 72rem (1152px); prose max 65ch.
 | `move` | `cubic-bezier(0.3, 0, 0.2, 1)` | Same as Razorpay Blade `standard` |
 
 **Rules**
-- Only `transform` and `opacity` animate anything that moves or resizes. Color, border-color and box-shadow may cross-fade over `hover` (150ms) because they repaint without layout; that is my reading of "transform/opacity only" (open question 9). Never animate width, height, top, left, margin or padding.
-- Replace the current standard `transition-all duration-200` with an explicit utility (`transition-[transform,opacity,background-color,border-color,box-shadow,color]`) so layout properties never animate by accident. `CODING_STANDARDS.md` would need a one-line update.
-- Use CSS transitions, not keyframes, for anything the merchant can interrupt (opening and closing a drawer quickly reverses smoothly).
-- No motion on keyboard-initiated or very frequent actions (switching sidebar screens, typing, opening the same drawer for the twentieth time beyond its basic slide).
-- **Focus:** `focus-visible` only (not on mouse click), drawn as `outline: 2px solid <focus>; outline-offset: 2px`. Outline rather than box-shadow so it survives Windows high-contrast mode. Focus color is at least 3:1 against every surface it can sit on (ratios per direction).
-- **Reduced motion:** under `prefers-reduced-motion: reduce`, drop every transform (no slide, no scale), keep opacity fades at 120ms or less, show the hero demo in its final state with a "Play" button instead of autoplay. In Tailwind: `motion-safe:` for transforms, plus a global rule in `index.css` that shortens transitions.
+- Anything that moves or resizes uses `transform` and `opacity` only. Color, background-color and border-color may cross-fade over `hover` (decision 9). Never animate width, height, top, left, margin or padding.
+- Replace the standard `transition-all duration-200` with an explicit list (`transition-[transform,opacity,background-color,border-color,color]`) so layout never animates by accident. `CODING_STANDARDS.md` needs a one-line update when the build starts.
+- CSS transitions, not keyframes, for anything the merchant can interrupt (opening and closing a drawer quickly reverses smoothly).
+- No motion on keyboard-initiated or very frequent actions (switching sidebar screens, typing).
+- **Focus:** `focus-visible` only, drawn as `outline: 2px solid var(--focus); outline-offset: 2px`. Outline, not box-shadow, so it survives Windows high-contrast mode.
+- **Reduced motion:** under `prefers-reduced-motion: reduce`, drop every transform (no slide, no scale), keep opacity fades at 120ms or less, show the hero demo in its final state with a "Play" button instead of autoplay, and stop the `animate-pulse` skeletons. In Tailwind: `motion-safe:` on transforms, plus a global rule in `index.css`.
 
-### 1.6 Components every direction must fix (independent of look)
+### 1.6 Fixes every screen needs, whatever the look
 
 From the audit in `RESEARCH.md` section 2:
-- `ConfirmDialog`, `AddInventoryItemModal`, `BookingDetail`: add Escape-to-close.
-- All dialogs and drawers (those three, `BookingPage` sheet, the Profile modals): trap focus while open, return focus to the trigger on close, mark the rest of the page `inert`.
+- `ConfirmDialog`, `AddInventoryItemModal`, `BookingDetail`: add Escape to close.
+- All dialogs and drawers (those three, the `BookingPage` sheet, the Profile modals): trap focus while open, return focus to the trigger on close, make the rest of the page `inert`.
 - Sidebar: `aria-current="page"` on the active item, plus a non-color active marker.
-- Replace `text-slate-400` labels (2.56:1, 41 uses) with the direction's muted text token (all at least 5:1).
-- Replace the ⛺ emoji favicon and the stock `CalendarDays` mark with a drawn mark (each direction proposes one).
+- Replace `text-slate-400` labels (2.56:1, 41 uses) with `text-3` (at least 4.69:1 on every dark surface).
+- Replace the ⛺ emoji favicon and the stock `CalendarDays` logo with a drawn mark (2.4).
 
 ---
 
-## 2. Direction A: Ledger (recommended)
+## 2. After Hours: the spec
 
-**Mood:** the paper booking register, made calm, exact and digital. Daylight, ink on paper, every number lined up.
+**Mood:** the evening of an event. Dark, precise and quietly lit, like a shamiana at night under string lights. The calm "premium tool" look people share from Linear and Raycast, made warmer and specific to the trade.
 
-**The one bold thing:** the **date numeral**. In the hero, a single calendar day ("14") set very large in a condensed width, with two wedding bookings stacked under it and the clash banner appearing while the confirm button stays live. The same condensed numerals carry dates through the app (calendar day numbers, the event countdown, the drawer header). Everything else is quiet.
+**The one bold thing:** **dates drawn as small lights.** In the landing hero, a month of dates where booked days glow teal, the clash day glows red with a ring, and free days are dim. Choosing a lit date shows its bookings. The same idea carries into the app: the calendar's "today" is a teal ring, and a clash day carries a small red light beside its number. Nothing else on the page glows.
 
-**Draws from:** Apple (one idea per section, numbers shown big with their basis beside them), Things and Granola (calm confidence, lived-in sample data), Cal.com (product widget as hero; restrained buttons with a pressed-in state), Vercel's rules (color only for meaning, always with a non-color cue), Stripe (UI fragments built as live markup).
+**Draws from:** Linear (dark neutral chrome, the real product doing the explaining, themes from a few inputs), Raycast (hero object built from the product's own vocabulary), Vercel (elevation by surface steps and borders, monochrome plus meaning, no decorative shadows), Resend (the product's states shown as content), Family (continuity: what you entered becomes what you confirm), Cal.com and Razorpay Blade (button press feedback).
 
 ### 2.1 Typography
 
-**Family:** Anek Latin by Ek Type (Mumbai), Google Fonts, OFL. One variable family used actively through its width axis: condensed for dates and display, normal for reading.
-- Verified in the font file: has the ₹ glyph (U+20B9), has tabular figures (`tnum`), axes `wght` 100 to 800 and `wdth` 75 to 125.
-- It has a Devanagari sibling (Anek Devanagari, same designer team, same axes, also has ₹ and `tnum`), so a Hindi interface later keeps the same voice.
-- Self-hosted (CSP requires it). Instanced to `wdth` 85 to 100 and `wght` 400 to 700, Latin subset plus ₹: **60.7 KB** as one WOFF2 (measured). Full axes would be 93.7 KB.
-
-| Role | Width | Weight | Notes |
-|---|---|---|---|
-| Display, date numerals | 85 | 650 | `font-variant-numeric: tabular-nums` on numerals |
-| Headings | 92 | 600 | |
-| Body, UI | 100 | 400 / 500 | Body line-height 1.55 |
-| Labels, buttons | 100 | 550 | Sentence case, never all caps |
-| Amounts | 100 | 500 | Always `tabular-nums` |
-
-**Landing scale** (base 16 to 17px, ratio 1.2 at 375px to 1.25 at 1440px):
-
-| Step | 375px | 1440px | CSS |
-|---|---|---|---|
-| sm | 13 | 14 | `clamp(0.8125rem, 0.7905rem + 0.0939vw, 0.875rem)` |
-| base | 16 | 17 | `clamp(1rem, 0.978rem + 0.0939vw, 1.0625rem)` |
-| lg | 19 | 21 | `clamp(1.1875rem, 1.143rem + 0.1878vw, 1.3125rem)` |
-| xl | 23 | 27 | `clamp(1.4375rem, 1.349rem + 0.3756vw, 1.6875rem)` |
-| 2xl | 28 | 33 | `clamp(1.75rem, 1.64rem + 0.4695vw, 2.0625rem)` |
-| 3xl | 33 | 42 | `clamp(2.0625rem, 1.864rem + 0.8451vw, 2.625rem)` |
-| 4xl | 40 | 52 | `clamp(2.5rem, 2.236rem + 1.127vw, 3.25rem)` |
-| display | 48 | 65 | `clamp(3rem, 2.626rem + 1.596vw, 4.0625rem)` |
-| date numeral | 96 | 160 | `clamp(6rem, 4.592rem + 6.009vw, 10rem)` (hero only) |
-
-All steps interpolate between 375px and 1440px viewports and stop growing above 1440.
-
-**App:** base 15px, sm 13px, lg 17px, xl 20px, 2xl 24px. Section titles get a real step up from body (today almost everything is 14px).
-
-### 2.2 Color tokens
-
-Cool, slightly blue-black ink on white and a cool off-white canvas. Not cream. Accent is the existing teal, one step darker so white text passes AA.
-
-| Token | Hex | Pair | Ratio |
-|---|---|---|---|
-| `paper` (cards, drawers) | `#FFFFFF` | | |
-| `canvas` (page) | `#F5F7F9` | | |
-| `ink-900` text | `#18212F` | on paper / canvas | 16.19 / 15.07 |
-| `ink-600` secondary | `#4A5566` | on paper / canvas | 7.55 / 7.03 |
-| `ink-500` muted, labels | `#5F6B7C` | on paper / canvas | 5.41 / 5.04 |
-| `ink-100` cancelled bg | `#EEF1F4` | `ink-600` on it | 6.66 |
-| `rule` hairlines | `#E3E7EC` | decorative only | |
-| `rule-strong` input borders | `#8A94A3` | on paper (non-text) | 3.07 |
-| `accent` buttons, links | `#0F766E` (teal-700) | white on it / it on paper | 5.47 / 5.47 |
-| `accent-hover` | `#115E59` (teal-800) | white on it | 7.58 |
-| `accent-soft` selected rows | `#F0FDFA` | `accent` on it | 5.25 |
-| `focus` ring | `#0F766E` | on paper / canvas | 5.47 / 5.10 |
-| Confirmed badge | `#115E59` on `#F0FDFA` | | 7.27 |
-| Calendar confirmed pill | white on `#0F766E` | | 5.47 |
-| Clash banner | `#B91C1C` on `#FEF2F2`, edge `#EF4444` | text / edge | 5.91 / 3.44 |
-| Shortfall banner | `#92400E` on `#FFFBEB`, edge `#D97706` | text / edge | 6.84 / 3.07 |
-| Pending badge | `#92400E` on `#FEF3C7` | | 6.37 |
-| Calendar pending pill | `#422006` on `#FCD34D` | | 10.11 |
-| Completed badge / pill | `#4338CA` on `#EEF2FF` / white on `#4F46E5` | | 7.07 / 6.29 |
-| Cancelled pill | `ink-600` on `ink-100`, struck through | | 6.66 |
-| WhatsApp button | white on `#15803D` | | 5.02 |
-
-Note: the amber-500 border I first tried on the shortfall banner was 2.07:1 and failed; amber-600 (`#D97706`) passes at 3.07:1.
-
-### 2.3 Shape, border, shadow
-
-| Token | Value | Use |
-|---|---|---|
-| `radius-control` | 8px | Inputs, buttons, chips |
-| `radius-card` | 12px | Cards, banners, calendar wrapper |
-| `radius-sheet` | 16px | Dialogs, drawer leading corners |
-| `radius-pill` | 9999px | Status badges only |
-| Border | 1px `rule` for structure, 1px `rule-strong` for inputs | |
-| `shadow-raised` | `0 1px 2px rgb(24 33 47 / 0.06), 0 1px 1px rgb(24 33 47 / 0.04)` | Sticky headers, menus |
-| `shadow-overlay` | `0 16px 40px -12px rgb(24 33 47 / 0.22), 0 2px 6px rgb(24 33 47 / 0.06)` | Drawers, dialogs |
-| `shadow-press` | `inset 0 2px 1px rgb(0 0 0 / 0.10)` | Primary button while pressed (Cal.com-style) |
-
-Cards rest with a border and no shadow. Only floating things get a shadow.
-
-**Motif:** faint ruled lines (`rule`, 1px, 32px apart) behind the Problem section's "register page" illustration and in empty states, never behind content that needs reading. No red margin line (red is reserved).
-
-**Mark:** a drawn tent roofline whose ridge is a calendar tab, in `accent`, used as favicon (SVG) and logo. Replaces ⛺ and `CalendarDays`.
-
-### 2.4 Motion
-
-- **Landing CTA:** hover `scale(1.02)` + `accent-hover` background over 150ms `out`; press `scale(0.97)` over 100ms; focus outline as in 1.5.
-- **App buttons:** hover changes background only (no scale; the app is used all day and the verified product systems in the research do not scale on hover); press `scale(0.98)` + `shadow-press` over 100ms.
-- **Links:** underline always present in body copy (not color alone); hover thickens decoration from 1px to 2px.
-- **Clickable cards** (inventory items, pending-balance rows): hover border to `rule-strong`, no lift. Non-clickable cards: no hover at all.
-- **Drawer:** `translateX(100%)` to 0 over 280ms `enter`, out over 200ms `exit`; backdrop opacity 0 to 1 over 200ms.
-- **Dialog:** opacity 0 to 1 and `scale(0.97)` to 1 over 240ms `enter`; out over 160ms.
-- **Banners:** clash and shortfall banners appear with opacity plus `translateY(-4px)` to 0 over 180ms. They do not shake or pulse.
-- **Continuity (from Family):** after "Confirm booking", the button label cross-fades to "Booked" and the drawer for the new booking opens from the calendar cell's side. The first booking a merchant ever saves gets a one-time 600ms highlight on its calendar cell; never again.
-- **Hero sequence:** see 6.2. One sequence, played once, replayable.
-
-### 2.5 How it applies across the product
-
-| Surface | Ledger treatment |
-|---|---|
-| Landing | White paper sections on `canvas`, left-aligned text, the date numeral as the only large display element, real screenshots in a 1px `rule` frame with `radius-card` (no fake browser or phone chrome). |
-| Login / signup (`AuthCard`) | Same card, new mark, Anek type, `accent` button. Visually the "first page" of the app. |
-| Sidebar | Proposal: switch from `slate-900` to `paper` with a right `rule`, like a register's margin. Active item: 3px `accent` bar plus `accent-soft` fill plus `aria-current`. (Alternative if you want to keep the dark sidebar: `ink-900` background, which still passes with white text at 16:1.) |
-| Calendar (FullCalendar) | Day numbers in condensed Anek with tabular figures; today marked with a 2px `accent` outline, not a fill; event pills with `radius-control` (not fully round) so long names truncate cleanly; status colors from 2.2; toolbar buttons become secondary buttons (paper, `rule-strong` border) so teal is not spent on navigation. Overrides move from hex in `index.css` to token values. |
-| Booking drawer (`BookingDetail`) | Header shows the event date in the numeral style plus the countdown; sections separated by `rule`, not boxed cards; WhatsApp buttons green-700. |
-| Booking sheet (`BookingPage`) | Inputs 8px radius with `rule-strong` borders; clash banner sits directly under the date field; shortfall banner directly under the item rows; submit always enabled for clashes, confirm-anyway dialog for shortfalls (unchanged rules). |
-| Dialogs | `radius-sheet`, `shadow-overlay`, native `<dialog>` (see 9.2). |
-| Cards (Inventory, Analytics, Usage) | Border, no shadow; the number is the largest thing in the card, label below it in `ink-500`. |
-| Banners | Clash: `radius-card`, 4px left edge in `#EF4444`, alert icon, title "Date clash", one line naming the other booking. Shortfall: full 1px `#D97706` border, package icon, a small table "Item, need, available". Different shape, icon and color. |
-| Empty and loading states | Ruled-line motif behind a one-line instruction and a single action ("Add your first item"). Skeletons in `ink-100`. |
-
-### 2.6 Tailwind v3 mapping (`tailwind.config.js` `theme.extend`, not applied)
-
-```js
-// Sketch only. Values from 2.1 to 2.4.
-fontFamily: { sans: ['"Anek Latin"', 'system-ui', 'sans-serif'] },
-colors: {
-  paper: '#FFFFFF', canvas: '#F5F7F9',
-  ink: { 100: '#EEF1F4', 500: '#5F6B7C', 600: '#4A5566', 900: '#18212F' },
-  rule: { DEFAULT: '#E3E7EC', strong: '#8A94A3' },
-  accent: { DEFAULT: '#0F766E', hover: '#115E59', soft: '#F0FDFA' },
-  whatsapp: '#15803D',
-},
-borderRadius: { control: '8px', card: '12px', sheet: '16px' },
-boxShadow: {
-  raised: '0 1px 2px rgb(24 33 47 / 0.06), 0 1px 1px rgb(24 33 47 / 0.04)',
-  overlay: '0 16px 40px -12px rgb(24 33 47 / 0.22), 0 2px 6px rgb(24 33 47 / 0.06)',
-  press: 'inset 0 2px 1px rgb(0 0 0 / 0.10)',
-},
-fontSize: { /* landing clamp() steps from 2.1, app fixed steps */ },
-spacing: { section: 'clamp(4rem, 2.592rem + 6.009vw, 8rem)', block: 'clamp(2rem, 1.648rem + 1.502vw, 3rem)', gutter: 'clamp(1rem, 0.648rem + 1.502vw, 2rem)' },
-transitionDuration: { press: '100ms', hover: '150ms', state: '180ms', enter: '240ms', exit: '160ms', 'sheet-in': '280ms', 'sheet-out': '200ms' },
-transitionTimingFunction: {
-  out: 'cubic-bezier(0.2, 0, 0, 1)', enter: 'cubic-bezier(0, 0, 0.2, 1)',
-  exit: 'cubic-bezier(0.4, 0, 1, 1)', move: 'cubic-bezier(0.3, 0, 0.2, 1)',
-},
-```
-
-Font variation settings (`font-stretch` for width) need a small plugin or a few arbitrary values (`[font-stretch:85%]`); a two-line plugin in the config is cleaner.
-
-**If Tailwind v4 is adopted:** the same values go in `@theme { --color-ink-900: #18212F; --radius-card: 12px; --ease-enter: cubic-bezier(0, 0, 0.2, 1); ... }` inside `index.css`, and every token becomes a CSS variable automatically. That makes the FullCalendar overrides use `var(--color-accent)` instead of hard-coded hex. Watch the renamed defaults: `shadow-sm` becomes `shadow-xs`, `rounded` becomes `rounded-sm`, `ring` becomes 1px currentColor, border color defaults to currentColor. Custom names like `shadow-raised` and `rounded-card` avoid most of that churn.
-
----
-
-## 3. Direction B: After Hours
-
-**Mood:** the evening of an event. Dark, precise and quietly lit, like a shamiana at night with string lights. The "premium tool" look people screenshot from Linear and Raycast, warmed up.
-
-**The one bold thing:** a **month strip of dates drawn as small lights** in the hero. Booked dates glow teal, the clash date glows red with a ring, free dates are dim. Hovering or focusing a light shows its booking. Nothing else on the page glows.
-
-**Draws from:** Linear (dark, neutral chrome, real product doing the explaining, themes from a few inputs), Raycast (hero object built from the product's own vocabulary), Vercel (no shadows, elevation by surface steps and borders, monochrome plus meaning), Resend (states shown as content).
-
-### 3.1 Typography
-
-**Family:** Schibsted Grotesk (Bakken & Baeck for Schibsted), Google Fonts, OFL. A newspaper grotesk: firm, compact, not the default Inter look.
-- Verified in the font file: has ₹ and `tnum`; weights 400 to 900 (variable). Latin subset plus ₹: **39.4 KB** WOFF2 (measured).
-- Rejected on inspection: Instrument Sans (no ₹ glyph), Onest (no ₹), Hanken Grotesk (no ₹, no tabular figures). Geist and Mona Sans have both but read as Vercel and GitHub.
+**Family:** Schibsted Grotesk (Bakken & Baeck for Schibsted), Google Fonts, OFL. A firm, compact newspaper grotesk; not the default Inter look.
+- Verified in the font file: has the ₹ glyph and tabular figures (`tnum`); variable weight 400 to 900.
+- Self-hosted (the CSP blocks Google's CDN). Latin subset plus ₹: **39.4 KB** as one WOFF2 (measured).
+- No Devanagari. If a Hindi interface is ever built, pair it with Anek Devanagari or Mukta as the Devanagari fallback in the font stack.
+- Rejected on inspection: Instrument Sans and Onest (no ₹), Hanken Grotesk (no ₹, no tabular figures), Geist and Mona Sans (read as Vercel and GitHub).
 
 | Role | Weight | Notes |
 |---|---|---|
-| Display | 700, tracking -0.02em | |
+| Display | 700, tracking -0.02em | Landing only |
 | Headings | 600 | |
-| Body, UI | 400 / 500 | Body line-height 1.6 on dark (a touch looser) |
-| Amounts, dates | 500, `tabular-nums` | |
+| Body, UI | 400; 500 for labels and buttons | Body line-height 1.6 (a touch looser on dark) |
+| Amounts, dates | 500, `tabular-nums` | Always tabular so columns of ₹ line up |
 
-**Landing scale** (base 16px, ratio 1.2 to 1.333, a more dramatic top end):
+Never below 400: thin weights break up on dark backgrounds.
+
+### 2.2 Type scale
+
+**Landing** (base 16px, ratio 1.2 at 375px to 1.333 at 1440px; stops growing above 1440):
 
 | Step | 375px | 1440px | CSS |
 |---|---|---|---|
@@ -285,247 +166,292 @@ Font variation settings (`font-stretch` for width) need a small plugin or a few 
 | 4xl | 40 | 67 | `clamp(2.5rem, 1.906rem + 2.535vw, 4.1875rem)` |
 | display | 48 | 90 | `clamp(3rem, 2.076rem + 3.944vw, 5.625rem)` |
 
-**App:** base 15px, same fixed steps as Ledger.
+**App** (fixed): xs 12, sm 13, base 15, lg 17, xl 20, 2xl 24px. Screen titles at 2xl/600; section titles at lg/600; body at base/400. Today almost everything is 14px, so this adds real hierarchy.
 
-### 3.2 Color tokens
+### 2.3 Color tokens (all dark)
 
-Dark landing and dark app chrome (sidebar, drawer headers, login). The app's working canvas stays light by default (open question 5), so merchants are not forced into dark mode in daylight.
+**Surfaces.** Elevation is shown by lighter surface steps, not shadows.
 
-| Token | Hex | Pair | Ratio |
-|---|---|---|---|
-| `night` page | `#0E1524` | | |
-| `night-raised` cards | `#172033` | | |
-| `text-1` | `#E7EBF2` | on night | 15.25 |
-| `text-2` | `#A9B3C6` | on night | 8.64 |
-| `text-3` muted | `#8792A8` | on night / raised | 5.83 / 5.20 |
-| `line` hairlines | `#243049` | decorative | |
-| `line-strong` input borders | `#67728B` | on night (non-text) | 3.78 |
-| `accent` | `#5EEAD4` (teal-300) | ink `#042F2C` on it / it on night | 9.80 / 12.33 |
-| `focus` | `#5EEAD4` | on night / raised | 12.33 / 11.00 |
-| Confirmed | `#5EEAD4` on `#0F2A2D` | | 10.22 |
-| Clash | `#FCA5A5` on `#2B1519` | | 9.04 |
-| Shortfall | `#FCD34D` on `#2A2312` | | 10.81 |
-| Completed | `#A5B4FC` on `#1C1E3A` | | 8.13 |
-| Light app canvas | ink `#141B2B` on `#F6F7FA` | | 16.05 |
-
-The first `line-strong` I tried (`#4A5670`) was 2.48:1 and failed; `#67728B` passes. Light-surface statuses inside the app use the Ledger values from 2.2.
-
-**Lights motif:** the date lights use `accent` at 100% (booked), `#FCA5A5` (clash) and `text-3` at 40% (free). A warm white glow is tempting but sits too close to the amber warning; not used.
-
-### 3.3 Shape, border, shadow
-
-| Token | Value |
-|---|---|
-| `radius-control` | 6px |
-| `radius-card` | 8px |
-| `radius-sheet` | 12px |
-| Border | 1px `line`; inputs 1px `line-strong` |
-| Shadows | **None.** Elevation is `night` to `night-raised` plus a border. Overlays get a 1px `line-strong` border and a 60% `night` backdrop. |
-
-**Mark:** a tent outline drawn as a single line with one small light at the ridge.
-
-### 3.4 Motion
-
-- **No scale anywhere**, on landing or app. Hover lifts the background one surface step (`night` to `night-raised`) over 150ms; press dims to 85% opacity over 100ms. This follows Cal.com and Vercel's restraint, and is the precise, unbouncy feel this mood needs.
-- **Date lights:** each light fades from 0 to its level over 180ms, staggered 20ms left to right, once on load (the whole strip finishes in about 0.8s). Focus and hover scale the light to 1.25 (a transform on a 8px dot, not on text). Reduced motion: lights appear at full level instantly.
-- Drawers, dialogs, banners: same timings as 1.5.
-
-### 3.5 How it applies across the product
-
-| Surface | After Hours treatment |
-|---|---|
-| Landing | Dark throughout, one light-themed band for the product tour so screenshots of the (light) app sit naturally. |
-| Login / signup | Dark card on `night`. |
-| Sidebar | Already dark (`slate-900`); retoken to `night` with `accent` active bar. Smallest change of the three directions here. |
-| Calendar | Light canvas; event pills as in Ledger; today ring in `#0F766E`. |
-| Drawer, dialogs | Dark header strip (`night`, `text-1`) over a light body: continuity with the landing without making forms dark. |
-| Banners | Same shapes as Ledger, light-surface colors. |
-
-**Risk:** the landing and the app look like two different products unless the dark chrome carries over strongly. A full dark mode for the app would fix that but is real work (every component, FullCalendar, recharts, the printed report stays light).
-
-### 3.6 Tailwind mapping
-
-Same structure as 2.6 with these values; v4 notes identical.
-
----
-
-## 4. Direction C: Shamiana
-
-**Mood:** festive and confident, from the trade itself: striped canopy fabric, wedding season, rani pink. Warm without being kitsch.
-
-**The one bold thing:** a **canopy band**, the scalloped edge of a striped shamiana, in rani pink and white, used once across the top of the hero and as the logo mark. Nowhere else.
-
-**Draws from:** Arc and Family (personality, human headlines, fluid label morphing, delight only on rare moments), OkCredit (vernacular warmth, naming the paper habit), Apple (big type, short sections).
-
-### 4.1 Typography
-
-**Families:** Baloo 2 for headings and Mukta for text, both by Ek Type (Mumbai), Google Fonts, OFL.
-- Verified in the font files: both have ₹ and `tnum`. Baloo 2 variable 400 to 800; Mukta static weights.
-- Measured Latin subset plus ₹: Baloo 2 30.2 KB; Mukta Regular 19.3 KB, SemiBold 20.1 KB (69.6 KB for three files).
-- Both have Devanagari in the same family (Mukta and Baloo 2 are Devanagari plus Latin), ready for Hindi.
-
-| Role | Family | Weight |
+| Token | Hex | Use |
 |---|---|---|
-| Display, headings | Baloo 2 | 700 / 800 |
-| Body, UI | Mukta | 400 / 600 |
-| Amounts | Mukta | 600, `tabular-nums` |
+| `sidebar` | `#0A101C` | Sidebar (recessed, darkest) |
+| `input` | `#0A101C` | Input fields (sunken into the card) |
+| `canvas` | `#0E1524` | Page background, calendar |
+| `raised` | `#172033` | Cards, table headers, landing panels |
+| `overlay` | `#1D2840` | Drawers, dialogs, menus, row hover |
+| `line` | `#243049` | Hairlines and dividers (decorative) |
+| `line-strong` | `#6E7A93` | Input and control borders, dialog borders |
 
-**Landing scale** (base 16 to 18px, ratio 1.2 to 1.25):
+**Text**
 
-| Step | 375px | 1440px | CSS |
-|---|---|---|---|
-| sm | 13 | 14 | `clamp(0.8125rem, 0.7905rem + 0.0939vw, 0.875rem)` |
-| base | 16 | 18 | `clamp(1rem, 0.956rem + 0.1878vw, 1.125rem)` |
-| lg | 19 | 22 | `clamp(1.1875rem, 1.121rem + 0.2817vw, 1.375rem)` |
-| xl | 23 | 28 | `clamp(1.4375rem, 1.327rem + 0.4695vw, 1.75rem)` |
-| 2xl | 28 | 35 | `clamp(1.75rem, 1.596rem + 0.6573vw, 2.1875rem)` |
-| 3xl | 33 | 44 | `clamp(2.0625rem, 1.82rem + 1.033vw, 2.75rem)` |
-| 4xl | 40 | 55 | `clamp(2.5rem, 2.17rem + 1.408vw, 3.4375rem)` |
-| display | 48 | 69 | `clamp(3rem, 2.538rem + 1.972vw, 4.3125rem)` |
+| Token | Hex | canvas | sidebar/input | raised | overlay |
+|---|---|---|---|---|---|
+| `text-1` primary | `#E7EBF2` | 15.25 | 15.91 | 13.61 | 12.28 |
+| `text-2` secondary | `#A9B3C6` | 8.64 | 9.01 | 7.71 | 6.96 |
+| `text-3` muted, labels, placeholders | `#8792A8` | 5.83 | 6.08 | 5.20 | 4.69 |
 
-**App:** base 16px (Mukta runs small), other steps as Ledger.
+`text-1` is deliberately not pure white, which reduces glare and the halo effect on dark screens.
 
-### 4.2 Color tokens
+**Lines and focus (non-text, need 3:1)**
 
-| Token | Hex | Pair | Ratio |
-|---|---|---|---|
-| `paper` | `#FFFFFF` | | |
-| `canvas` | `#F6F5F8` | | |
-| `ink` text | `#1D1A24` | on paper | 17.14 |
-| `ink-600` | `#4D4858` | on paper | 8.81 |
-| `ink-500` muted | `#635E6E` | on canvas | 5.76 |
-| `rani` accent (buttons, links) | `#B3135E` | white on it / it on paper | 6.62 / 6.62 |
-| `rani-hover` | `#930F4E` | white on it | 8.68 |
-| `rani-soft` selected | `#FDF0F6` | `rani` on it | 5.98 |
-| `focus` | `#D0176D` | on paper | 5.22 |
-| Status and alert colors | as Ledger 2.2 | | |
-
-**Known risk, measured:** rani `#B3135E` and clash red `#B91C1C` have almost identical luminance (1.02:1 against each other). They differ only in hue, which is the first thing color-blind merchants lose. So: pink is never used on the calendar, inside banners, on badges or near the date field; clash always carries its icon and the word "clash". This rule is strict and easy to break later, which is a main reason this direction is not recommended.
-
-### 4.3 Shape, border, shadow
-
-| Token | Value |
+| Pair | Ratio |
 |---|---|
-| `radius-control` | 12px; primary buttons fully rounded (pill) |
-| `radius-card` | 16px |
-| `radius-sheet` | 20px |
-| `shadow-cta` | `0 6px 20px -8px rgb(179 19 94 / 0.35)` on the primary landing CTA only |
-| Cards | 1px border, no shadow |
+| `line-strong` vs canvas / input / raised / overlay | 4.23 / 4.41 / 3.77 / 3.40 |
+| `focus` `#5EEAD4` vs canvas / input / raised / overlay | 12.33 / 12.86 / 11.00 / 9.93 |
 
-**Mark:** a tent made of two stripes under a scalloped edge.
+**Accent and buttons**
 
-### 4.4 Motion
+| Element | Colors | Ratio |
+|---|---|---|
+| `accent` (primary button fill, links, focus) | `#5EEAD4` (teal-300) | link on canvas 12.33 |
+| Primary button | ink `#042F2C` on `#5EEAD4` | 9.80 |
+| Primary hover | ink on `#99F6E4` (teal-200) | 11.50 |
+| Secondary button | `text-1` on transparent, 1px `line-strong` border; hover fill `raised` | 13.61 on hover fill |
+| Danger button (delete account, delete booking) | ink `#2A0A0A` on `#F87171` (red-400); hover `#FCA5A5` | 6.62; hover 9.65; edge vs overlay 5.31 |
+| WhatsApp button | ink `#052E16` on `#22C55E` (green-500); hover `#4ADE80` | 6.54; hover 8.55; edge vs overlay 6.45 |
+| Disabled button | `#67728B` on `#1D2537`, no pointer | 3.18 (disabled controls are exempt from AA; still legible) |
+| `accent-soft` (selected row, active nav) | `text-1` on `#0F2A2D` | 12.64 |
 
-- **Landing CTA:** hover `scale(1.03)` over 150ms `out`; press `scale(0.96)` over 100ms.
-- **App buttons:** press `scale(0.97)`; hover color only.
-- **Label morph (from Family):** "Confirm booking" to "Booked", "Add item" to "Added", by cross-fading the changing word inside a fixed-width label.
-- **Directional tabs (from Family):** in the product tour and in Analytics tabs, content slides 12px toward the side of the tab you picked, over 240ms.
-- **Canopy band:** draws in once, left to right, as a `clip-path` reveal over 600ms. Reduced motion: shown complete.
+**Status badges** (pill, tinted fill, label text)
 
-### 4.5 How it applies across the product
+| Status | Text on fill | Ratio |
+|---|---|---|
+| Confirmed | `#5EEAD4` on `#0F2A2D` | 10.22 |
+| Pending advance | `#FCD34D` on `#2A2312` | 10.81 |
+| Completed | `#A5B4FC` on `#1C1E3A` | 8.13 |
+| Cancelled | `#A9B3C6` on `#222B3E`, struck through | 6.71 |
+| Inventory available | `#6EE7B7` on `#0B2A22` | 10.07 |
+| Inventory in use today | `#FCD34D` on `#2A2312` | 10.81 |
+| Inventory damaged | `#FCA5A5` on `#2B1519` | 9.04 |
+| Sidebar pending count | ink `#422006` on `#FCD34D` | 10.11 |
 
-| Surface | Shamiana treatment |
+**Banners**
+
+| Banner | Fill | Title / body | Edge | Ratios |
+|---|---|---|---|---|
+| Date clash | `#2B1519` | `text-1` / `#FCA5A5` | 4px left edge `#F87171` | title 14.35, body 9.04, edge 6.20 vs fill and 5.88 vs raised |
+| Stock shortfall | `#2A2312` | `text-1` / `#FCD34D` | 1px full border `#F59E0B` | body 10.81, edge 7.26 vs fill and 7.57 vs raised |
+
+Different shape (left edge vs full border), icon (alert vs package) and hue, so the two warnings are told apart three ways.
+
+**Calendar event pills** (filled, so a month of events stays readable)
+
+| Status | Text on fill | Ratio | Extra cue |
+|---|---|---|---|
+| Confirmed | `#F0FDFA` on `#115E59` | 7.27 | 3px left stripe `#5EEAD4` (5.13 vs pill) |
+| Pending | `#FEF3C7` on `#78350F` | 8.15 | "Advance due" in the drawer |
+| Completed | `#E0E7FF` on `#3730A3` | 8.06 | Check icon |
+| Cancelled | `#A9B3C6` on `#273248` | 6.08 | Strikethrough |
+
+Calendar: day numbers `text-2` (8.64), other-month days `text-3` (5.83), today a 2px `#5EEAD4` ring (12.33), clash day a red light `#F87171` beside the number (6.59) plus an accessible label "date clash".
+
+**Messages:** error text `#FCA5A5` (7.74 on overlay, 9.61 on canvas); success and "target met" text `#6EE7B7` (9.64 on overlay).
+
+**Charts (recharts):** series 1 `#5EEAD4` (11.00 vs raised), series 2 `#A5B4FC` (8.16). The two series are close in lightness (1.35:1), so they must differ by mark too: revenue as bars, target as a dashed line. Grid lines `line`, axis labels `text-3` (5.20), tooltip on `overlay` with a `line-strong` border.
+
+**Backdrop:** `rgb(5 8 15 / 0.72)` over the page (measured composite `#080C15`). Dialogs and drawers sit on `overlay` with a 1px `line-strong` border, 4.53:1 against the backdrop, so the panel edge is always clear.
+
+**Browser chrome:** `<html style="color-scheme: dark">` so native date pickers, selects and scrollbars render dark; `<meta name="theme-color" content="#0E1524">` (today `#0d9488`).
+
+### 2.4 Shape, border, elevation
+
+| Token | Value | Use |
+|---|---|---|
+| `radius-control` | 6px | Inputs, buttons, chips, calendar pills |
+| `radius-card` | 8px | Cards, banners, table wrappers |
+| `radius-sheet` | 12px | Dialogs, drawer leading corners, landing screenshots |
+| `radius-pill` | 9999px | Status badges only |
+| Borders | 1px `line` for structure; 1px `line-strong` for inputs and overlays | |
+| Shadows | **None.** Elevation is a lighter surface plus a border | |
+
+**Mark:** a tent drawn as a single line with one small teal light at the ridge. Used as an SVG favicon and logo, replacing ⛺ and `CalendarDays`.
+
+### 2.5 Motion
+
+- **Buttons (all):** press `scale(0.98)` over 100ms `out`; release returns over 150ms.
+- **Landing primary CTA:** hover `scale(1.02)` plus fill to `#99F6E4` over 150ms `out`. Under reduced motion, color only.
+- **App hover:** background or border color only, over 150ms. No scale, no lift.
+- **Links:** underlined in body copy (not color alone); hover thickens the underline from 1px to 2px.
+- **Clickable rows and cards** (inventory items, pending balances, records): hover fill `overlay`. Non-clickable cards: no hover at all.
+- **Drawer:** `translateX(100%)` to 0 over 280ms `enter`; out over 200ms `exit`; backdrop opacity over 200ms.
+- **Dialog:** opacity 0 to 1 and `scale(0.97)` to 1 over 240ms `enter`; out over 160ms.
+- **Banners:** clash and shortfall appear with opacity plus `translateY(-4px)` to 0 over 180ms. They never shake or pulse.
+- **Continuity:** after "Confirm booking", the button label cross-fades to "Booked" and the new booking's calendar day briefly lights (teal light fades in over 240ms). The first booking a merchant ever saves gets a one-time 600ms glow on its day; never again.
+- **Hero lights:** see 4.2.
+
+### 2.6 How it applies across the product
+
+| Surface | Treatment |
 |---|---|
-| Landing | White and `canvas` sections, the canopy band once, Baloo 2 headlines, pill CTAs. |
-| Sidebar | `paper` with `rani` active bar. |
-| Calendar | Same as Ledger. No pink inside the calendar (rule from 4.2). |
-| Drawer, dialogs | 20px corners, Mukta body, pill primary button. |
-| Banners | Same shapes and colors as Ledger. |
+| Landing | Dark throughout on `canvas`, with `raised` panels for the hero demo and FAQ. Screenshots of the (dark) app sit in a 1px `line` frame with 12px corners. No fake browser or phone chrome. |
+| Login, signup, reset (`AuthCard`) | `raised` card on `canvas`, new mark, primary button teal. |
+| Sidebar | `sidebar` background with a right `line` border. Active item: `accent-soft` fill, 3px teal bar, `aria-current`. Business name in `text-1`/600. |
+| Calendar (FullCalendar) | Set FullCalendar's own CSS variables (`--fc-page-bg-color`, `--fc-border-color`, `--fc-neutral-bg-color`, `--fc-today-bg-color` transparent, `--fc-button-*`) from the tokens instead of hex in `index.css`. Toolbar buttons become secondary buttons, so teal is not spent on navigation. Pills as in 2.3 with `radius-control` (not fully round) so long names truncate cleanly. |
+| Morning briefing | A `raised` card at the top of the calendar; numbers in `text-1`/500 tabular, labels in `text-2`. |
+| Booking drawer (`BookingDetail`) | `overlay` surface. Header shows the event date large in `text-1` with the countdown in `text-2`. Sections divided by `line`, not boxed. WhatsApp buttons in green-500. |
+| Booking sheet (`BookingPage`) | Inputs on `input` with `line-strong` borders. Clash banner directly under the date field; shortfall banner directly under the item quantity rows. Submit always enabled for clashes; confirm-anyway dialog for shortfalls (rules unchanged). |
+| Dialogs | Native `<dialog>` (see 7.2), `overlay` surface, `line-strong` border, `radius-sheet`. |
+| Records table | Header row `raised` with `text-2` labels; row dividers `line`; hover row `overlay`; amounts right-aligned and tabular. |
+| Pending balances | Each row: client, event date, balance in `text-1`/500. Totals in a `raised` summary bar. |
+| Analytics, My Activity | Cards on `raised`; the number is the largest thing in the card, its label below in `text-2`. Charts per 2.3. |
+| Inventory | Item cards on `raised`; available / in use / damaged as badges (2.3). |
+| Profile, danger zone | Sections on `raised`. Danger zone title in `#FCA5A5`, delete button in red-400 with dark text. |
+| Empty states | One line of `text-2` and a single action ("Add your first item"). A faint row of dim lights (the hero motif at 40% `text-3`) behind the empty calendar only. |
+| Loading | Skeletons in `overlay`, gently pulsing (stopped under reduced motion). |
+| Printed report and PDF | **Stay light.** They are paper documents; the report window keeps its current light styling. |
+| Excel export, WhatsApp messages | Unaffected. |
 
-**Risk:** personality that suits a landing page can wear thin in a tool opened twenty times a day; Baloo 2 is informal for amounts and records.
+### 2.7 Daylight legibility (the main risk of full dark)
+
+Merchants often work in bright shops or at venues during the day, where dark screens are harder to read. Mitigations built into this spec:
+- High text contrast: primary text 12 to 16:1, and even muted text never below 4.69:1.
+- Body text 15px (app) and 16px (landing), weights never below 400.
+- No thin grey-on-grey: every label uses `text-2` or `text-3` from the table above.
+- All colors are CSS variables (2.8), so a light theme can be added later by supplying a second set of values (Appendix A has a ready, contrast-checked light palette). Worth revisiting once merchants use the dark app in daylight.
+
+### 2.8 Tailwind mapping (sketch, not applied)
+
+Define tokens as CSS variables in `index.css` and point Tailwind at them, so a future light theme is a value swap rather than a rewrite:
+
+```css
+/* index.css (sketch) */
+:root {
+  color-scheme: dark;
+  --sidebar: 10 16 28;   --canvas: 14 21 36;   --raised: 23 32 51;   --overlay: 29 40 64;
+  --line: 36 48 73;      --line-strong: 110 122 147;
+  --text-1: 231 235 242; --text-2: 169 179 198; --text-3: 135 146 168;
+  --accent: 94 234 212;  --accent-hover: 153 246 228; --accent-ink: 4 47 44; --accent-soft: 15 42 45;
+  --focus: 94 234 212;
+}
+```
+
+```js
+// tailwind.config.js theme.extend (sketch)
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`
+colors: {
+  sidebar: v('sidebar'), canvas: v('canvas'), raised: v('raised'), overlay: v('overlay'),
+  line: { DEFAULT: v('line'), strong: v('line-strong') },
+  fg: { 1: v('text-1'), 2: v('text-2'), 3: v('text-3') },
+  accent: { DEFAULT: v('accent'), hover: v('accent-hover'), ink: v('accent-ink'), soft: v('accent-soft') },
+  // status, banner and pill colors from 2.3 as fixed values (they do not change per theme)
+},
+fontFamily: { sans: ['"Schibsted Grotesk"', 'system-ui', 'sans-serif'] },
+borderRadius: { control: '6px', card: '8px', sheet: '12px' },
+spacing: {
+  section: 'clamp(4rem, 2.592rem + 6.009vw, 8rem)',
+  block: 'clamp(2rem, 1.648rem + 1.502vw, 3rem)',
+  gutter: 'clamp(1rem, 0.648rem + 1.502vw, 2rem)',
+},
+transitionDuration: { press: '100ms', hover: '150ms', state: '180ms', enter: '240ms', exit: '160ms', 'sheet-in': '280ms', 'sheet-out': '200ms' },
+transitionTimingFunction: {
+  out: 'cubic-bezier(0.2, 0, 0, 1)', enter: 'cubic-bezier(0, 0, 0.2, 1)',
+  exit: 'cubic-bezier(0.4, 0, 1, 1)', move: 'cubic-bezier(0.3, 0, 0.2, 1)',
+},
+```
+
+Custom names (`bg-canvas`, `text-fg-2`, `rounded-card`) replace `slate-*` and the default radius and shadow classes.
+
+**If Tailwind v4 is adopted:** the same values go in `@theme` in `index.css` and become CSS variables automatically. Watch the renamed defaults (`shadow-sm` becomes `shadow-xs`, `rounded` becomes `rounded-sm`, `ring` becomes 1px currentColor, border color defaults to currentColor); the custom names above avoid most of that churn.
 
 ---
 
-## 5. Routing: how `/` coexists with the app
+## 3. Routing: how `/` coexists with the app
 
-### 5.1 Today
+### 3.1 Today
 
-`App.jsx` matches `window.location.pathname` by hand: `/` renders the app behind the auth gate, `/privacy` the policy, everything else the 404 page. `vercel.json` sends every non-`/api` path to `index.html`. `checkAuth()` runs on mount for every route.
+`App.jsx` matches `window.location.pathname` by hand: `/` is the app behind the auth gate, `/privacy` the policy, everything else the 404 page. `vercel.json` sends every non-`/api` path to `index.html`. `checkAuth()` runs on mount for every route, including `/privacy`.
 
-### 5.2 Proposal
+### 3.2 Proposal
 
 | Path | Shows | Calls the API? |
 |---|---|---|
 | `/` | Landing page | **No** |
-| `/login` | Login screen (today's `LoginScreen`) | Only on submit |
-| `/signup` | Sign-up flow (today's `SignupScreen`) | Only on submit |
+| `/login` | Login | Only on submit |
+| `/signup` | Sign-up flow | Only on submit |
 | `/forgot-password` | Reset flow | Only on submit |
 | `/app` | The logged-in app (today's `/`) | Yes, `checkAuth()` |
-| `/privacy` | Privacy policy (unchanged) | **No** (today it does; fix by gating `checkAuth()` to `/app`) |
+| `/privacy` | Privacy policy (its "Back to sign in" link changes to `/login`) | **No** (gate `checkAuth()` to `/app`) |
 | anything else | 404 | No |
 
-- Keep the small hand-written path switch; adding a router library is not needed for six paths. It moves **above** `App`: `main.jsx` picks a route and lazy-loads either the landing bundle or the app bundle, so the landing never downloads FullCalendar, recharts, jsPDF or Zustand stores it does not use.
-- `/app` without a session redirects to `/login?next=/app`; after login, go to `next` (only same-origin paths accepted).
-- The landing's "Create free account" links to `/signup`, "Log in" to `/login`. Inside the auth screens, the existing in-page switching becomes real links, so the browser back button works.
-- `vercel.json` needs no change for this (the SPA fallback already serves `index.html` everywhere). It changes only if the landing is pre-rendered (9.4).
+- Keep the small hand-written path switch; six paths do not need a router library. Move it **above** `App`: `main.jsx` picks the route and lazy-loads either the landing bundle or the app bundle, so the landing never downloads FullCalendar, recharts, jsPDF, html2canvas or xlsx.
+- `/app` without a session redirects to `/login?next=/app`; after login, go to `next` (same-origin paths only).
+- Landing "Create free account" goes to `/signup`, "Log in" to `/login`. Inside the auth screens, the in-page switches become real links so the back button works.
+- `vercel.json` needs no change for this; it changes only if the landing is pre-rendered (7.4).
 
-### 5.3 What a logged-in merchant sees at `/`
+### 3.3 Logged-in merchant at `/` (decision 6)
 
-The session cookie is `httpOnly`, so the landing cannot read it, and asking the API would wake the Render server for every visitor. So:
-
-- On successful login or `/api/auth/me`, the app stores a **UI hint** in `localStorage` (`ef:signedIn = "1"`). It is not a token and holds no personal data. It is cleared on logout, on any 401, and on account deletion.
-- At `/`, if the hint is present, the nav shows **"Open dashboard"** (to `/app`) instead of "Log in" and "Get started", and the hero CTA becomes "Open dashboard". No redirect, so the landing stays reachable and a stale hint can never loop.
-- If the hint is stale, `/app` simply runs `checkAuth()`, gets a 401, clears the hint and shows `/login`. One extra step, no harm.
-- Existing bookmarks to `/` (Bharat's, if he resumes) land on the landing with "Open dashboard" one click away. Alternative: auto-redirect `/` to `/app` when the hint is present (open question 6).
+The session cookie is `httpOnly`, so the landing cannot see it, and calling the API would wake the Render server for every visitor. So:
+- On successful login or `/api/auth/me`, the app writes a **UI hint** to `localStorage` (`ef:signedIn = "1"`). It is not a token and holds no personal data. It is cleared on logout, on any 401 and on account deletion.
+- At `/`, if the hint is present, the nav and hero show **"Open dashboard"** (to `/app`) in place of "Log in" and "Create free account". No redirect, so the landing stays reachable and a stale hint can never loop.
+- A stale hint costs one step: `/app` runs `checkAuth()`, gets a 401, clears the hint and shows `/login`.
 - The `localStorage` read is wrapped in try/catch (private browsing can throw).
 
 ---
 
-## 6. Landing page plan
+## 4. Landing page plan
 
-Copy rules: plain merchant English, short sentences (8 to 14 words), verbs on buttons, one name per action, no em dashes, amounts in Indian format, no invented numbers, logos or quotes. Section titles use sentence case. Draft copy is direction-neutral; visual notes are given for Ledger, with differences for B and C where they matter.
+Copy rules: plain merchant English, 8 to 14 words per sentence, verbs on buttons, one name per action (decision 2), no em dashes, amounts in Indian format, no invented numbers, logos or quotes, nothing about phones (decision 7) or languages (decision 8). Section titles in sentence case.
 
-### 6.1 Nav
+### 4.1 Nav
 
-- **Purpose:** get to signup or login fast; jump to the three explainers.
+- **Purpose:** reach signup or login fast; jump to the explainers.
 - **Layout:**
 ```
-[mark] EventFlow      Features  How it works  FAQ        Log in   [Get started]
-375px: [mark] EventFlow                                   Log in   [Menu]
+1280: [mark] EventFlow    Features  How it works  FAQ      Log in  [Create free account]
+375:  [mark] EventFlow                                     Log in  [Menu]
 ```
-  Sticky after the hero scrolls away, with `shadow-raised` only once stuck. On mobile, the three anchors move into a disclosure menu (a `<button aria-expanded>` that opens a list, not a drawer).
-- **Copy:** "Features", "How it works", "FAQ", "Log in", "Get started". Logged-in hint: "Open dashboard".
-- **Interactions:** anchor links scroll natively (`scroll-behavior: smooth` only under `motion-safe`), and move focus to the section heading. Active section is not tracked (no scroll spy; it adds JS for little value). Skip link "Skip to content" is the first focusable element.
+  The bar is `canvas` with a bottom `line` once the page scrolls (no shadow). At 375 the anchors and "Create free account" move into a disclosure menu (`<button aria-expanded>` opening a list, not a drawer).
+- **Copy:** "Features", "How it works", "FAQ", "Log in", "Create free account". With the signed-in hint: "Open dashboard".
+- **Interactions:** anchors scroll natively (`scroll-behavior: smooth` only under `motion-safe`) and move focus to the section heading. No scroll spy. "Skip to content" is the first focusable element. Targets at least 44px tall.
 
-### 6.2 Hero
+### 4.2 Hero
 
-- **Purpose:** in five seconds, a tent or catering owner knows this is for them and sees the core idea: you get warned, you still decide.
+- **Purpose:** in five seconds an owner sees this is for them, and sees the core idea: you get warned, you still decide.
 - **Layout (1280):**
 ```
-| H1 (left, max 14ch per line)                 |  ┌ Example, sample data ───────────┐ |
-| Subhead (max 2 lines)                        |  │ February 2026                    │ |
-|                                              |  │  14   Verma family, wedding      │ |
-| [Create free account]   See how it works     |  │       Khan family, wedding (new) │ |
-| Free to sign up. Email and a one-time code.  |  │  ┌ Date clash: Verma family ... ┐│ |
-|                                              |  │  [Confirm booking]               │ |
-|                                              |  └──────────────────────────────────┘ |
-| ─────────── real calendar screenshot, cropped, framed in 1px rule, below ────────── |
+| H1 (left, about 14 characters per line)        |  ┌ Sample month ─────────────────┐ |
+| Subhead (2 lines max)                          |  │  M  T  W  T  F  S  S          │ |
+|                                                |  │  ·  ·  ●  ·  ·  ●  ·          │ |
+| [Create free account]   See how it works       |  │  ·  ●  ·  ·  ·  ·  ◉  ← 14    │ |
+| Free to use. Sign up with your email.          |  │  ...                          │ |
+|                                                |  │ ┌ 14 February ──────────────┐ │ |
+|                                                |  │ │ Verma family, wedding     │ │ |
+|                                                |  │ │ Khan family, wedding (new)│ │ |
+|                                                |  │ │ Date clash: ...           │ │ |
+|                                                |  │ │ [Confirm booking]         │ │ |
+|                                                |  │ └───────────────────────────┘ │ |
+| ─────── real calendar screenshot below the fold line, cropped, 12px corners ────── |
 ```
-  At 768: two columns get narrower; the demo card sits right. At 375: H1, subhead, CTA, then the demo card full width, then the screenshot cropped to the week row.
+  At 768: two narrower columns. At 375: H1, subhead, CTA, then the lights panel full width, then the screenshot cropped to one week.
 - **Copy direction:**
-  - H1: "Every booking, advance and chair, on one screen." (alternative: "Your booking register, minus the register.")
+  - H1: "Every booking, advance and chair, on one screen."
   - Subhead: "EventFlow keeps your event dates, advances and stock together. It warns you about clashes and short stock, and you decide."
   - Primary: "Create free account". Secondary text link: "See how it works".
-  - Under the button: "Free to sign up. Email and a one-time code." (depends on open question 1)
-- **Interactions:** the demo card is live markup with seeded fictional names. On first view (IntersectionObserver, once): at 0ms one booking sits under "14"; at 300ms the "Khan family" pill enters (opacity plus `translateY(8px)` to 0, 240ms `enter`); at 600ms the clash banner appears (180ms). The "Confirm booking" button is enabled throughout. Clicking it cross-fades the label to "Booked" and adds a line: "2 events on 14 Feb. Both saved." A small "Play again" button resets it. Reduced motion: shown in the final pre-click state. The card has `aria-label="Example of a date clash warning, with sample data"` and announces "Booked" through a polite live region. Hero screenshot is the LCP image: `fetchpriority="high"`, explicit width and height, not lazy.
-- **B:** the demo becomes the strip of date lights; clicking the red light opens the same clash card. **C:** canopy band draws across the top edge once.
+  - Under the button: "Free to use. Sign up with your email."
+- **The lights panel (built in HTML and CSS, not an image):**
+  - A 7-column month of sample dates. Each date is a small light (10px dot) above its number. Booked dates are teal `#5EEAD4`, the clash date (14th) is red `#F87171` with a 2px ring, free dates are `text-3` at 40%.
+  - Only booked dates and the clash date are buttons (about six), each with a label such as "14 February: two weddings, date clash". Free dates are plain text, so keyboard users are not walked through 28 stops.
+  - Choosing a date shows its bookings in the card below. The 14th's card shows both weddings, the clash banner, and a **"Confirm booking" button that stays enabled**. Pressing it cross-fades the label to "Booked" and adds the line "2 events on 14 Feb. Both saved." announced through a polite live region.
+- **Sequence (once, when the panel first enters the viewport):** lights fade in left to right, 180ms each, staggered 20ms (about 0.6s for the month); 300ms later the 14th's ring appears and its card opens with the clash banner (180ms). If the panel is off-screen, the sequence waits; if the tab is hidden, it pauses. A small "Play again" button resets it. Reduced motion: the final state is shown immediately.
+- **Panel label:** "Sample month with made-up bookings".
+- **Performance:** the hero screenshot is the LCP image (`fetchpriority="high"`, explicit width and height, not lazy). The lights panel is a few dozen elements and no images.
 
-### 6.3 Problem
+### 4.3 Problem
 
-- **Purpose:** name the paper habit exactly, so the merchant feels understood (OkCredit's lesson).
-- **Layout:** left: title and two lines. Right (stacks below at 375): three short items, each a small drawn object (register page with ruled lines, a stack of advance slips, a thought bubble with chairs) plus two lines of text. Not cards; items separated by `rule`.
+- **Purpose:** name the paper habit exactly, so the owner feels understood.
+- **Layout:** left: title and two lines. Right (stacked at 375): three short items, each with a small line drawing in `text-3` strokes (a register page, a stack of advance slips, a thought bubble of chairs) and two lines of text, separated by `line`. Not cards.
 - **Copy direction:**
   - Title: "Right now it lives in three places"
-  - Register: "Dates and names in the booking register, in pen."
-  - Slips: "Advances on separate slips, or in your head."
-  - Stock: "How many chairs are free on the 14th? Only you know."
-  - Closing line: "When two families want the same date, or 400 chairs are promised on a day you own 300, you find out late."
-- **Interactions:** none. Static section.
+  - "Dates and names in the booking register, in pen."
+  - "Advances on separate slips, or in your head."
+  - "How many chairs are free on the 14th? Only you know."
+  - Closing: "When two families want the same date, or 400 chairs are promised on a day you own 300, you find out late."
+- **Interactions:** none.
 
-### 6.4 Features
+### 4.4 Features
 
-- **Purpose:** six features, each named by what the merchant gets.
-- **Layout:** two large rows for the two headline features (clash alerts, per-date stock), each with a cropped real screenshot of that state; then a 2x2 grid (2x1 at 768, 1 column at 375) for the other four, text plus a small cropped UI fragment. Not six identical icon cards.
+- **Purpose:** six features, each named by what the owner gets.
+- **Layout:** two large rows for the headline features (clash alerts, stock per date), each with a cropped dark screenshot of that state. Then a 2x2 grid (2x1 at 768, one column at 375) for the other four: text plus a small cropped UI fragment. Not six identical icon cards.
 - **Copy direction:**
   - **Clash alerts that don't stop you.** "If a date already has an event, you see it before you save. You decide if you can do both."
   - **Stock checked for the event date.** "Add chairs, tables and tents to a booking. If that day's other bookings already use them, you see the shortfall and confirm only if you mean it."
@@ -533,41 +459,46 @@ Copy rules: plain merchant English, short sentences (8 to 14 words), verbs on bu
   - **Pending balances in one list.** "Every booking with money still to come, and how much."
   - **Reports and Excel.** "Pick a date range for a printable report or PDF. Download your records as an Excel file."
   - **Morning briefing.** "Open the app to a short note: events this week, balances due and your next event."
-- **Interactions:** the two large screenshots show the state described (a red clash banner, an amber shortfall table). No hover effects on these blocks (not clickable).
+- **Interactions:** none (these blocks are not clickable).
 
-### 6.5 How it works
+### 4.5 How it works
 
-- **Purpose:** show that setup is small. This is a real sequence, so numbering is honest.
-- **Layout:** three columns at 1280 and 768, stacked at 375; each step a number, a title and one line; a thin `rule` connects them horizontally on wide screens.
+- **Purpose:** show setup is small. A real sequence, so numbering is honest.
+- **Layout:** three columns at 1280 and 768, stacked at 375; each step a number in `accent`, a title and one line; a thin `line` connects them on wide screens.
 - **Copy direction:**
   1. "Create your account. Your email, a one-time code, a password."
   2. "Add your stock. Item names and how many you own."
   3. "Log your bookings. Date, client, guests and what they need."
-  - Under the steps: "[Create free account]"
-- **Interactions:** none beyond the button.
+  - Then "[Create free account]".
+- **Interactions:** the button only.
 
-### 6.6 Product tour
+### 4.6 Product tour
 
-- **Purpose:** let a cautious merchant look around before signing up.
-- **Layout:** a tab list (Calendar, New booking, Booking details, Pending balances, Reports) above one large framed screenshot. At 375 the tabs become a horizontally scrollable row (no hidden overflow trap; visible scroll affordance) and the screenshot is cropped to the relevant region.
-- **Copy direction:** one sentence under each image, e.g. Booking details: "Client, event, money and stock for one booking, with the WhatsApp buttons."
-- **Interactions:** WAI-ARIA tabs pattern (arrow keys move between tabs, Tab moves into the panel). Images cross-fade over 180ms (B: no slide; C: 12px directional slide). Only the "New booking" tab may carry a short loop (see 7.3), with a visible pause button, `preload="none"`, and a poster frame; all other tabs are still images, lazy-loaded.
+- **Purpose:** let a careful owner look around before signing up.
+- **Layout:** tabs (Calendar, New booking, Booking details, Pending balances, Reports) above one large framed screenshot. At 375 the tabs become a horizontally scrollable row with a visible edge fade, and the screenshot is cropped to the relevant region.
+- **Copy direction**, one line under each image:
+  - Calendar: "Your month at a glance, with clashes marked."
+  - New booking: "Date, client, venue and guests, then the items and quantities they need."
+  - Booking details: "Client, event, money and stock for one booking, with the WhatsApp buttons."
+  - Pending balances: "Who still owes what, nearest event first."
+  - Reports: "Pick dates, then print, save as PDF or download Excel."
+- **Interactions:** WAI-ARIA tabs (arrow keys between tabs, Tab into the panel). Images cross-fade over 180ms; no sliding. All images lazy-loaded. Only the "New booking" tab may carry a short loop (section 5), with a visible pause button, `preload="none"` and a poster frame.
 
-### 6.7 Built for Indian event businesses
+### 4.7 Built for Indian event businesses
 
 - **Purpose:** show the local details are right, without flag-waving.
-- **Layout:** left: title. Right: four short facts, each paired with how it looks in the app.
+- **Layout:** title left; four short facts right, each paired with a tiny example rendered in the app's style.
 - **Copy direction:**
   - "Amounts the way you write them: ₹1,20,000, not ₹120,000."
   - "Dates and 'today' in Indian time, wherever the server is."
   - "Weddings, birthdays, corporate events, or your own event type."
   - "Messages go out on WhatsApp, under your business name."
-- **Interactions:** none. Must not mention Hindi, GST, UPI collection or anything not built.
+- **Interactions:** none. No GST, UPI collection, languages or anything not built.
 
-### 6.8 Security and privacy
+### 4.8 Security and privacy
 
-- **Purpose:** plain, specific, honest. Matches `/privacy` and DATA_PRIVACY.md.
-- **Layout:** two columns of short statements, then a text link to the policy.
+- **Purpose:** plain, specific, honest; matches `/privacy` and DATA_PRIVACY.md.
+- **Layout:** two columns of short statements, then a text link.
 - **Copy direction:**
   - "Every account is confirmed with a one-time code sent to your email."
   - "Each business sees only its own bookings, stock and records."
@@ -577,157 +508,180 @@ Copy rules: plain merchant English, short sentences (8 to 14 words), verbs on bu
   - Link: "Read the privacy policy" (`/privacy`).
 - **Interactions:** none.
 
-### 6.9 FAQ
+### 4.9 FAQ
 
-- **Purpose:** answer the questions that stop a signup.
-- **Layout:** single column, max 65ch, native `<details>`/`<summary>` (keyboard and screen reader support for free). Open state rotates a chevron 90 degrees over 150ms; content appears without height animation.
-- **Questions and answer direction** (all must stay true):
-  - "Is it free?" "Yes, creating an account and using EventFlow is free." (open question 1)
-  - "Does EventFlow message my clients itself?" "No. It opens WhatsApp with the message ready. You send it from your own phone."
+- **Purpose:** answer what stops a signup.
+- **Layout:** one column, max 65ch, native `<details>`/`<summary>` on `raised` rows separated by `line`. Opening rotates the chevron 90 degrees over 150ms; content appears without animating height.
+- **Questions** (every answer must stay true):
+  - "Is it free?" "Yes. Creating an account and using EventFlow is free."
+  - "Does EventFlow message my clients itself?" "No. It opens WhatsApp with the message ready, and you send it yourself."
   - "What happens if two bookings fall on the same day?" "You see a clash alert. You can still save both."
-  - "Can I use it on my phone?" "Yes, in your phone's browser. For long PDF reports, use a computer." (open question 7)
-  - "Is it in Hindi?" "English for now." (open question 8)
+  - "What if I don't have enough chairs for an event?" "You see what is short for that date, and you can confirm anyway if you have a plan."
   - "Can I get my data out?" "Download your records as Excel any time. For a full export, write to eventflow.support@gmail.com."
   - "Can I delete my account?" "Yes, from Profile. You confirm with your password and business name, and everything is deleted at once."
-  - "Do I need to install anything?" "No. It runs in the browser."
+  - "Do I need to install anything?" "No. EventFlow runs in your web browser."
 - **Interactions:** as above.
 
-### 6.10 Final CTA and footer
+### 4.10 Final CTA and footer
 
-- **Purpose:** one last, calm push; then the essentials.
 - **Layout:**
 ```
 Put this season's bookings in one place.        [Create free account]
 ──────────────────────────────────────────────────────────────────────
 EventFlow      Privacy policy   Contact   Log in               © 2026 EventFlow
 ```
-- **Copy direction:** title as above; contact is the `mailto:` for eventflow.support@gmail.com; no social links (there are none to show).
-- **Interactions:** button as hero.
+- **Copy:** as above; "Contact" is a `mailto:` for eventflow.support@gmail.com. No social links (there are none).
+- **Interactions:** the button as in the hero.
 
 ---
 
-## 7. Screenshots and demo loops from seeded data only
+## 5. Screenshots and demo loops from seeded data only
 
 Per DATA_PRIVACY.md: never capture production, never show a real client.
 
-1. **Source:** local dev against the Neon dev branch, seeded with `db/seedMerchants.js` (two demo merchants). Never point at production; the existing production-host guard already refuses it.
-2. **Which merchant name:** use **Shree Ganesh Caterers** (fictional seed) or a new fictional demo business, not Bala Ji Tent House. Showing the real merchant's name on a page with "Create free account" reads as an endorsement, which the brief rules out (open question 4).
-3. **Client data:** seeded fictional names only (Ramesh Sharma, Priya Patel and the like) and Meerut localities. The seed phone pattern (`98765432xx`) is shaped like a real mobile number and may belong to someone; mask phones in every capture (`98765 4XXXX`) or seed visibly impossible ones for screenshots.
-4. **Freeze time:** seed relative dates, then capture with the browser clock fixed to one demo month (for example February 2026, wedding season), so the calendar, countdowns and "this week" lines agree across all images.
-5. **Capture:** 1440x900 at 2x device pixel ratio for desktop shots, 390x844 at 3x for any phone crop; light theme; cursor hidden.
-6. **Output:** AVIF with WebP fallback via `<picture>`, widths 640/960/1440/2160, explicit `width`/`height`, `loading="lazy"` and `decoding="async"` below the fold, hero eager with `fetchpriority="high"`. Images live in `client/public/landing/` (same origin, CSP-safe). Alt text describes what the image shows, e.g. "Calendar for February 2026 with two weddings on the 14th and a red clash marker".
-7. **Short loops** (product tour "New booking" tab only): 6 to 8 seconds, H.264 MP4 plus WebM, under 1.5 MB, muted, `playsinline`, `preload="none"`, poster frame, visible pause control, no autoplay under reduced motion. Alternative with no video at all: the hero-style live markup demo reused in the tour.
-8. **Review before commit:** every image checked for names, phone numbers and emails before it enters the repo.
+1. **Source:** local dev against the Neon dev branch, seeded with `db/seedMerchants.js`. The production-host guard already refuses production.
+2. **Business name:** **Shree Ganesh Caterers** (decision 4), logged in as that seed merchant. Never Bala Ji Tent House.
+3. **Client data:** seeded fictional names and Meerut localities only. The seed phone pattern (`98765432xx`) is shaped like a real number, so mask phones in every capture (`98765 4XXXX`) or seed visibly impossible ones for screenshots.
+4. **Freeze time:** seed bookings into one demo month (February 2026, wedding season, with a clash on the 14th to match the hero), and fix the browser clock to that month, so the calendar, countdowns and "this week" lines agree in every image.
+5. **Capture:** dark theme, 1440x900 at 2x for desktop shots; cursor hidden.
+6. **Output:** AVIF with WebP fallback in `<picture>`, widths 640/960/1440/2160, explicit width and height, `loading="lazy"` and `decoding="async"` below the fold, hero eager with `fetchpriority="high"`. Stored in `client/public/landing/` (same origin, CSP-safe). Alt text describes the state, e.g. "Calendar for February 2026 with two weddings on the 14th and a red clash light".
+7. **Short loop** ("New booking" tab only): 6 to 8 seconds, H.264 MP4 plus WebM, under 1.5 MB, muted, `playsinline`, `preload="none"`, poster frame, visible pause control, no autoplay under reduced motion, paused when off-screen.
+8. **Review before commit:** check every image for names, phone numbers and emails before it enters the repo.
 
 ---
 
-## 8. Engineering constraints
+## 6. Engineering constraints
 
-### 8.1 Responsive
+### 6.1 Responsive
 
 | Width | Landing | App (notes only) |
 |---|---|---|
-| 375 | Single column; demo card full width; tour tabs scroll horizontally; nav anchors in a menu | Sidebar already becomes an off-canvas menu below `md`; drawers go full width. Known mobile bugs (e.g. #094 iOS PDF size) stay out of scope. |
-| 768 | Two-column hero; features 2 columns | Calendar month view usable; drawer 480px over content. |
+| 375 | One column; lights panel full width; tour tabs scroll; nav in a menu | Sidebar already becomes an off-canvas menu below `md`; drawers go full width. Mobile-only bugs (e.g. #094) stay out of scope. |
+| 768 | Two-column hero; features two columns | Calendar month view usable; drawer 480px over content. |
 | 1280 | Full layout, 72rem container | Primary design width. |
 | 1536 | Same container, more side space; display type at max | Calendar gains width; no layout change. |
 
-### 8.2 Performance budget (landing)
+### 6.2 Performance budget (landing)
 
 | Item | Budget |
 |---|---|
 | JS for `/` (gzipped) | Under 90 KB including React and ReactDOM; no FullCalendar, recharts, jsPDF, html2canvas, xlsx |
 | CSS (gzipped) | Under 20 KB |
-| Fonts | Under 70 KB total WOFF2, preloaded, `font-display: swap`, with a metric-matched fallback (`size-adjust`) to avoid layout shift |
+| Fonts | One WOFF2 (39.4 KB), preloaded, `font-display: swap`, with a size-adjusted fallback to avoid layout shift |
 | Hero image | Under 120 KB AVIF at 1440 wide |
 | Video | None in the hero; tour loop under 1.5 MB, not preloaded |
 | Third-party requests | Zero (also required by the CSP) |
 | API requests on `/` | Zero |
-| Targets | LCP under 2.5 s on throttled 4G mobile, CLS under 0.05, Lighthouse Performance and Accessibility at 90 or above |
+| Targets | LCP under 2.5 s on throttled 4G, CLS under 0.05, Lighthouse Performance and Accessibility 90 or above |
 
-### 8.3 Accessibility
+### 6.3 Accessibility
 
-- Landmarks: `header` (nav), `main`, `footer`; one `h1`; headings in order.
-- Skip link to `main`; visible on focus.
-- Every interactive element reachable and operable by keyboard; tour tabs follow the tabs pattern; FAQ uses `<details>`.
-- AA contrast on all pairs listed per direction; focus outlines at 3:1 or more.
-- Alt text on every screenshot describing the state shown; decorative drawings `alt=""`.
-- `lang="en-IN"` on `<html>` (currently `en`) so screen readers pick Indian English pronunciation for ₹ amounts.
-- App fixes listed in 1.6 (Escape, focus trap and return, `inert`, `aria-current`, muted text contrast).
+- Landmarks: `header`, `main`, `footer`; one `h1`; headings in order; skip link to `main`.
+- Everything reachable and operable by keyboard; tour tabs follow the tabs pattern; FAQ uses `<details>`.
+- AA contrast for every pair in 2.3 (all computed); focus outlines at least 9.93:1.
+- Alt text on every screenshot describing the state; decorative drawings `alt=""`.
+- `lang="en-IN"` on `<html>` (today `en`) so screen readers read ₹ amounts with Indian English.
+- `color-scheme: dark` so native controls match.
+- Landing touch targets at least 44px (WCAG 2.2 AA asks for 24px; 44 is the comfortable size).
+- App fixes from 1.6.
 
-### 8.4 Scope (ROADMAP.md)
+### 6.4 Scope (ROADMAP.md)
 
-The landing and redesign show only shipped features. Not shown, not hinted: customer portal or client-facing pages, WhatsApp booking intake, payment collection or gateway, bulk or automatic WhatsApp reminders, quotation PDFs, client ledger or repeat-client detection, deploy/return tracking, multi-day events, Google or phone login, Hindi or other languages, native apps.
+Show only shipped features. Not shown or hinted: customer portal or client-facing pages, WhatsApp booking intake, payment collection or gateway, bulk or automatic WhatsApp reminders, quotation PDFs, client ledger or repeat-client detection, deploy/return tracking, multi-day events, Google or phone login, Hindi or other languages, native apps.
 
 ---
 
-## 9. Optional tooling
+## 7. Optional tooling
 
-None of these is needed for any direction. Each direction works with Tailwind v3, plain CSS transitions and the current dependencies.
+None of these is needed. The spec works with Tailwind v3, plain CSS transitions and the current dependencies.
 
-### 9.1 Self-hosted font files (practically required if any custom font is used)
-- **Benefit:** the CSP blocks Google's font CDN, so self-hosting is the only way to use Anek, Schibsted or Baloo/Mukta.
-- **Cost:** zero dependencies if the WOFF2 files are subset once and committed to `client/public/fonts/` with `@font-face` in `index.css`. The `@fontsource-variable/*` packages are the dependency alternative (simpler updates, larger files unless subset). Re-verify: CSP has no violations, no layout shift on swap.
-- **Optional:** yes; the system font stack still works, but then every direction loses its main typographic idea.
+### 7.1 Self-hosted font file (practically required)
+- **Benefit:** the CSP blocks Google's font CDN, so self-hosting is the only way to use Schibsted Grotesk.
+- **Cost:** no dependency if the subset WOFF2 is committed to `client/public/fonts/` with `@font-face` in `index.css`. Re-verify: no CSP violations, no layout shift on swap.
+- **Optional:** yes; the system font stack still works, but the direction loses its typeface.
 
-### 9.2 Native `<dialog>` instead of a headless library
-- **Benefit:** `showModal()` gives Escape-to-close, a top layer, the `::backdrop` and an inert page behind it, in every modern browser since 2022. A ~40-line hook adds focus return. Fixes most of 1.6 with no dependency.
-- **Cost:** rework of five overlay components; `BookingDetail` is a drawer, which `<dialog>` also handles with CSS. Re-verify every modal flow, including the inventory confirm-anyway step and the delete-account flow.
+### 7.2 Native `<dialog>` instead of a headless library
+- **Benefit:** `showModal()` gives Escape-to-close, a top layer, `::backdrop` and an inert page behind it, in every modern browser since 2022. A small hook adds focus return. Fixes most of 1.6 with no dependency.
+- **Cost:** rework of five overlay components. Re-verify every modal flow, including the inventory confirm-anyway step and account deletion.
 - **Optional:** yes.
 
-### 9.3 Radix primitives (`@radix-ui/react-dialog`, later Popover/Tabs)
-- **Benefit:** battle-tested focus management and ARIA for complex widgets (menus, popovers, comboboxes) beyond what `<dialog>` covers.
-- **Cost:** a new dependency tree (each primitive pulls in several small Radix packages); measure the gzipped delta with `vite build` before adopting. Unstyled, so no visual lock-in. Re-verify all overlays.
-- **Optional:** yes. My view: start with 9.2; add Radix only when a widget needs it.
+### 7.3 Radix primitives
+- **Benefit:** tested focus management and ARIA for menus, popovers and comboboxes beyond what `<dialog>` covers.
+- **Cost:** a new dependency tree; measure the gzipped size with `vite build` before adopting. Unstyled, so no visual lock-in. Re-verify all overlays.
+- **Optional:** yes. Start with 7.2; add Radix only when a widget needs it.
 
-### 9.4 Pre-rendering the landing route
-- **Benefit:** the landing's HTML ships with content (better first paint, link previews and search indexing without running JS).
-- **Cost:** two entries (`index.html` for the landing, `app.html` for the app) with `vercel.json` rewrites for `/app`, `/login`, `/signup`, `/forgot-password`, `/privacy` to `app.html`; landing components must be safe to render on the server (no `window` at import time). A small build script using Vite's SSR build and `react-dom/server` needs no runtime dependency; tools like `vite-react-ssg` are simpler but add one. **CSP check:** `script-src 'self'` blocks inline scripts, so any tool that injects inline JSON for hydration will break.
-- **Optional:** yes. The route split in 5.2 gets most of the speed without it.
+### 7.4 Pre-rendering the landing route
+- **Benefit:** the landing HTML ships with its content (faster first paint, link previews and indexing without JS).
+- **Cost:** two entries (`index.html` for the landing, `app.html` for the app) with `vercel.json` rewrites for `/app`, `/login`, `/signup`, `/forgot-password` and `/privacy`. Landing components must render without `window` at import time. A small script using Vite's SSR build and `react-dom/server` needs no runtime dependency. **CSP:** `script-src 'self'` blocks inline scripts, so any tool that injects inline hydration JSON will break.
+- **Optional:** yes. The route split in 3.2 gets most of the speed without it.
 
-### 9.5 Tailwind v4
-- **Benefit:** tokens defined once in CSS (`@theme`) become CSS variables automatically, so FullCalendar overrides and any future dark theme read the same values; faster builds; and it is the only fix for the accepted build-time advisories BUGS #088 and #093.
-- **Cost:** browser floor rises to Safari 16.4, Chrome 111, Firefox 128 (from the official upgrade guide). A merchant on an iPhone stuck below iOS 16.4 would get broken styles; that is a real consideration for this audience. Utility renames across the codebase (`shadow-sm` to `shadow-xs`, `rounded` to `rounded-sm`, `outline-none` to `outline-hidden`, `ring` to `ring-3`), changed defaults (border color and ring become currentColor, button cursor default), the JS config needs an explicit `@config`. The upgrade tool (`npx @tailwindcss/upgrade`) does most of it. Re-verify every screen; best done as its own commit with no visual change, before the redesign.
+### 7.5 Tailwind v4
+- **Benefit:** tokens in CSS (`@theme`) become variables automatically, which suits this variable-based spec; faster builds; the only fix for the accepted build-time advisories BUGS #088 and #093.
+- **Cost:** the browser floor rises to Safari 16.4, Chrome 111 and Firefox 128 (official upgrade guide), so an older iPhone that can't update past iOS 16.4 would get broken styles. Utility renames across the codebase; changed defaults (border color and ring become currentColor, button cursor default); the JS config needs an explicit `@config`. The upgrade tool (`npx @tailwindcss/upgrade`) does most of it. Best as its own commit with no visual change, before the restyle.
 - **Optional:** yes.
 
-### 9.6 Motion library (`motion`, formerly Framer Motion)
-- **Benefit:** springs and layout animations (shared elements moving between screens).
-- **Cost:** a JS animation runtime (tens of KB gzipped for the full React package; measure), main-thread animation, and nothing in any direction needs it.
-- **Optional:** yes, and not recommended. CSS transitions plus the Web Animations API cover every interaction above. For the Family-style continuity moments, the View Transitions API is a native progressive enhancement (it degrades to an instant change); check current browser support before relying on it.
+### 7.6 Motion library (`motion`, formerly Framer Motion)
+- **Benefit:** springs and shared-element layout animations.
+- **Cost:** a JS animation runtime, animation on the main thread, and nothing in this spec needs it.
+- **Optional:** yes, and not recommended. CSS transitions and the Web Animations API cover every interaction here; the hero lights are CSS transitions with staggered delays.
 
-### 9.7 Accessibility checks in development
+### 7.7 Accessibility checks in development
 - **Benefit:** `eslint-plugin-jsx-a11y` (dev only) catches missing labels and alt text as you write; an axe run on the landing in CI guards the 90+ target.
-- **Cost:** one or two dev dependencies and some lint noise on existing files.
+- **Cost:** one or two dev dependencies, some lint noise on existing files.
 - **Optional:** yes.
 
 ---
 
-## 10. Recommendation: Ledger
+## 8. Build order
 
-1. **It fits how the product is used.** Merchants open it in daylight, at a shop counter or a venue, often on a mid-range phone. Dark-first (B) fights that; festive (C) is fun on the landing and tiring in a tool used all day.
-2. **Its one bold idea is the product's thesis.** The big date with a clash under it and a confirm button that still works is "alert, don't block" in one picture, and the same numerals carry into the app.
-3. **Least risk to meaning.** It keeps teal as the brand and as "confirmed", fixes every AA failure found (primary button, WhatsApp, labels, calendar pills), and has no accent that can be confused with clash red (C's rani pink measures 1.02:1 luminance against it).
-4. **Smallest migration.** Slate becomes ink, teal-600 becomes teal-700, shapes and shadows get stricter. No dark theme to build (B), no color rules to police (C).
-5. **The type choice earns its place.** One variable family from an Indian foundry, with a Devanagari sibling for a later Hindi interface, verified to carry ₹ and tabular figures, at 60.7 KB.
+Each step is one prompt and one or more commits, verified in the browser before the next.
 
-Borrow from the others: B's restraint (no hover scale inside the app, borders over shadows) is already in Ledger's app rules; C's Family-style continuity (label morph to "Booked", the one-time first-booking moment) is in Ledger's motion spec.
+1. **Route split** (3.2): `/app`, `/login`, `/signup`, `/forgot-password`; gate `checkAuth()` to `/app`; signed-in hint (3.3). No visual change.
+2. **Accessibility fixes** (1.6): Escape, focus trap and return, `inert`, `aria-current`. Native `<dialog>` if you take 7.2.
+3. **Tokens and font** (2.3, 2.8, 7.1): CSS variables, Tailwind mapping, self-hosted Schibsted Grotesk, `color-scheme`, theme-color, new mark and favicon. Optional: Tailwind v4 as its own step just before this.
+4. **App restyle, screen by screen** (2.6): auth screens, sidebar, calendar, drawer, booking sheet, then the remaining screens.
+5. **Seed the demo month and capture screenshots** (section 5).
+6. **Landing page** (section 4), last, so its screenshots show the finished dark app.
 
-Suggested order once you choose: (1) route split and the `checkAuth` gate (no visual change), (2) a11y fixes from 1.6, (3) tokens and fonts, (4) landing, (5) app restyle screen by screen. Optional: Tailwind v4 as its own step before (3).
+Each built screen is checked against the anti-"AI look" checklist in `RESEARCH.md` section 6.
 
 ---
 
-## 11. Open questions
+## 9. Follow-ups
 
-1. **Free:** can the landing say "free" plainly ("Creating an account and using EventFlow is free"), or should it only say "free to sign up"?
-2. **CTA label:** the brief names "Get started" in the nav and "Create free account" in the hero. UX writing says one action should have one name. Use "Create free account" in both?
-3. **Cancelled bookings:** OK to move cancelled from red to grey with strikethrough, so red means only clash and errors?
-4. **Demo business name** in screenshots: Shree Ganesh Caterers (fictional seed), a new fictional name, or Bala Ji Tent House (real, permitted, but reads as an endorsement)?
-5. **Direction B only:** should the app get a full dark mode, or keep a light working canvas with dark chrome?
-6. **Logged-in at `/`:** show "Open dashboard" (my proposal), or auto-redirect to `/app`?
-7. **Phones:** mobile is out of scope for the app. Can the FAQ say it works in a phone browser (true today, with the #094 PDF caveat), or should the landing stay silent on phones?
-8. **Language:** English only for launch, or a Hinglish line or two in the hero (OkCredit-style)? The fonts in all three directions can support Devanagari later.
-9. **"Transform/opacity only":** is a 150ms color or shadow cross-fade on hover acceptable (paint only, no layout), or should color changes be instant?
-10. **Sidebar in Ledger:** light paper sidebar (my proposal) or keep a dark one in `ink-900`?
-11. **Reference inspection:** fetch could not see hover/press timings on Linear, Stripe, Apple and the rest. If you want measured values from those live sites, I can inspect them in the Claude desktop app's browser on your computer in a later session.
-12. **Docs mismatch:** ROADMAP.md describes a BookMyShow-style "unit grid" inventory picker, but `BookingPage.jsx` uses quantity inputs. Which is current? (Affects the product tour.)
-13. **`ui-ux-pro-max`:** not installed. Want it added before the build phase?
+- **ROADMAP.md "unit grid":** the scope log describes a BookMyShow-style inventory picker; the code uses quantity inputs (decision 12). Correct that line in a separate `docs:` commit (outside `docs/design/`, so I did not edit it).
+- **`ui-ux-pro-max` permanent install:** it isn't in your claude.ai skills catalog. To have it in your own Claude Code sessions, run these two commands in Claude Code on your computer (from the skill's README):
+  ```
+  /plugin marketplace add nextlevelbuilder/ui-ux-pro-max-skill
+  /plugin install ui-ux-pro-max@ui-ux-pro-max-skill
+  ```
+  It is MIT-licensed. I reviewed its scripts: they use no network, shell or eval calls, and write files only when asked to `--persist`.
+
+---
+
+## Appendix A: Ledger (not chosen)
+
+Kept because its palette is a ready, contrast-checked **light theme** if one is added later (2.7).
+
+**Mood:** the paper booking register, made calm and exact. Daylight, ink on paper. **Bold thing:** a huge condensed date numeral. **Type:** Anek Latin (Ek Type), variable width and weight, has ₹ and `tnum`, Devanagari sibling; 60.7 KB instanced to width 85 to 100 and weight 400 to 700.
+
+| Token | Hex | Ratio |
+|---|---|---|
+| `paper` / `canvas` | `#FFFFFF` / `#F5F7F9` | |
+| `ink-900` text | `#18212F` | 16.19 on paper, 15.07 on canvas |
+| `ink-600` secondary | `#4A5566` | 7.55 / 7.03 |
+| `ink-500` muted | `#5F6B7C` | 5.41 / 5.04 |
+| `rule-strong` input borders | `#8A94A3` | 3.07 vs paper |
+| `accent` | `#0F766E` (teal-700), white text 5.47; hover `#115E59` 7.58 | |
+| Confirmed badge | `#115E59` on `#F0FDFA` | 7.27 |
+| Clash banner | `#B91C1C` on `#FEF2F2`, edge `#EF4444` | 5.91 / 3.44 |
+| Shortfall banner | `#92400E` on `#FFFBEB`, edge `#D97706` | 6.84 / 3.07 |
+| Pending badge | `#92400E` on `#FEF3C7` | 6.37 |
+| Completed | `#4338CA` on `#EEF2FF`; pill white on `#4F46E5` | 7.07 / 6.29 |
+| WhatsApp | white on `#15803D` | 5.02 |
+
+Shapes: radius 8 / 12 / 16px; cards bordered, no shadow; overlays `0 16px 40px -12px rgb(24 33 47 / 0.22)`. If used as the light theme, keep After Hours' typeface and motion and swap only these color values.
+
+## Appendix B: Shamiana (not chosen)
+
+**Mood:** festive, from the trade: striped canopy fabric, wedding season. **Bold thing:** a scalloped rani-pink canopy band, once. **Type:** Baloo 2 headings and Mukta body (Ek Type), both with ₹, `tnum` and Devanagari; 69.6 KB for three files. **Accent:** rani `#B3135E`, white text 6.62. **Rejected because** rani and clash red have almost the same lightness (1.02:1), so they would differ by hue alone, and its informal personality wears thin in a tool used all day.
