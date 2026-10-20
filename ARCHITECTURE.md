@@ -68,6 +68,7 @@ eventflow/
 │       │   ├── BookingPage.jsx            # Create/edit booking form
 │       │   ├── CalendarView.jsx           # FullCalendar + search + morning briefing
 │       │   ├── ConfirmDialog.jsx
+│       │   ├── ModalDialog.jsx            # Shared native <dialog> frame of every overlay (showModal, Tab wrap, Escape / backdrop unless busy, focus return)
 │       │   ├── ConflictBanner.jsx         # Inline alert on date clash (non-blocking)
 │       │   ├── AuthCard.jsx, EmailStep.jsx, OtpInput.jsx, OtpVerifyStep.jsx, ResendOtpButton.jsx, SetPasswordForm.jsx
 │       │   │                              # Shared parts of the sign-up and forgot-password flows (email -> code -> password)

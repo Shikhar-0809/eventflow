@@ -44,9 +44,9 @@ try {
     }
   })
 
-  const discardDialog = page.getByRole('dialog').filter({ hasText: 'Discard changes?' })
-  const shortfallDialog = page.getByRole('dialog').filter({ hasText: 'Inventory Shortfall' })
-  const noteDialog = page.getByRole('dialog').filter({ hasText: 'Discard change note?' })
+  const discardDialog = page.getByRole('dialog', { name: 'Discard changes?' })
+  const shortfallDialog = page.getByRole('dialog', { name: 'Inventory Shortfall' })
+  const noteDialog = page.getByRole('dialog', { name: 'Discard change note?' })
   const formHeading = (text) => page.locator(`h1:has-text("${text}")`)
   const submitButton = (label) => page.locator(`button[type="submit"]:has-text("${label}")`).last()
   const formClosed = (text) => formHeading(text).waitFor({ state: 'detached', timeout: 10_000 })
@@ -94,8 +94,8 @@ try {
   record('shortfall shows only the shortfall dialog', (await discardDialog.count()) === 0)
   await page.keyboard.press('Escape')
   await page.waitForTimeout(200)
-  record('Escape over the shortfall dialog does not open the discard dialog', (await discardDialog.count()) === 0)
-  await shortfallDialog.getByRole('button', { name: 'Cancel' }).click()
+  // Escape answers the topmost dialog only (BUGS #106): it is the same as Cancel, and never opens the discard dialog.
+  record('Escape over the shortfall dialog closes only it, with no discard dialog', (await discardDialog.count()) === 0 && (await shortfallDialog.count()) === 0 && (await formHeading('New Booking').count()) === 1)
   await submitButton('Confirm Booking').click()
   await shortfallDialog.waitFor({ timeout: 5000 })
   await shortfallDialog.getByRole('button', { name: 'Confirm' }).click()
@@ -122,7 +122,7 @@ try {
       record('Escape on the discard dialog means Keep editing', (await discardDialog.count()) === 0 && (await formHeading('New Booking').count()) === 1)
       await closeForm()
       await discardDialog.waitFor()
-      await page.locator('div.fixed.inset-0.z-\\[80\\] > button[aria-label="Close"]').click({ position: { x: 5, y: 5 } })
+      await page.locator('dialog[aria-labelledby="confirm-dialog-title"]').click({ position: { x: 5, y: 5 } })
       await page.waitForTimeout(200)
       record('backdrop click on the discard dialog means Keep editing', (await discardDialog.count()) === 0 && (await formHeading('New Booking').count()) === 1)
     }

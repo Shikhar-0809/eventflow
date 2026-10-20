@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, Loader2, X } from 'lucide-react'
+import { ModalDialog } from '../ModalDialog'
 
 // Small building blocks shared by the Profile screen's sections and modals.
 
@@ -92,34 +93,14 @@ export const Toast = ({ message, onDismiss }) => {
 // A modal for forms (ConfirmDialog is only for yes/no questions). Content is mounted only while the modal is open, so
 // closing it drops everything typed into it, passwords included. `busy` blocks every way of closing it mid-request.
 export const ProfileModal = ({ title, titleId, onClose, busy = false, children }) => {
-  useEffect(() => {
-    document.body.classList.add('overflow-hidden')
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape' && !busy) onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.body.classList.remove('overflow-hidden')
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [busy, onClose])
-
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40"
-        aria-label="Close"
-        onClick={() => {
-          if (!busy) onClose()
-        }}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="relative bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6"
-      >
+    <ModalDialog
+      onClose={onClose}
+      busy={busy}
+      aria-labelledby={titleId}
+      className="open:flex items-center justify-center p-4 bg-black/40"
+    >
+      <div className="bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6">
         <div className="flex items-start justify-between gap-3 mb-4">
           <h2 id={titleId} className="text-lg font-bold text-slate-800">
             {title}
@@ -136,7 +117,7 @@ export const ProfileModal = ({ title, titleId, onClose, busy = false, children }
         </div>
         {children}
       </div>
-    </div>,
+    </ModalDialog>,
     document.body,
   )
 }

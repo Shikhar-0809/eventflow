@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
+import { ModalDialog } from './ModalDialog'
 import { api } from '../utils/api'
 import { inventoryItemSchema } from '../schemas/inventory.schema.js'
 
@@ -84,19 +85,13 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40"
-        aria-label="Close"
-        onClick={handleClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-inventory-title"
-        className="relative bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-md p-6"
-      >
+    <ModalDialog
+      onClose={handleClose}
+      busy={isSubmitting}
+      aria-labelledby="add-inventory-title"
+      className="open:flex items-center justify-center p-4 bg-black/40"
+    >
+      <div className="bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 id="add-inventory-title" className="text-lg font-bold text-slate-800">
             Add Inventory Item
@@ -182,6 +177,6 @@ export const AddInventoryItemModal = ({ isOpen, onClose, onAdded }) => {
           </button>
         </form>
       </div>
-    </div>
+    </ModalDialog>
   )
 }

@@ -112,7 +112,7 @@ try {
       fail('1280: sidebar is covered while the booking form is open', 'nav button is clickable through the overlay')
     }
 
-    const discardDialog = page.getByRole('dialog').filter({ hasText: 'Discard changes?' })
+    const discardDialog = page.getByRole('dialog', { name: 'Discard changes?' })
     await page.locator('#client_name').fill('Desktop Verify Client')
     await analyticsBtn.evaluate((el) => el.click())
     await discardDialog.waitFor({ timeout: 3000 }).catch(() => {})

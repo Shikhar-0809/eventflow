@@ -9,6 +9,7 @@ import { bookingSchema } from '../schemas/booking.schema.js'
 import { ConflictBanner } from './ConflictBanner'
 import { InventoryWarningBanner } from './InventoryWarningBanner'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ModalDialog } from './ModalDialog'
 
 const EVENT_TYPES = [
   { value: 'wedding', label: 'Wedding' },
@@ -691,21 +692,6 @@ export const BookingPageContent = () => {
     requestCloseModal()
   }
 
-  useEffect(() => {
-    if (!isModalOpen) return undefined
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape') return
-      if (discardPromptOpen) {
-        keepEditing()
-        return
-      }
-      if (showConfirmDialog || isSubmitting) return
-      requestCloseModal()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isModalOpen, discardPromptOpen, showConfirmDialog, isSubmitting, keepEditing, requestCloseModal])
-
   const submitBooking = useCallback(async () => {
     if (submittingRef.current) return
 
@@ -1008,15 +994,18 @@ export const BookingPageContent = () => {
 
   return (
     <>
-      <div
-        className={`fixed inset-0 z-[70] bg-slate-50 flex flex-col transition-all duration-200 ease-out ${
+      <ModalDialog
+        onClose={handleRequestClose}
+        closeOnBackdrop={false}
+        aria-labelledby="booking-page-title"
+        className={`open:flex bg-slate-50 flex-col transition-all duration-200 ease-out ${
           visible
             ? 'opacity-100 translate-y-0 md:scale-100'
             : 'opacity-0 translate-y-full md:translate-y-0 md:scale-[0.98]'
         }`}
       >
         <div className="shrink-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-          <h1 className="text-slate-800 font-bold text-xl">
+          <h1 id="booking-page-title" className="text-slate-800 font-bold text-xl">
             {isEditMode ? 'Edit Booking' : 'New Booking'}
           </h1>
           <button
@@ -1269,7 +1258,7 @@ export const BookingPageContent = () => {
             </div>
           </div>
         </div>
-      </div>
+      </ModalDialog>
 
       <ConfirmDialog
         isOpen={showConfirmDialog}

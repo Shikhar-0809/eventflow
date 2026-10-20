@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
+import { ModalDialog } from './ModalDialog'
 
 export const ConfirmDialog = ({
   isOpen,
@@ -15,15 +15,6 @@ export const ConfirmDialog = ({
   onConfirm,
   onCancel,
 }) => {
-  useEffect(() => {
-    if (!isOpen) return undefined
-
-    document.body.classList.add('overflow-hidden')
-    return () => {
-      document.body.classList.remove('overflow-hidden')
-    }
-  }, [isOpen])
-
   if (!isOpen) return null
 
   const resolvedConfirmLabel = confirmLabel ?? 'Confirm'
@@ -33,23 +24,16 @@ export const ConfirmDialog = ({
     : 'bg-teal-600 hover:bg-teal-700 text-white'
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 pointer-events-auto">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40 z-50"
-        aria-label="Close"
-        onClick={(e) => {
-          e.stopPropagation()
-          if (!isConfirming) onCancel()
-        }}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        className="relative z-50 bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-md p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
+    // Opened later than the drawer or sheet it was triggered from, so the top layer stacks it above them; when it
+    // closes, focus returns to the button that opened it (inside that drawer or sheet).
+    <ModalDialog
+      onClose={onCancel}
+      busy={isConfirming}
+      aria-labelledby="confirm-dialog-title"
+      className="open:flex items-center justify-center p-4 bg-black/40"
+      stopPropagation
+    >
+      <div className="bg-white rounded-xl shadow-lg border border-slate-200 w-full max-w-md p-6">
         <h2 id="confirm-dialog-title" className="text-lg font-bold text-slate-800 mb-2">
           {title}
         </h2>
@@ -62,7 +46,7 @@ export const ConfirmDialog = ({
               onCancel()
             }}
             disabled={isConfirming}
-            autoFocus={focusCancel}
+            data-autofocus={focusCancel ? '' : undefined}
             className="px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all duration-200 disabled:opacity-50"
           >
             {resolvedCancelLabel}
@@ -81,7 +65,7 @@ export const ConfirmDialog = ({
           </button>
         </div>
       </div>
-    </div>,
+    </ModalDialog>,
     document.body,
   )
 }

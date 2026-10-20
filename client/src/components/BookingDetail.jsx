@@ -7,6 +7,7 @@ import { api } from '../utils/api'
 import { formatCurrency } from '../utils/formatCurrency'
 import { getDaysUntilEvent } from '../utils/dateHelpers'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ModalDialog } from './ModalDialog'
 import {
   confirmationMessage,
   paymentReminderMessage,
@@ -458,18 +459,13 @@ export const BookingDetail = () => {
 
   return (
     <>
-      <div
-        className="fixed inset-0 bg-black/50 z-40"
-        onClick={requestCloseDetail}
-        aria-hidden="true"
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
+      <ModalDialog
+        onClose={requestCloseDetail}
+        busy={isLogging || isAddingExpense || isDeletingExpense || isCompleting || isCancelling || isDeleting}
         aria-labelledby="booking-detail-title"
-        className="fixed right-0 top-0 h-full w-full max-w-[480px] bg-white shadow-xl z-50 overflow-y-auto flex flex-col animate-[slideIn_0.2s_ease-out]"
-        onClick={(e) => e.stopPropagation()}
+        className="open:flex justify-end bg-black/50"
       >
+      <div className="h-full w-full max-w-[480px] bg-white shadow-xl overflow-y-auto flex flex-col animate-[slideIn_0.2s_ease-out]">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
           <h2 id="booking-detail-title" className="text-xl font-semibold text-slate-900">Booking Details</h2>
           <div className="flex items-center gap-1">
@@ -906,6 +902,7 @@ export const BookingDetail = () => {
           </div>
         </div>
       </div>
+      </ModalDialog>
 
       <ConfirmDialog
         isOpen={notePromptOpen}
