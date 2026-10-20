@@ -14,6 +14,8 @@ These files define the shape, quality and safety bar. Read the relevant ones bef
 - `DATA_PRIVACY.md` — how client data is handled (DPDP Act context)
 - `BUGS.md` — known gotchas and the bug tracker; check gotchas before debugging
 - `ROADMAP.md` — scope; don't build deferred features unless the task says so
+- `docs/design/DIRECTIONS.md` — UI spec: tokens, motion, routing, landing plan; follow it for any UI work
+- `docs/design/RESEARCH.md` section 6 — anti-template checklist; check every built screen against it
 
 If code and these docs disagree, say so — don't silently pick one.
 
