@@ -44,7 +44,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
 
   const navButtonClass = (view) =>
     view === activeView
-      ? 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-teal-600 text-white font-medium transition-all duration-200'
+      ? 'relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-teal-600 text-white font-medium transition-all duration-200 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[3px] before:rounded-r before:bg-white'
       : 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-all duration-200'
 
   const fetchStats = async ({ quiet = false } = {}) => {
@@ -160,6 +160,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('calendar')}
           className={navButtonClass('calendar')}
+          aria-current={activeView === 'calendar' ? 'page' : undefined}
         >
           <Calendar className="w-4 h-4" />
           Calendar
@@ -168,6 +169,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('inventory')}
           className={navButtonClass('inventory')}
+          aria-current={activeView === 'inventory' ? 'page' : undefined}
         >
           <Package className="w-4 h-4" />
           Inventory
@@ -176,6 +178,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('pending-balances')}
           className={navButtonClass('pending-balances')}
+          aria-current={activeView === 'pending-balances' ? 'page' : undefined}
         >
           <IndianRupee className="w-4 h-4 shrink-0" />
           <span className="flex-1 text-left">Pending Balances</span>
@@ -189,6 +192,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('records')}
           className={navButtonClass('records')}
+          aria-current={activeView === 'records' ? 'page' : undefined}
         >
           <TableProperties className="w-4 h-4" />
           Records
@@ -197,6 +201,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('analytics')}
           className={navButtonClass('analytics')}
+          aria-current={activeView === 'analytics' ? 'page' : undefined}
         >
           <BarChart2 className="w-4 h-4" />
           Analytics
@@ -205,6 +210,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('usage')}
           className={navButtonClass('usage')}
+          aria-current={activeView === 'usage' ? 'page' : undefined}
         >
           <Activity className="w-4 h-4" />
           My Activity
@@ -280,6 +286,7 @@ export const Sidebar = ({ mobileOpen = false, onMobileClose }) => {
           type="button"
           onClick={() => navigate('profile')}
           className={navButtonClass('profile')}
+          aria-current={activeView === 'profile' ? 'page' : undefined}
         >
           <UserCircle className="w-4 h-4" />
           Profile
