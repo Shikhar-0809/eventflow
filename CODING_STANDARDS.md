@@ -88,7 +88,14 @@ export const BookingModal = ({ isOpen, onClose }) => {
 
 - Use Tailwind utility classes exclusively — no inline `style={{}}` unless absolutely necessary (e.g. dynamic pixel values from JS)
 - No custom CSS files except `index.css`, which contains **Tailwind directives + FullCalendar overrides + keyframes only**
-- Color palette to use consistently:
+- **New screens use the design tokens, not `slate`/`teal`.** Tokens are defined in `client/src/index.css` (CSS variables under `[data-theme="dark"]`, which no screen sets until build step 4) and mapped in `client/tailwind.config.js`; spec in `docs/design/DIRECTIONS.md` 2.3 and 2.8:
+  - Surfaces: `bg-sidebar`, `bg-input`, `bg-canvas`, `bg-raised`, `bg-overlay`; lines: `border-line` (structure), `border-line-strong` (inputs, overlays).
+  - Text: `text-fg-1` (primary), `text-fg-2`, `text-fg-3`. Accent: `bg-accent`, `hover:bg-accent-hover`, `text-accent-ink`, `bg-accent-soft`; focus ring color `focus`.
+  - Fixed colors (same in any theme): `danger`, `whatsapp`, `disabled`, `status-error`/`status-success`, `badge-*` (`confirmed`, `pending`, `completed`, `cancelled`, `available`, `in-use`, `damaged`, `count`, each with `fg`/`bg`), `banner-clash`/`banner-shortfall`, `pill-*`.
+  - Radius: `rounded-control` (6px), `rounded-card` (8px), `rounded-sheet` (12px). Spacing: `section`, `block`, `gutter` (e.g. `py-section`). Durations: `duration-press|hover|state|enter|exit|sheet-in|sheet-out`; easings: `ease-out|enter|exit|move`.
+  - The default sans is Schibsted Grotesk (self-hosted in `client/public/fonts/`); amounts and dates use `tabular-nums`.
+- **No `transition-all`.** List the properties, e.g. `transition-[background-color,border-color,color,opacity,transform]`, so layout never animates by accident. Move or resize with `transform` and `opacity` only.
+- Color palette (**legacy until step 4**; the current screens still use it, new screens must not):
 
 | Purpose | Tailwind class |
 |---|---|
@@ -112,7 +119,7 @@ export const BookingModal = ({ isOpen, onClose }) => {
 
 - Use `rounded-xl` for cards and modals, `rounded-lg` for buttons and inputs
 - Use `shadow-sm` for cards, `shadow-lg` for modals and drawers
-- Transitions: always add `transition-all duration-200` to interactive elements
+- Transitions: legacy screens still carry `transition-all duration-200`; replace it with an explicit property list when a screen is restyled (new code never adds it)
 
 ---
 
