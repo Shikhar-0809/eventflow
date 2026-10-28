@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Schibsted Grotesk';
+  src: url('/fonts/SchibstedGrotesk-Variable-latin-rupee.woff2') format('woff2');
+  font-weight: 400 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Arial resized to Schibsted Grotesk's metrics, so the swap from the fallback does not shift layout. */
+@font-face {
+  font-family: 'Schibsted Grotesk Fallback';
+  src: local('Arial');
+  size-adjust: 107.19%;
+  ascent-override: 91.11%;
+  descent-override: 24.05%;
+  line-gap-override: 0%;
+}
+
 /* Reset for native <dialog> overlays (ModalDialog.jsx): the element is the full-screen backdrop, so the browser's own
    centring, padding, border, size cap and ::backdrop are switched off. Utilities on the element still win. */
 @layer components {
