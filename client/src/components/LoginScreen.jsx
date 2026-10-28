@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 import { useAuthStore } from '../store/authStore'
 import { loginSchema } from '../schemas/merchant.schema'
 import { PasswordInput } from './PasswordInput'
@@ -61,7 +61,7 @@ export const LoginScreen = ({ onLeave, notice = null, initialEmail = '' }) => {
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg w-full max-w-md p-8">
         <div className="flex flex-col items-center mb-8">
           <div className="bg-teal-600 rounded-xl p-3 mb-4">
-            <CalendarDays className="w-8 h-8 text-white" />
+            <BrandMark className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-semibold text-slate-900">EventFlow</h1>
           <p className="mt-1 text-sm text-slate-500">Log in to your business</p>

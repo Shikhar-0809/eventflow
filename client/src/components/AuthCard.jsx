@@ -1,4 +1,4 @@
-import { CalendarDays } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 
 // The shared frame of the logged-out screens: logo, title, subtitle and the privacy link.
 export const AuthCard = ({ subtitle, children }) => (
@@ -6,7 +6,7 @@ export const AuthCard = ({ subtitle, children }) => (
     <div className="bg-white border border-slate-200 rounded-xl shadow-lg w-full max-w-md p-6 sm:p-8">
       <div className="flex flex-col items-center mb-8">
         <div className="bg-teal-600 rounded-xl p-3 mb-4">
-          <CalendarDays className="w-8 h-8 text-white" />
+          <BrandMark className="w-8 h-8 text-white" />
         </div>
         <h1 className="text-2xl font-semibold text-slate-900">EventFlow</h1>
         <p className="mt-1 text-sm text-slate-500 text-center">{subtitle}</p>

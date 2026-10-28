@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { ArrowLeft, CalendarDays } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { BrandMark } from './BrandMark'
 
 const LAST_UPDATED = '19 October 2026'
 
@@ -46,7 +47,7 @@ export const PrivacyPolicyPage = () => {
         <main className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 sm:p-8">
           <div className="flex items-center gap-3 mb-2">
             <div className="bg-teal-600 rounded-xl p-2">
-              <CalendarDays className="w-6 h-6 text-white" aria-hidden="true" />
+              <BrandMark className="w-6 h-6 text-white" />
             </div>
             <h1 className="text-2xl font-semibold text-slate-900">Privacy Policy</h1>
           </div>
