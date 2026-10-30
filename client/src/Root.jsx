@@ -11,6 +11,7 @@ import { matchRoute, navigate, safeNext, useLocation } from './utils/router'
 // The logged-in app (FullCalendar, recharts, jsPDF, html2canvas, xlsx) is its own bundle: the public screens below
 // never download it.
 const App = lazy(() => import('./App.jsx'))
+const LandingPage = lazy(() => import('./components/LandingPage'))
 const ForgotPasswordScreen = lazy(() =>
   import('./components/ForgotPasswordScreen').then((module) => ({ default: module.ForgotPasswordScreen })),
 )
@@ -41,11 +42,6 @@ export default function Root() {
   const [loginEmail, setLoginEmail] = useState('')
 
   const isAuthRoute = route === 'login' || route === 'signup' || route === 'forgot'
-
-  // The landing page is not built yet: "/" goes to the app so existing bookmarks keep working.
-  useEffect(() => {
-    if (route === 'landing') navigate('/app', { replace: true })
-  }, [route, location])
 
   // A session that exists (just logged in or signed up) leaves the auth screens for ?next= (same-origin paths only).
   useEffect(() => {
@@ -92,7 +88,11 @@ export default function Root() {
     case 'privacy':
       return <PrivacyPolicyPage />
     case 'landing':
-      return null
+      return (
+        <Suspense fallback={null}>
+          <LandingPage />
+        </Suspense>
+      )
     default:
       return <NotFoundPage />
   }

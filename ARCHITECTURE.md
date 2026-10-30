@@ -484,9 +484,9 @@ Analytics > Export Report opens a new window with the printable report (`openRep
   - `/app`: the logged-in app. `Root` lazy-loads `App.jsx`, which runs `checkAuth()` (skipped when the store already knows the session, e.g. right after login); with no session it goes to `/login?next=/app`. This is the only route that calls the API on load.
   - `/login`, `/signup`, `/forgot-password`: the auth screens as real URLs; they call the API only on submit. After login or sign-up, the app goes to `?next=` only if it starts with `/` and not `//` (or `/\`), and is not itself an auth screen; otherwise `/app` (`safeNext`).
   - `/privacy`: the public policy, no API call; its "Back to sign in" link goes to `/login`.
-  - `/`: the landing page is not built yet, so it redirects to `/app` (keeps old bookmarks working).
+  - `/`: the public landing page (`LandingPage.jsx`, lazy-loaded, no API calls). Its buttons read the `ef:signedIn` hint: "Open dashboard" to `/app` when set, otherwise "Log in" and "Create free account".
   - anything else: the 404 page.
-  Logout, expired sessions and account deletion `navigate('/login', { replace: true })` from `authStore`, so the existing notices ("Your account has been deleted.", the password-reset banner) still show. Because FullCalendar, recharts, jsPDF, html2canvas and xlsx are only reachable from `App.jsx`, the public routes never download them. The `ef:signedIn` hint (`signedInHint.js`, DIRECTIONS.md 3.3) is maintained for the future landing page; nothing reads it yet. Inside the app, views switch via Zustand `activeView`, with overlays/modals for forms and detail.
+  Logout, expired sessions and account deletion `navigate('/login', { replace: true })` from `authStore`, so the existing notices ("Your account has been deleted.", the password-reset banner) still show. Because FullCalendar, recharts, jsPDF, html2canvas and xlsx are only reachable from `App.jsx`, the public routes never download them. The `ef:signedIn` hint (`signedInHint.js`, DIRECTIONS.md 3.3) is read only by the landing page. Inside the app, views switch via Zustand `activeView`, with overlays/modals for forms and detail.
 
 ---
 

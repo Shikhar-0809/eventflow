@@ -54,6 +54,7 @@ export const installLinkInterception = () => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null
     if (!anchor || (anchor.target && anchor.target !== '_self') || anchor.hasAttribute('download')) return
+    if (anchor.getAttribute('href').startsWith('#')) return // in-page anchors (skip link, landing sections) scroll natively
     const url = new URL(anchor.href, window.location.href)
     if (url.origin !== window.location.origin || matchRoute(url.pathname) === 'not-found') return
     event.preventDefault()
