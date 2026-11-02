@@ -198,7 +198,21 @@ const FAQ = [
 ]
 
 export default function LandingPage() {
-  const [signedIn] = useState(readSignedIn)
+  const [signedIn, setSignedIn] = useState(readSignedIn)
+
+  // Another tab logging in or out changes the hint; re-read it on storage, focus and tab-visible.
+  useEffect(() => {
+    const sync = () => setSignedIn(readSignedIn())
+    const onVisible = () => { if (document.visibilityState === 'visible') sync() }
+    window.addEventListener('storage', sync)
+    window.addEventListener('focus', sync)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('focus', sync)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
 
   useEffect(() => {
     document.title = TITLE
