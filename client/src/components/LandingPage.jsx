@@ -21,6 +21,10 @@ const LINK = `inline-flex min-h-[44px] items-center text-[15px] text-[#16181D] u
 const WRAP = 'mx-auto w-full max-w-[1120px] px-5 sm:px-8'
 const H2 = 'text-[clamp(1.75rem,3.2vw,2.5rem)] font-semibold leading-[1.1] tracking-[-0.02em]'
 
+// Auth links open in a new tab; router.js link interception skips anchors with a target.
+const NEW_TAB = { target: '_blank', rel: 'noopener noreferrer' }
+const NEW_TAB_HINT = <span className="sr-only"> (opens in a new tab)</span>
+
 const Mark = () => (
   <svg viewBox="0 0 32 32" fill="none" className="h-7 w-7" aria-hidden="true">
     <path d="M3 26 16 8l13 18h-9l-4-8-4 8H3Z" stroke="#16181D" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -54,8 +58,8 @@ const Nav = ({ signedIn }) => {
             <a href="/app" className={BTN}>Open dashboard</a>
           ) : (
             <>
-              <a href="/login" className={navLink}>Log in</a>
-              <a href="/signup" className={`${BTN} hidden sm:inline-flex`}>Create free account</a>
+              <a href="/login" {...NEW_TAB} className={navLink}>Log in{NEW_TAB_HINT}</a>
+              <a href="/signup" {...NEW_TAB} className={`${BTN} hidden sm:inline-flex`}>Create free account{NEW_TAB_HINT}</a>
             </>
           )}
           <button
@@ -75,7 +79,7 @@ const Nav = ({ signedIn }) => {
             {NAV_LINKS.map(([label, href]) => (
               <a key={href} href={href} onClick={() => setOpen(false)} className={navLink}>{label}</a>
             ))}
-            {!signedIn && <a href="/signup" onClick={() => setOpen(false)} className={`${navLink} sm:hidden`}>Create free account</a>}
+            {!signedIn && <a href="/signup" {...NEW_TAB} onClick={() => setOpen(false)} className={`${navLink} sm:hidden`}>Create free account{NEW_TAB_HINT}</a>}
           </nav>
         </div>
       )}
@@ -203,7 +207,7 @@ export default function LandingPage() {
   const signup = signedIn ? (
     <a href="/app" className={BTN}>Open dashboard</a>
   ) : (
-    <a href="/signup" className={BTN}>Create free account</a>
+    <a href="/signup" {...NEW_TAB} className={BTN}>Create free account{NEW_TAB_HINT}</a>
   )
 
   return (
@@ -355,7 +359,7 @@ export default function LandingPage() {
           <nav aria-label="Footer" className="flex flex-wrap gap-x-6">
             <a href="/privacy" className={LINK}>Privacy policy</a>
             <a href={`mailto:${SUPPORT_EMAIL}`} className={LINK}>Contact</a>
-            <a href="/login" className={LINK}>Log in</a>
+            <a href="/login" {...NEW_TAB} className={LINK}>Log in{NEW_TAB_HINT}</a>
           </nav>
           <p className="text-[14px] text-[#5B616B]">© 2026 EventFlow</p>
         </div>
